@@ -1,22 +1,51 @@
 // ==============================================================================
-// CLIENT API REST - SALFA TANAMBAO (.TSX / REACT)
+// CLIENT API REST - SALFA TANAMBAO (.TSX / REACT) - MODE JSON PUR
 // ==============================================================================
+
 import { Employe, PaieMensuelle, TotauxMois, ComparaisonNet, UserSession } from './types';
 
 const BASE_URL = '/api';
 
-export async function apiLogin(username: string, password: string):Promise<UserSession | null> {
+// Helper : fetch avec timeout et messages d'erreur clairs
+async function safeFetch(url: string, opts?: RequestInit) {
   try {
-    const res = await fetch(`${BASE_URL}/auth/login`, {
+    const res = await fetch(url, opts);
+    return res;
+  } catch (e: any) {
+    // Réseau indisponible (serveur non démarré)
+    throw new Error(`Serveur inaccessible (${e?.message || 'fetch failed'}). Vérifiez que "npm run dev" est lancé et que le port 3000 est accessible.`);
+  }
+}
+
+export async function apiLogin(username: string, password: string): Promise<UserSession | null> {
+  try {
+    const res = await safeFetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn('[LOGIN] échec', res.status, err);
+      return null;
+    }
     const data = await res.json();
-    return data.user;
+    return data.user || null;
+  } catch (e: any) {
+    console.error('[LOGIN] erreur réseau', e.message);
+    // Propager pour que LoginModal affiche le message réseau distinct
+    throw e;
+  }
+}
+
+export async function checkHealth(): Promise<boolean> {
+  try {
+    const res = await safeFetch(`${BASE_URL}/health`);
+    if (!res.ok) return false;
+    const d = await res.json();
+    return d.status === 'ok';
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -24,19 +53,19 @@ export async function fetchEmployes(actifsOnly: boolean = false, search: string 
   const params = new URLSearchParams();
   if (actifsOnly) params.append('actifs_seulement', 'true');
   if (search) params.append('search', search);
-  const res = await fetch(`${BASE_URL}/employes?${params.toString()}`);
+  const res = await safeFetch(`${BASE_URL}/employes?${params.toString()}`);
   const data = await res.json();
   return data.employes || [];
 }
 
 export async function fetchEmployePaies(id: number): Promise<PaieMensuelle[]> {
-  const res = await fetch(`${BASE_URL}/employes/${id}/paies`);
+  const res = await safeFetch(`${BASE_URL}/employes/${id}/paies`);
   const data = await res.json();
   return data.paies || [];
 }
 
 export async function createEmploye(employe: Partial<Employe>): Promise<boolean> {
-  const res = await fetch(`${BASE_URL}/employes`, {
+  const res = await safeFetch(`${BASE_URL}/employes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(employe)
@@ -45,7 +74,7 @@ export async function createEmploye(employe: Partial<Employe>): Promise<boolean>
 }
 
 export async function updateEmploye(id: number, employe: Partial<Employe>): Promise<boolean> {
-  const res = await fetch(`${BASE_URL}/employes/${id}`, {
+  const res = await safeFetch(`${BASE_URL}/employes/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(employe)
@@ -54,7 +83,7 @@ export async function updateEmploye(id: number, employe: Partial<Employe>): Prom
 }
 
 export async function toggleActifEmploye(id: number, actif: boolean): Promise<boolean> {
-  const res = await fetch(`${BASE_URL}/employes/${id}/actif`, {
+  const res = await safeFetch(`${BASE_URL}/employes/${id}/actif`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ actif })
@@ -67,12 +96,12 @@ export async function fetchPaiesMois(annee: number, mois: string): Promise<{
   verrouille: boolean;
   totaux: TotauxMois;
 }> {
-  const res = await fetch(`${BASE_URL}/paies?annee=${annee}&mois=${mois}`);
+  const res = await safeFetch(`${BASE_URL}/paies?annee=${annee}&mois=${mois}`);
   return await res.json();
 }
 
 export async function initMoisPaie(annee: number, mois: string): Promise<{ success: boolean; initializedCount: number }> {
-  const res = await fetch(`${BASE_URL}/paies/initialiser`, {
+  const res = await safeFetch(`${BASE_URL}/paies/initialiser`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ annee, mois })
@@ -81,7 +110,7 @@ export async function initMoisPaie(annee: number, mois: string): Promise<{ succe
 }
 
 export async function savePaieSaisie(id: number, avance: number, med: number, accessoires?: any): Promise<{ success: boolean; updated?: PaieMensuelle }> {
-  const res = await fetch(`${BASE_URL}/paies/${id}`, {
+  const res = await safeFetch(`${BASE_URL}/paies/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ avance, med, accessoires })
@@ -90,7 +119,7 @@ export async function savePaieSaisie(id: number, avance: number, med: number, ac
 }
 
 export async function cloturerMois(annee: number, mois: string): Promise<boolean> {
-  const res = await fetch(`${BASE_URL}/paies/cloturer`, {
+  const res = await safeFetch(`${BASE_URL}/paies/cloturer`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ annee, mois })
@@ -99,7 +128,7 @@ export async function cloturerMois(annee: number, mois: string): Promise<boolean
 }
 
 export async function deverrouillerMois(annee: number, mois: string, userRole: string): Promise<boolean> {
-  const res = await fetch(`${BASE_URL}/paies/deverrouiller`, {
+  const res = await safeFetch(`${BASE_URL}/paies/deverrouiller`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ annee, mois, userRole })
@@ -114,7 +143,7 @@ export async function fetchComparaison(annee: number, moisActuel: string, moisAv
     mois_avant: moisAvant,
     use_hist: String(useHist)
   });
-  const res = await fetch(`${BASE_URL}/rapports/comparaison?${params.toString()}`);
+  const res = await safeFetch(`${BASE_URL}/rapports/comparaison?${params.toString()}`);
   const data = await res.json();
   return data.comparaison || [];
 }
