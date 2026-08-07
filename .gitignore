@@ -6,3 +6,4 @@ dist/
 paie_salfa.db
 salfa_data_legacy.json
 archive/
+salfa_data_backup*.json
