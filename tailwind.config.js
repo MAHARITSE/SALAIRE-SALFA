@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -14,6 +15,13 @@ export default {
           accent: '#2F855A',
           danger: '#C53030'
         }
+      },
+      screens: {
+        'xs': '360px',
+        '3xl': '1920px',
+      },
+      maxWidth: {
+        'screen-3xl': '1920px',
       }
     },
   },

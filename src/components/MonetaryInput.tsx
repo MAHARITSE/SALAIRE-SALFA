@@ -1,5 +1,5 @@
 // ==============================================================================
-// COMPOSANT REACT : MASQUE DE SAISIE MONÉTAIRE AUTOMATIQUE (ESPACE)
+// COMPOSANT REACT : MASQUE DE SAISIE MONÉTAIRE (SANS UNITÉ Ar) - RESPONSIVE
 // ==============================================================================
 import React, { useEffect, useState } from 'react';
 
@@ -14,7 +14,7 @@ interface MonetaryInputProps {
 }
 
 /**
- * Formate un nombre ou chaîne numérique avec des espaces comme séparateur de milliers.
+ * Formate un nombre avec des espaces comme séparateur de milliers.
  * Ex: 700000 -> "700 000"
  */
 export function formatSpace(num: number | string | undefined): string {
@@ -22,6 +22,14 @@ export function formatSpace(num: number | string | undefined): string {
   const digits = String(num).replace(/\D/g, '');
   if (!digits) return '0';
   return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+
+/**
+ * Format standard sans unité (remplace ancien formatAr avec Ar)
+ */
+export function formatNumber(val: number | undefined): string {
+  if (val === undefined || val === null) return '0,00';
+  return val.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export const MonetaryInput: React.FC<MonetaryInputProps> = ({
@@ -33,9 +41,7 @@ export const MonetaryInput: React.FC<MonetaryInputProps> = ({
   required = false,
   id
 }) => {
-  const [displayValue, setDisplayValue] = useState<string>(
-    formatSpace(value || 0)
-  );
+  const [displayValue, setDisplayValue] = useState<string>(formatSpace(value || 0));
 
   useEffect(() => {
     setDisplayValue(formatSpace(value || 0));
@@ -59,11 +65,8 @@ export const MonetaryInput: React.FC<MonetaryInputProps> = ({
         onChange={handleInputChange}
         placeholder={placeholder}
         required={required}
-        className={`${className} pr-10 font-mono font-bold text-right`}
+        className={`${className} font-mono font-bold text-right`}
       />
-      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
-        Ar
-      </span>
     </div>
   );
 };
