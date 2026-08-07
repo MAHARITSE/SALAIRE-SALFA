@@ -2,10 +2,10 @@
 // COMPOSANT REACT : DIALOGUE D'AUTHENTIFICATION - SALFA TANAMBAO (JSON PUR)
 // ==============================================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { UserSession } from '../types';
-import { apiLogin, checkHealth } from '../api';
-import { Lock, UserCheck, Shield, AlertCircle, WifiOff, Server } from 'lucide-react';
+import { apiLogin } from '../api';
+import { Lock, UserCheck, Shield, AlertCircle } from 'lucide-react';
 
 interface LoginModalProps {
   onSuccess: (user: UserSession) => void;
@@ -16,14 +16,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess }) => {
   const [password, setPassword] = useState('admin123');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [serverOk, setServerOk] = useState<boolean | null>(null);
-
-  // Ping health au montage pour diagnostiquer rapidement "serveur inaccessible"
-  useEffect(() => {
-    checkHealth().then(ok => setServerOk(ok));
-    const id = setInterval(() => checkHealth().then(ok => setServerOk(ok)), 5000);
-    return () => clearInterval(id);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +29,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess }) => {
         setError("Identifiants incorrects. Vérifiez votre saisie (admin / admin123 ou comptable / comptable123).");
       }
     } catch (err: any) {
-      setError(err?.message || "Serveur inaccessible. Vérifiez que 'npm run dev' est lancé (port 3000).");
+      setError(err?.message || "Impossible de se connecter. Les identifiants sont peut-être incorrects.");
     } finally {
       setLoading(false);
     }
@@ -60,32 +52,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess }) => {
           </div>
           <h2 className="text-xl font-bold">CLINIQUE SALFA TANAMBAO</h2>
           <p className="text-xs text-slate-300 mt-1">
-            Logiciel de Paie Mensuelle — Authentification <span className="text-sky-300">(JSON)</span>
+            Logiciel de Paie Mensuelle — Authentification <span className="text-sky-300">(100% Local)</span>
           </p>
         </div>
 
         {/* Corps du formulaire */}
         <div className="p-6">
-          
-          {/* Indicateur santé serveur */}
-          {serverOk === false && (
-            <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-start gap-2">
-              <WifiOff className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
-              <div>
-                <div className="font-bold">Serveur JSON inaccessible</div>
-                <div className="text-amber-800/80 mt-0.5">
-                  Lancez <code className="bg-white px-1 py-0.5 rounded border">npm run dev</code> à la racine du projet et assurez-vous que le port <b>3000</b> est ouvert (0.0.0.0). Vérifiez <code>/api/health</code>.
-                </div>
-              </div>
-            </div>
-          )}
-          {serverOk === true && (
-            <div className="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg">
-              <Server className="w-3.5 h-3.5" />
-              <span className="font-semibold">Serveur JSON connecté</span>
-              <span className="text-emerald-600">— salfa_data.json prêt</span>
-            </div>
-          )}
+
+          {/* Indicateur mode local */}
+          <div className="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg">
+            <Lock className="w-3.5 h-3.5" />
+            <span className="font-semibold">Mode 100% local</span>
+            <span className="text-emerald-600">— données stockées dans ce navigateur</span>
+          </div>
 
           {/* Astuces comptes par défaut */}
           <div className="bg-sky-50 border border-sky-200 rounded-lg p-3 mb-5 text-xs text-salfa-dark">
@@ -111,7 +90,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess }) => {
               </button>
             </div>
             <div className="mt-2 text-[11px] text-slate-500">
-              Stockage: <b>salfa_data.json</b> (plus de SQLite / paie_salfa.db)
+              Stockage: <b>localStorage du navigateur</b> (aucun serveur, aucune base distante)
             </div>
           </div>
 
@@ -160,7 +139,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess }) => {
               <span>{loading ? "Connexion..." : "Se connecter"}</span>
             </button>
             <div className="text-[11px] text-center text-slate-400 mt-2">
-              Astuce dépannage : si la connexion échoue, ouvrez <code className="bg-slate-100 px-1 rounded">/api/health</code> dans le navigateur — vous devez voir <code>{"{"}"status":"ok"{"}"}</code>.
+              Application 100% locale : vos données ne quittent jamais votre navigateur.
             </div>
           </form>
 

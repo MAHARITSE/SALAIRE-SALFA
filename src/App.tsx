@@ -10,6 +10,7 @@ import { EmployesTab } from './components/tabs/EmployesTab';
 import { SaisieTab } from './components/tabs/SaisieTab';
 import { BulletinsTab } from './components/tabs/BulletinsTab';
 import { RapportsTab } from './components/tabs/RapportsTab';
+import { resetStore } from './local/store';
 import {
   Users, Calendar, FileText, BarChart3, ShieldCheck, CheckCircle2
 } from 'lucide-react';
@@ -28,6 +29,16 @@ export const App: React.FC = () => {
   const handleLogout = () => {
     setUser(null);
     setShowLogin(true);
+  };
+
+  const handleResetData = () => {
+    if (!window.confirm(
+      "Réinitialiser toutes les données locales de cette application ?\n\n" +
+      "Les modifications enregistrées dans ce navigateur (employés, paies, avances, MED, clôtures) seront perdues " +
+      "et remplacées par les données initiales embarquées."
+    )) return;
+    resetStore();
+    window.location.reload();
   };
 
   return (
@@ -52,6 +63,7 @@ export const App: React.FC = () => {
             user={user}
             onLogout={handleLogout}
             onOpenAdminModal={() => setShowAdminModal(true)}
+            onResetData={handleResetData}
           />
 
           {/* Bandeau de navigation par onglets */}
@@ -133,7 +145,7 @@ export const App: React.FC = () => {
               <div className="flex items-center gap-4 text-slate-400">
                 <span>Conformité CGI Madagascar (IRSA) & Congé Maternité</span>
                 <span>•</span>
-                <span>Base JSON persistante : salfa_data.json</span>
+                <span>100% local : données stockées dans le navigateur</span>
                 <span>•</span>
                 <span>2026</span>
               </div>
