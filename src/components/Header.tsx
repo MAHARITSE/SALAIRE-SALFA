@@ -3,15 +3,16 @@
 // ==============================================================================
 import React from 'react';
 import { UserSession } from '../types';
-import { User, LogOut, ShieldCheck, Building2 } from 'lucide-react';
+import { User, LogOut, ShieldCheck, Building2, RefreshCw } from 'lucide-react';
 
 interface HeaderProps {
   user: UserSession;
   onLogout: () => void;
   onOpenAdminModal?: () => void;
+  onResetData?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user, onLogout, onOpenAdminModal }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onLogout, onOpenAdminModal, onResetData }) => {
   return (
     <header className="bg-salfa-dark text-white shadow-lg border-b-4 border-salfa-teal no-print">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
@@ -41,6 +42,17 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, onOpenAdminModal
               >
                 <ShieldCheck className="w-4 h-4" />
                 <span>Admin : Formules & Colonnes</span>
+              </button>
+            )}
+
+            {user.role === 'Administrateur' && onResetData && (
+              <button
+                onClick={onResetData}
+                className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold px-3 py-2 rounded-lg transition shadow-md"
+                title="Réinitialiser les données locales (localStorage) à partir des données initiales embarquées"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Réinit. données</span>
               </button>
             )}
 

@@ -1,5 +1,6 @@
 // ==============================================================================
-// SERVEUR NODE : MOTEUR DE CALCUL DE PAIE - SALFA TANAMBAO (TYPESCRIPT)
+// CLIENT LOCAL : MOTEUR DE CALCUL DE PAIE - SALFA TANAMBAO (TYPESCRIPT)
+// Porté depuis server/calcul.ts pour tourner à 100% dans le navigateur.
 // ==============================================================================
 
 export interface BaremeAnciennete {
@@ -65,20 +66,20 @@ export function evaluerBaseRevalorisee(baseInitiale: number, dateEmbauche: strin
 
 export function calculerIrsa(salaireImposable: number, enfantsACharge: number = 0): number {
   const enfants = (typeof enfantsACharge === 'number' && enfantsACharge > 0) ? enfantsACharge : 0;
-  
+
   // 1. Arrondi de la base imposable à la centaine inférieure (CGI Madagascar)
   const base = Math.floor(salaireImposable / 100) * 100;
-  
+
   // 2. Barème IRSA Madagascar
   let irsaBrut = 0.0;
   if (base > 350000) irsaBrut += Math.min(base - 350000, 50000) * 0.05;
   if (base > 400000) irsaBrut += Math.min(base - 400000, 100000) * 0.10;
   if (base > 500000) irsaBrut += Math.min(base - 500000, 100000) * 0.15;
   if (base > 600000) irsaBrut += (base - 600000) * 0.20;
-  
+
   // 3. Réduction charges de famille : 2 000 Ar par enfant
   const irsaNet = irsaBrut - (enfants * 2000);
-  
+
   // 4. Minimum de perception IRSA : 3 000 Ar
   const irsaFinal = Math.max(3000.0, irsaNet);
   return Math.round(irsaFinal * 100) / 100;

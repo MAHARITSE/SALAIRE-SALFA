@@ -1,0 +1,21 @@
+# ==============================================================================
+# CONFIG WRANGLER - CLOUDFLARE PAGES (site 100% statique) - SALFA TANAMBAO
+#
+# Ce projet est un site 100% statique (aucun backend, aucune fonction Worker) :
+# toutes les données vivent dans le localStorage du navigateur.
+#
+# Déploiement via l'interface Cloudflare Dashboard (recommandé) :
+#   1. Allez sur https://dash.cloudflare.com/ -> Pages -> Create project
+#   2. Connectez ce dépôt Git, ou utilisez "Direct Upload" après `npm run build`.
+#   3. Build command    : npm run build
+#      Build output     : dist
+#
+# Déploiement en ligne de commande :
+#   npm run deploy
+# ==============================================================================
+
+name = "salfa-web-paie"
+compatibility_date = "2024-11-01"
+
+# Dossier généré par `vite build` (utilisé par `wrangler pages deploy`)
+pages_build_output_dir = "dist"
