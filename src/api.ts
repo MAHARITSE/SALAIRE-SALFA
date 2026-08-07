@@ -27,6 +27,14 @@ export async function apiLogin(username: string, password: string): Promise<User
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.warn('[LOGIN] échec', res.status, err);
+      // 401 signifie réellement que les identifiants sont invalides. Les
+      // autres statuts indiquent un problème de déploiement/API et ne doivent
+      // pas être présentés à l'utilisateur comme une faute de saisie.
+      if (res.status !== 401) {
+        throw new Error(
+          `API d'authentification indisponible (HTTP ${res.status}). Vérifiez que le serveur Node est déployé et que /api/auth/login est accessible.`
+        );
+      }
       return null;
     }
     const data = await res.json();
