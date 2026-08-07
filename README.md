@@ -7,34 +7,61 @@ initialisées à partir du fichier embarqué `src/data/salfa_data.json`.
 
 ---
 
-## 🚀 Déployer sur Cloudflare Dashboard
+## 🚀 Déploiement sur Cloudflare
 
-1. Rendez-vous sur <https://dash.cloudflare.com/> → **Workers & Pages** → **Create** → **Pages**.
-2. Choisissez **Connect to Git** (recommandé) puis sélectionnez ce dépôt, **ou** **Upload assets**
-   (glissez le contenu du dossier `dist/` après avoir lancé `npm run build`).
-3. Configurez les réglages de build (en cas de connexion Git) :
+Deux méthodes de déploiement sont possibles selon votre choix :
 
-   | Réglage          | Valeur        |
-   |------------------|---------------|
-   | Framework preset | `Vite`        |
-   | Build command    | `npm run build` |
-   | Build output     | `dist`        |
+### Option A — Cloudflare Pages (recommandé pour site statique)
 
-4. Cliquez **Deploy and continue**. Cloudflare vous fournit une URL `*.pages.dev`.
+1. Rendez-vous sur <https://dash.cloudflare.com/> → **Workers & Pages** → **Create** → **Pages** → **Connect to Git**.
+2. Sélectionnez ce dépôt Git.
+3. Configurez les réglages de build :
 
-> ⚠️ **Données :** étant 100 % local, chaque navigateur possède son propre jeu de données
-> (stocké dans son `localStorage`). Il n'y a pas de base partagée entre utilisateurs/machines.
-> Pour **réinitialiser** les données, videz le `localStorage` du site dans les outils
-> développeur, ou utilisez le bouton de réinitialisation ajouté dans l'application.
+   | Réglage                | Valeur          |
+   |------------------------|-----------------|
+   | Framework preset       | `Vite`          |
+   | **Build command**      | `npm run build` |
+   | **Build output directory** | `dist`      |
 
-### Alternative en ligne de commande (Wrangler)
+   > ⚠️ **Important :** Dans les réglages Cloudflare Pages, la commande de build doit être `npm run build` et **non** `wrangler deploy` ou `npm run deploy`. Cloudflare Pages publie automatiquement le dossier `dist`.
+
+4. Cliquez sur **Save and Deploy**. Cloudflare fournit votre URL `*.pages.dev`.
+
+### Option B — Cloudflare Workers (Static Assets / CLI)
+
+Grâce à la configuration `wrangler.toml` avec `[assets]`, vous pouvez déployer directement en tant que Worker avec assets statiques :
 
 ```bash
 npm install
-npm run build          # génère dist/
+npm run build
 npx wrangler login
+npx wrangler deploy
+```
+
+Ou pour un déploiement Pages direct en CLI :
+```bash
 npx wrangler pages deploy dist --project-name salfa-web-paie
 ```
+
+---
+
+## 🔧 Résolution de l'erreur `Workers-specific command in a Pages project`
+
+Si vous avez rencontré l'erreur :
+```text
+✘ [ERROR] It looks like you've run a Workers-specific command in a Pages project.
+For Pages, please run wrangler pages deploy instead.
+```
+
+Voici les causes et solutions :
+
+1. **Sur Cloudflare Pages (Dashboard CI/CD) :**
+   - **Cause :** La commande de build dans le tableau de bord Cloudflare Pages était définie sur `npm run deploy` ou `wrangler deploy`.
+   - **Solution :** Allez dans **Cloudflare Dashboard** → **Workers & Pages** → Votre projet Pages → **Settings** → **Builds & deployments** → Modifiez **Build command** en `npm run build` et **Build output directory** en `dist`.
+
+2. **En ligne de commande :**
+   - **Solution Pages :** Lancez `npx wrangler pages deploy dist --project-name salfa-web-paie` (ou `npm run deploy:pages`).
+   - **Solution Workers :** Le fichier `wrangler.toml` a été mis à jour avec `[assets] directory = "./dist"` et Wrangler a été mis à niveau vers la v4, ce qui permet à `wrangler deploy` de fonctionner directement.
 
 ---
 
