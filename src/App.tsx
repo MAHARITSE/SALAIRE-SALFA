@@ -133,7 +133,7 @@ export const App: React.FC = () => {
               <div className="flex items-center gap-4 text-slate-400">
                 <span>Conformité CGI Madagascar (IRSA) & Congé Maternité</span>
                 <span>•</span>
-                <span>Base SQLite persistante : paie_salfa.db</span>
+                <span>Base JSON persistante : salfa_data.json</span>
                 <span>•</span>
                 <span>2026</span>
               </div>
