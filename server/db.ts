@@ -11,9 +11,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let dbInstance: Database | null = null;
-const DB_PATH = path.resolve(__dirname, '../../paie_salfa.db');
-const SCHEMA_PATH = path.resolve(__dirname, '../../schema.sql');
-const JSON_PATH = path.resolve(__dirname, '../../salfa_data.json');
+// Les fichiers de données vivent à la racine du projet (un niveau au-dessus de
+// ce dossier `server`). Ils peuvent être redéfinis en production avec DB_PATH
+// et JSON_PATH, sans jamais faire dépendre le navigateur d'un chemin local.
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+const DB_PATH = path.resolve(process.env.DB_PATH || path.join(PROJECT_ROOT, 'paie_salfa.db'));
+const SCHEMA_PATH = path.resolve(process.env.SCHEMA_PATH || path.join(PROJECT_ROOT, 'schema.sql'));
+const JSON_PATH = path.resolve(process.env.JSON_PATH || path.join(PROJECT_ROOT, 'salfa_data.json'));
 
 export async function getDb(): Promise<Database> {
   if (dbInstance) return dbInstance;
