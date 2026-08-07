@@ -30,13 +30,14 @@ let initialized = false;
 function migrateLegacyIfNeeded(raw: any): JsonStore | null {
   // Nouveau format flat : il faut employes + paies
   if (raw && Array.isArray(raw.employes) && Array.isArray(raw.paies)) {
+    const ensuredUsers = ensureDefaultUsers(raw.utilisateurs || []);
     return {
       meta: raw.meta || {},
       bareme_anciennete: raw.bareme_anciennete || {},
       employes: raw.employes,
       paies: raw.paies,
       comparaison_net: raw.comparaison_net || [],
-      utilisateurs: raw.utilisateurs || defaultUtilisateurs(),
+      utilisateurs: ensuredUsers.users,
     };
   }
 
@@ -217,6 +218,40 @@ function defaultUtilisateurs() {
   ];
 }
 
+/**
+ * Les installations JSON existantes peuvent contenir une ancienne liste
+ * d'utilisateurs (par exemple après une migration SQLite). Dans ce cas, la
+ * présence de cette liste empêchait defaultUtilisateurs() de s'appliquer et
+ * les comptes documentés ne fonctionnaient plus. On répare uniquement les
+ * deux comptes intégrés, sans supprimer d'éventuels comptes supplémentaires.
+ */
+function ensureDefaultUsers(utilisateurs: any[]): { users: any[]; changed: boolean } {
+  const defaults = defaultUtilisateurs();
+  const users = Array.isArray(utilisateurs) ? [...utilisateurs] : [];
+  let changed = false;
+
+  for (const defaultUser of defaults) {
+    const index = users.findIndex((user: any) =>
+      String(user?.username || '').trim().toLowerCase() === defaultUser.username
+    );
+    if (index === -1) {
+      users.push(defaultUser);
+      changed = true;
+      continue;
+    }
+
+    // Garantit que les identifiants affichés dans l'écran de connexion sont
+    // toujours valides, même si le JSON provient d'une ancienne version.
+    const current = users[index];
+    if (current.password_hash !== defaultUser.password_hash || Number(current.actif) !== 1) {
+      users[index] = { ...current, ...defaultUser };
+      changed = true;
+    }
+  }
+
+  return { users, changed };
+}
+
 function loadStoreSync(): JsonStore {
   if (storeCache) return storeCache;
 
@@ -276,6 +311,16 @@ function loadStoreSync(): JsonStore {
       saveStoreSync(migrated);
       return migrated;
     }
+
+    // Même un fichier déjà plat peut venir d'une ancienne version et contenir
+    // des hashes obsolètes ou des comptes désactivés.
+    if (JSON.stringify(raw.utilisateurs || []) !== JSON.stringify(migrated.utilisateurs)) {
+      console.log('[JSON STORE] Comptes par défaut réparés dans le store JSON.');
+      storeCache = migrated;
+      saveStoreSync(migrated);
+      return migrated;
+    }
+
     storeCache = migrated;
     return migrated;
   }
