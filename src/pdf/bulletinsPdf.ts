@@ -85,7 +85,6 @@ function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
 }
 
 function drawCover(doc: jsPDF, paies: PaieMensuelle[], mois: string, annee: number): void {
-  const totalNet = paies.reduce((sum, p) => sum + Number(p.net || 0), 0);
   doc.setFillColor(...NAVY); doc.rect(0, 0, 297, 210, 'F');
   doc.setDrawColor(110, 191, 191); doc.setLineWidth(1.2); doc.roundedRect(18, 18, 261, 174, 4, 4, 'S');
   doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255); doc.setFontSize(15);
@@ -99,7 +98,7 @@ function drawCover(doc: jsPDF, paies: PaieMensuelle[], mois: string, annee: numb
   doc.setFontSize(11); doc.setTextColor(...NAVY); doc.text('ÉTATS DES BULLETINS DE PAIE', 148.5, 119, { align: 'center' });
   doc.setFontSize(20); doc.text(`${mois} ${annee}`, 148.5, 132, { align: 'center' });
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(190, 224, 240);
-  doc.text(`${paies.length} salarié${paies.length > 1 ? 's' : ''}  •  Net total : ${fmt(totalNet)}`, 148.5, 157, { align: 'center' });
+  doc.text(`${paies.length} salarié${paies.length > 1 ? 's' : ''}`, 148.5, 157, { align: 'center' });
   doc.text('Un bulletin par page — deux exemplaires côte à côte (employeur / salarié)', 148.5, 165, { align: 'center' });
   doc.setFontSize(7); doc.text(`Édité le ${new Date().toLocaleDateString('fr-FR')}`, 148.5, 181, { align: 'center' });
 }
