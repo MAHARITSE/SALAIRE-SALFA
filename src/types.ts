@@ -20,6 +20,7 @@ export interface Employe {
   mode_paiement: string;
   actif: number;
   conge_maternite?: number | boolean;
+  date_debut_maternite?: string;
 }
 
 export interface PaieMensuelle {
@@ -61,6 +62,7 @@ export interface PaieMensuelle {
   rib: string;
   verrouille: number;
   conge_maternite?: number | boolean;
+  date_debut_maternite?: string;
 }
 
 export interface TotauxMois {
