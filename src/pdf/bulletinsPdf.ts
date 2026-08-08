@@ -86,195 +86,191 @@ function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
 
 function drawCover(doc: jsPDF, paies: PaieMensuelle[], mois: string, annee: number): void {
   const TEAL: [number, number, number] = [61, 153, 153];
-  const TEAL_LIGHT: [number, number, number] = [190, 224, 220];
+  const TEAL_DARK: [number, number, number] = [33, 122, 122];
   const SLATE_50: [number, number, number] = [248, 250, 252];
   const SLATE_200: [number, number, number] = [226, 232, 240];
   const SLATE_500: [number, number, number] = [100, 116, 139];
+  const SLATE_600: [number, number, number] = [71, 85, 105];
 
-  // 1) Fond blanc total - conforme demande
+  const PAGE_W = 297;
+  const PAGE_H = 210;
+  const LEFT_W = 92;
+  const GUTTER_X = LEFT_W;
+  const rightCenter = GUTTER_X + (PAGE_W - GUTTER_X) / 2;
+
+  // Fond blanc pour toute la page de couverture.
   doc.setFillColor(255, 255, 255);
-  doc.rect(0, 0, 297, 210, 'F');
+  doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
 
-  // 2) Bande gauche (respect visuel) - occupe côté gauche
-  const LEFT_W = 84;
-  doc.setFillColor(...NAVY);
-  doc.rect(0, 0, LEFT_W, 210, 'F');
+  // Séparation discrète : la couverture reste blanche, avec l'identité placée à gauche.
+  doc.setDrawColor(...SLATE_200);
+  doc.setLineWidth(0.35);
+  doc.line(GUTTER_X, 12, GUTTER_X, PAGE_H - 12);
 
-  // Liseré teal à la jonction pour séparer proprement
-  doc.setFillColor(...TEAL);
-  doc.rect(LEFT_W, 0, 4, 210, 'F');
+  doc.setDrawColor(...TEAL);
+  doc.setLineWidth(1.15);
+  doc.line(GUTTER_X + 2.8, 20, GUTTER_X + 2.8, PAGE_H - 20);
 
-  // -- Contenu bande gauche (image respectée = logo circulaire non déformé) --
-  const cx = LEFT_W / 2; // 42
+  // -- Bloc gauche : logo / établissement / infos, sans fond coloré --
+  const leftCenter = LEFT_W / 2;
+  const cardX = 10;
+  const cardY = 12;
+  const cardW = LEFT_W - 20;
+  const cardH = PAGE_H - 24;
 
-  // Logo circulaire blanc - contient une croix médicale stylisée (respecte ratio 1:1)
-  // Cercle blanc
   doc.setFillColor(255, 255, 255);
-  doc.circle(cx, 38, 17, 'F');
+  doc.setDrawColor(...SLATE_200);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(cardX, cardY, cardW, cardH, 4, 4, 'S');
 
-  // Croix navy à l'intérieur (forme respectant le ratio)
-  // On dessine une croix épaisse mais centrée
-  doc.setFillColor(...NAVY);
-  // barre verticale
-  doc.roundedRect(cx - 2.6, 26, 5.2, 24, 1, 1, 'F');
-  // barre horizontale
-  doc.roundedRect(cx - 12, 35.4, 24, 5.2, 1, 1, 'F');
+  // Petit liseré supérieur gauche pour rappeler la charte sans colorer le fond.
+  doc.setDrawColor(...TEAL);
+  doc.setLineWidth(1.5);
+  doc.line(cardX + 8, cardY + 8, cardX + cardW - 8, cardY + 8);
 
-  // Petit cercle teal au centre de la croix pour détail
+  // Logo stylisé conservé au ratio 1:1.
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(...NAVY);
+  doc.setLineWidth(0.8);
+  doc.circle(leftCenter, 39, 17, 'FD');
+
   doc.setFillColor(...TEAL);
-  doc.circle(cx, 38, 2.2, 'F');
-
-  // Texte SALFA sous le logo
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(17);
-  doc.text('SALFA', cx, 68, { align: 'center' });
+  doc.roundedRect(leftCenter - 2.6, 27, 5.2, 24, 1, 1, 'F');
+  doc.roundedRect(leftCenter - 12, 36.4, 24, 5.2, 1, 1, 'F');
+  doc.setFillColor(...NAVY);
+  doc.circle(leftCenter, 39, 2.2, 'F');
 
   doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...NAVY);
+  doc.setFontSize(18);
+  doc.text('SALFA', leftCenter, 69, { align: 'center' });
+
   doc.setFontSize(6.8);
-  doc.setTextColor(...TEAL_LIGHT);
-  doc.text('SAHAM — CLINIQUE', cx, 73.5, { align: 'center' });
+  doc.setTextColor(...TEAL_DARK);
+  doc.text('SAHAM — CLINIQUE', leftCenter, 74.5, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6);
-  doc.setTextColor(165, 195, 205);
-  doc.text('Fiangonana Loterana', cx, 78, { align: 'center' });
-  doc.text('Malagasy', cx, 81.5, { align: 'center' });
+  doc.setFontSize(6.2);
+  doc.setTextColor(...SLATE_500);
+  doc.text('Fiangonana Loterana Malagasy', leftCenter, 80, { align: 'center' });
 
-  // Séparateur fin
-  doc.setDrawColor(...TEAL);
+  doc.setDrawColor(...SLATE_200);
   doc.setLineWidth(0.25);
-  doc.setDrawColor(80, 170, 170);
-  doc.line(14, 87, LEFT_W - 14, 87);
+  doc.line(cardX + 11, 91, cardX + cardW - 11, 91);
 
-  // Bloc Dispensaire
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(...NAVY);
   doc.setFontSize(10.5);
-  doc.text('DISPENSAIRE', cx, 102, { align: 'center' });
-  doc.text('TANAMBAO', cx, 109, { align: 'center' });
+  doc.text('DISPENSAIRE', leftCenter, 105, { align: 'center' });
+  doc.text('TANAMBAO', leftCenter, 112, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.2);
-  doc.setTextColor(...TEAL_LIGHT);
-  doc.text('TOBY BETELA • TOLIARA', cx, 116, { align: 'center' });
+  doc.setTextColor(...TEAL_DARK);
+  doc.text('TOBY BETELA • TOLIARA', leftCenter, 119.5, { align: 'center' });
 
-  doc.setFontSize(6.5);
-  doc.setTextColor(140, 180, 190);
-  doc.text('SAMPAN’ASA LOTERANA', cx, 123, { align: 'center' });
-  doc.text('MOMBA NY FAHASALAMANA', cx, 127, { align: 'center' });
+  doc.setFontSize(6.4);
+  doc.setTextColor(...SLATE_500);
+  doc.text('SAMPAN’ASA LOTERANA', leftCenter, 127, { align: 'center' });
+  doc.text('MOMBA NY FAHASALAMANA', leftCenter, 131, { align: 'center' });
 
-  // Illustration simple "image respectée" sur côté gauche : une icône dossier/bulletins en filaire blanc
-  // On dessine un rectangle représentant un état
-  doc.setDrawColor(255, 255, 255);
-  doc.setLineWidth(0.35);
-  doc.setFillColor(255, 255, 255);
-  // petite doc icon
-  const iconX = cx - 13;
-  const iconY = 137;
-  doc.setDrawColor(255, 255, 255);
-  doc.roundedRect(iconX, iconY, 26, 18, 1.2, 1.2, 'S');
-  doc.line(iconX, iconY + 5, iconX + 26, iconY + 5);
-  doc.setFillColor(255, 255, 255);
-  doc.rect(iconX + 2, iconY + 7.5, 14, 1.1, 'F');
-  doc.rect(iconX + 2, iconY + 10, 18, 1.1, 'F');
-  doc.rect(iconX + 2, iconY + 12.5, 11, 1.1, 'F');
+  // Icône état/documents sur le côté gauche de l'état.
+  const iconX = leftCenter - 14;
+  const iconY = 143;
+  doc.setDrawColor(...NAVY);
+  doc.setLineWidth(0.45);
+  doc.roundedRect(iconX, iconY, 28, 19, 1.4, 1.4, 'S');
+  doc.line(iconX, iconY + 5, iconX + 28, iconY + 5);
+  doc.setFillColor(...TEAL);
+  doc.rect(iconX + 3, iconY + 8, 14, 1.15, 'F');
+  doc.setFillColor(...NAVY);
+  doc.rect(iconX + 3, iconY + 10.8, 20, 0.9, 'F');
+  doc.rect(iconX + 3, iconY + 13.3, 12, 0.9, 'F');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(5.8);
-  doc.setTextColor(255, 255, 255);
-  doc.text('ÉTATS DE PAIE', cx, 163, { align: 'center' });
+  doc.setFontSize(6.2);
+  doc.setTextColor(...NAVY);
+  doc.text('ÉTATS DE PAIE', leftCenter, 171, { align: 'center' });
 
-  // Pied de bande gauche
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(5.2);
-  doc.setTextColor(120, 160, 175);
-  doc.text('NIF: 5000767080', cx, 184, { align: 'center' });
-  doc.text('STAT: 851 125 120 120 001 36', cx, 187.5, { align: 'center' });
+  doc.setFontSize(5.3);
+  doc.setTextColor(...SLATE_500);
+  doc.text('NIF: 5000767080', leftCenter, 185, { align: 'center' });
+  doc.text('STAT: 851 125 120 120 001 36', leftCenter, 188.6, { align: 'center' });
+  doc.text(`Édité le ${new Date().toLocaleDateString('fr-FR')}`, leftCenter, 196, { align: 'center' });
 
-  doc.setFontSize(5);
-  doc.setTextColor(100, 140, 155);
-  doc.text(`Édité le ${new Date().toLocaleDateString('fr-FR')}`, cx, 195, { align: 'center' });
-
-  // -- Zone droite : fond blanc, contenu centré --
-  const rightCenter = LEFT_W + 4 + (297 - LEFT_W - 4) / 2; // 192.5
-
-  // Cadre très léger autour de la zone droite pour structure
+  // -- Zone droite : contenu principal sur fond blanc --
   doc.setDrawColor(...SLATE_200);
   doc.setLineWidth(0.4);
-  doc.roundedRect(LEFT_W + 12, 10, 297 - LEFT_W - 24, 190, 4, 4, 'S');
+  doc.roundedRect(GUTTER_X + 14, 12, PAGE_W - GUTTER_X - 26, PAGE_H - 24, 4, 4, 'S');
 
-  // En-tête haut droite
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...NAVY);
   doc.setFontSize(12.5);
-  doc.text('FIANGONANA LOTERANA MALAGASY', rightCenter, 32, { align: 'center' });
+  doc.text('FIANGONANA LOTERANA MALAGASY', rightCenter, 34, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(...SLATE_500);
-  doc.text("SAMPAN'ASA LOTERANA MOMBA NY FAHASALAMANA", rightCenter, 39, { align: 'center' });
+  doc.text("SAMPAN'ASA LOTERANA MOMBA NY FAHASALAMANA", rightCenter, 41, { align: 'center' });
 
   doc.setDrawColor(...SLATE_200);
   doc.setLineWidth(0.35);
-  doc.line(rightCenter - 58, 45, rightCenter + 58, 45);
+  doc.line(rightCenter - 58, 48, rightCenter + 58, 48);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
-  doc.setTextColor(...TEAL);
-  doc.text('DISPENSAIRE TANAMBAO — TOBY BETELA TOLIARA • CLINIQUE SALFA', rightCenter, 51.5, { align: 'center' });
+  doc.setTextColor(...TEAL_DARK);
+  doc.text('DISPENSAIRE TANAMBAO — TOBY BETELA TOLIARA • CLINIQUE SALFA', rightCenter, 55, { align: 'center' });
 
-  // Badge "Document officiel"
+  // Badge "Document officiel" sur fond blanc/gris très léger.
   doc.setFillColor(...SLATE_50);
   doc.setDrawColor(...SLATE_200);
   doc.setLineWidth(0.3);
-  doc.roundedRect(rightCenter - 38, 59, 76, 9, 2, 2, 'FD');
+  doc.roundedRect(rightCenter - 38, 63, 76, 9, 2, 2, 'FD');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.3);
-  doc.setTextColor(...TEAL);
-  doc.text('DOCUMENT OFFICIEL DE PAIE', rightCenter, 64.8, { align: 'center' });
+  doc.setTextColor(...TEAL_DARK);
+  doc.text('DOCUMENT OFFICIEL DE PAIE', rightCenter, 68.8, { align: 'center' });
 
-  // Titre principal
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(26);
+  doc.setFontSize(24);
   doc.setTextColor(...NAVY);
-  doc.text('ÉTATS DES', rightCenter, 88, { align: 'center' });
-  doc.setFontSize(26);
-  doc.text('BULLETINS DE PAIE', rightCenter, 100, { align: 'center' });
+  doc.text('ÉTAT GLOBAL', rightCenter, 91, { align: 'center' });
+  doc.setFontSize(23);
+  doc.text('DES BULLETINS DE PAIE', rightCenter, 103, { align: 'center' });
 
-  // Période - encadré blanc avec fond très léger
-  doc.setFillColor(248, 250, 252);
+  doc.setFillColor(255, 255, 255);
   doc.setDrawColor(...NAVY);
   doc.setLineWidth(0.55);
-  doc.roundedRect(rightCenter - 60, 111, 120, 28, 3, 3, 'FD');
+  doc.roundedRect(rightCenter - 60, 115, 120, 28, 3, 3, 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18.5);
   doc.setTextColor(...NAVY);
-  doc.text(`${mois} ${annee}`, rightCenter, 128.5, { align: 'center' });
+  doc.text(`${mois} ${annee}`, rightCenter, 132.5, { align: 'center' });
 
-  // Badge nombre salariés
-  doc.setFillColor(...NAVY);
-  doc.roundedRect(rightCenter - 35, 146, 70, 11, 2.5, 2.5, 'F');
+  // Nombre de salariés : badge lisible, le reste de la page reste blanc.
+  doc.setFillColor(...TEAL);
+  doc.roundedRect(rightCenter - 36, 150, 72, 11, 2.5, 2.5, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.8);
   doc.setTextColor(255, 255, 255);
-  doc.text(`${paies.length} salarié${paies.length > 1 ? 's' : ''} • ${paies.length > 0 ? 'LISTE COMPLÈTE' : ''}`, rightCenter, 153.5, { align: 'center' });
+  doc.text(`${paies.length} salarié${paies.length > 1 ? 's' : ''} • ${paies.length > 0 ? 'LISTE COMPLÈTE' : ''}`, rightCenter, 157.5, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.2);
-  doc.setTextColor(...SLATE_500);
-  doc.text('Un bulletin par page — deux exemplaires côte à côte (employeur / salarié)', rightCenter, 165.5, { align: 'center' });
+  doc.setTextColor(...SLATE_600);
+  doc.text('Un bulletin par page — deux exemplaires côte à côte (employeur / salarié)', rightCenter, 169.5, { align: 'center' });
 
-  // Pied de page droite
   doc.setDrawColor(...SLATE_200);
   doc.setLineWidth(0.3);
-  doc.line(LEFT_W + 22, 180, 297 - 12, 180);
+  doc.line(GUTTER_X + 24, 183, PAGE_W - 14, 183);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6);
   doc.setTextColor(140, 150, 165);
-  doc.text('Document confidentiel — Usage interne uniquement — Clinique SALFA Tanambao — Toby Betela Toliara', rightCenter, 186, { align: 'center' });
+  doc.text('Document confidentiel — Usage interne uniquement — Clinique SALFA Tanambao — Toby Betela Toliara', rightCenter, 190, { align: 'center' });
 }
 
 /** Downloads a single print-ready PDF: cover page then one A4 landscape page per employee. */
