@@ -85,22 +85,196 @@ function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
 }
 
 function drawCover(doc: jsPDF, paies: PaieMensuelle[], mois: string, annee: number): void {
-  doc.setFillColor(...NAVY); doc.rect(0, 0, 297, 210, 'F');
-  doc.setDrawColor(110, 191, 191); doc.setLineWidth(1.2); doc.roundedRect(18, 18, 261, 174, 4, 4, 'S');
-  doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255); doc.setFontSize(15);
-  doc.text('FIANGONANA LOTERANA MALAGASY', 148.5, 43, { align: 'center' });
-  doc.setFontSize(10); doc.setTextColor(190, 224, 240);
-  doc.text("SAMPAN'ASA LOTERANA MOMBA NY FAHASALAMANA", 148.5, 51, { align: 'center' });
-  doc.setDrawColor(190, 224, 240); doc.setLineWidth(.4); doc.line(75, 61, 222, 61);
-  doc.setFontSize(18); doc.setTextColor(255, 255, 255); doc.text('DISPENSAIRE TANAMBAO', 148.5, 78, { align: 'center' });
-  doc.setFontSize(11); doc.text('TOBY BETELA — TOLIARA', 148.5, 86, { align: 'center' });
-  doc.setFillColor(255, 255, 255); doc.roundedRect(68, 105, 161, 36, 3, 3, 'F');
-  doc.setFontSize(11); doc.setTextColor(...NAVY); doc.text('ÉTATS DES BULLETINS DE PAIE', 148.5, 119, { align: 'center' });
-  doc.setFontSize(20); doc.text(`${mois} ${annee}`, 148.5, 132, { align: 'center' });
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(190, 224, 240);
-  doc.text(`${paies.length} salarié${paies.length > 1 ? 's' : ''}`, 148.5, 157, { align: 'center' });
-  doc.text('Un bulletin par page — deux exemplaires côte à côte (employeur / salarié)', 148.5, 165, { align: 'center' });
-  doc.setFontSize(7); doc.text(`Édité le ${new Date().toLocaleDateString('fr-FR')}`, 148.5, 181, { align: 'center' });
+  const TEAL: [number, number, number] = [61, 153, 153];
+  const TEAL_LIGHT: [number, number, number] = [190, 224, 220];
+  const SLATE_50: [number, number, number] = [248, 250, 252];
+  const SLATE_200: [number, number, number] = [226, 232, 240];
+  const SLATE_500: [number, number, number] = [100, 116, 139];
+
+  // 1) Fond blanc total - conforme demande
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, 297, 210, 'F');
+
+  // 2) Bande gauche (respect visuel) - occupe côté gauche
+  const LEFT_W = 84;
+  doc.setFillColor(...NAVY);
+  doc.rect(0, 0, LEFT_W, 210, 'F');
+
+  // Liseré teal à la jonction pour séparer proprement
+  doc.setFillColor(...TEAL);
+  doc.rect(LEFT_W, 0, 4, 210, 'F');
+
+  // -- Contenu bande gauche (image respectée = logo circulaire non déformé) --
+  const cx = LEFT_W / 2; // 42
+
+  // Logo circulaire blanc - contient une croix médicale stylisée (respecte ratio 1:1)
+  // Cercle blanc
+  doc.setFillColor(255, 255, 255);
+  doc.circle(cx, 38, 17, 'F');
+
+  // Croix navy à l'intérieur (forme respectant le ratio)
+  // On dessine une croix épaisse mais centrée
+  doc.setFillColor(...NAVY);
+  // barre verticale
+  doc.roundedRect(cx - 2.6, 26, 5.2, 24, 1, 1, 'F');
+  // barre horizontale
+  doc.roundedRect(cx - 12, 35.4, 24, 5.2, 1, 1, 'F');
+
+  // Petit cercle teal au centre de la croix pour détail
+  doc.setFillColor(...TEAL);
+  doc.circle(cx, 38, 2.2, 'F');
+
+  // Texte SALFA sous le logo
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(17);
+  doc.text('SALFA', cx, 68, { align: 'center' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.8);
+  doc.setTextColor(...TEAL_LIGHT);
+  doc.text('SAHAM — CLINIQUE', cx, 73.5, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6);
+  doc.setTextColor(165, 195, 205);
+  doc.text('Fiangonana Loterana', cx, 78, { align: 'center' });
+  doc.text('Malagasy', cx, 81.5, { align: 'center' });
+
+  // Séparateur fin
+  doc.setDrawColor(...TEAL);
+  doc.setLineWidth(0.25);
+  doc.setDrawColor(80, 170, 170);
+  doc.line(14, 87, LEFT_W - 14, 87);
+
+  // Bloc Dispensaire
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(10.5);
+  doc.text('DISPENSAIRE', cx, 102, { align: 'center' });
+  doc.text('TANAMBAO', cx, 109, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.2);
+  doc.setTextColor(...TEAL_LIGHT);
+  doc.text('TOBY BETELA • TOLIARA', cx, 116, { align: 'center' });
+
+  doc.setFontSize(6.5);
+  doc.setTextColor(140, 180, 190);
+  doc.text('SAMPAN’ASA LOTERANA', cx, 123, { align: 'center' });
+  doc.text('MOMBA NY FAHASALAMANA', cx, 127, { align: 'center' });
+
+  // Illustration simple "image respectée" sur côté gauche : une icône dossier/bulletins en filaire blanc
+  // On dessine un rectangle représentant un état
+  doc.setDrawColor(255, 255, 255);
+  doc.setLineWidth(0.35);
+  doc.setFillColor(255, 255, 255);
+  // petite doc icon
+  const iconX = cx - 13;
+  const iconY = 137;
+  doc.setDrawColor(255, 255, 255);
+  doc.roundedRect(iconX, iconY, 26, 18, 1.2, 1.2, 'S');
+  doc.line(iconX, iconY + 5, iconX + 26, iconY + 5);
+  doc.setFillColor(255, 255, 255);
+  doc.rect(iconX + 2, iconY + 7.5, 14, 1.1, 'F');
+  doc.rect(iconX + 2, iconY + 10, 18, 1.1, 'F');
+  doc.rect(iconX + 2, iconY + 12.5, 11, 1.1, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(5.8);
+  doc.setTextColor(255, 255, 255);
+  doc.text('ÉTATS DE PAIE', cx, 163, { align: 'center' });
+
+  // Pied de bande gauche
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5.2);
+  doc.setTextColor(120, 160, 175);
+  doc.text('NIF: 5000767080', cx, 184, { align: 'center' });
+  doc.text('STAT: 851 125 120 120 001 36', cx, 187.5, { align: 'center' });
+
+  doc.setFontSize(5);
+  doc.setTextColor(100, 140, 155);
+  doc.text(`Édité le ${new Date().toLocaleDateString('fr-FR')}`, cx, 195, { align: 'center' });
+
+  // -- Zone droite : fond blanc, contenu centré --
+  const rightCenter = LEFT_W + 4 + (297 - LEFT_W - 4) / 2; // 192.5
+
+  // Cadre très léger autour de la zone droite pour structure
+  doc.setDrawColor(...SLATE_200);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(LEFT_W + 12, 10, 297 - LEFT_W - 24, 190, 4, 4, 'S');
+
+  // En-tête haut droite
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...NAVY);
+  doc.setFontSize(12.5);
+  doc.text('FIANGONANA LOTERANA MALAGASY', rightCenter, 32, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(...SLATE_500);
+  doc.text("SAMPAN'ASA LOTERANA MOMBA NY FAHASALAMANA", rightCenter, 39, { align: 'center' });
+
+  doc.setDrawColor(...SLATE_200);
+  doc.setLineWidth(0.35);
+  doc.line(rightCenter - 58, 45, rightCenter + 58, 45);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(...TEAL);
+  doc.text('DISPENSAIRE TANAMBAO — TOBY BETELA TOLIARA • CLINIQUE SALFA', rightCenter, 51.5, { align: 'center' });
+
+  // Badge "Document officiel"
+  doc.setFillColor(...SLATE_50);
+  doc.setDrawColor(...SLATE_200);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(rightCenter - 38, 59, 76, 9, 2, 2, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6.3);
+  doc.setTextColor(...TEAL);
+  doc.text('DOCUMENT OFFICIEL DE PAIE', rightCenter, 64.8, { align: 'center' });
+
+  // Titre principal
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(26);
+  doc.setTextColor(...NAVY);
+  doc.text('ÉTATS DES', rightCenter, 88, { align: 'center' });
+  doc.setFontSize(26);
+  doc.text('BULLETINS DE PAIE', rightCenter, 100, { align: 'center' });
+
+  // Période - encadré blanc avec fond très léger
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(...NAVY);
+  doc.setLineWidth(0.55);
+  doc.roundedRect(rightCenter - 60, 111, 120, 28, 3, 3, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18.5);
+  doc.setTextColor(...NAVY);
+  doc.text(`${mois} ${annee}`, rightCenter, 128.5, { align: 'center' });
+
+  // Badge nombre salariés
+  doc.setFillColor(...NAVY);
+  doc.roundedRect(rightCenter - 35, 146, 70, 11, 2.5, 2.5, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.8);
+  doc.setTextColor(255, 255, 255);
+  doc.text(`${paies.length} salarié${paies.length > 1 ? 's' : ''} • ${paies.length > 0 ? 'LISTE COMPLÈTE' : ''}`, rightCenter, 153.5, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.2);
+  doc.setTextColor(...SLATE_500);
+  doc.text('Un bulletin par page — deux exemplaires côte à côte (employeur / salarié)', rightCenter, 165.5, { align: 'center' });
+
+  // Pied de page droite
+  doc.setDrawColor(...SLATE_200);
+  doc.setLineWidth(0.3);
+  doc.line(LEFT_W + 22, 180, 297 - 12, 180);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6);
+  doc.setTextColor(140, 150, 165);
+  doc.text('Document confidentiel — Usage interne uniquement — Clinique SALFA Tanambao — Toby Betela Toliara', rightCenter, 186, { align: 'center' });
 }
 
 /** Downloads a single print-ready PDF: cover page then one A4 landscape page per employee. */
