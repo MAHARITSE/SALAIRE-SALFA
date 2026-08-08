@@ -7,7 +7,7 @@
 
 import { Employe, PaieMensuelle, TotauxMois, ComparaisonNet, UserSession } from './types';
 import { getStore, saveStore, nextEmployeId, nextPaieId, nowStamp } from './local/store';
-import { calculerPaieEmploye, calculerAnciennete } from './local/calcul';
+import { calculerPaieEmploye, calculerAnciennete, estEnCongeMaternite } from './local/calcul';
 import { hashPassword } from './local/hash';
 
 // ------------------------------------------------------------------------------
@@ -97,6 +97,7 @@ export async function createEmploye(employe: Partial<Employe>): Promise<boolean>
     mode_paiement: String(employe.mode_paiement || 'ESPECES').toUpperCase(),
     actif: 1,
     conge_maternite: employe.conge_maternite ? 1 : 0,
+    date_debut_maternite: String(employe.date_debut_maternite || '').trim(),
     date_creation: nowStamp(),
   };
   store.employes.push(newEmp);
@@ -138,6 +139,10 @@ export async function updateEmploye(id: number, employe: Partial<Employe>): Prom
           ? 1
           : 0
         : store.employes[idx].conge_maternite,
+    date_debut_maternite:
+      employe.date_debut_maternite !== undefined
+        ? String(employe.date_debut_maternite || '').trim()
+        : store.employes[idx].date_debut_maternite,
   };
 
   store.employes[idx] = updated;
@@ -255,6 +260,26 @@ export async function initMoisPaie(
     .filter((e: any) => Number(e.actif) === 1)
     .sort((x: any, y: any) => Number(x.numero_matricule) - Number(y.numero_matricule));
 
+  // Indexer les paies existantes par (employe_id -> liste triée du plus récent
+  // au plus ancien) afin de reprendre les accessoires du dernier mois saisi.
+  const MOIS_ORDRE: Record<string, number> = {
+    JANVIER: 0, FEVRIER: 1, MARS: 2, AVRIL: 3, MAI: 4, JUIN: 5,
+    JUILLET: 6, AOUT: 7, SEPTEMBRE: 8, OCTOBRE: 9, NOVEMBRE: 10, DECEMBRE: 11,
+  };
+  const paiesParEmploye: Record<number, any[]> = {};
+  for (const p of store.paies || []) {
+    const id = Number(p.employe_id);
+    if (!paiesParEmploye[id]) paiesParEmploye[id] = [];
+    paiesParEmploye[id].push(p);
+  }
+  for (const id of Object.keys(paiesParEmploye)) {
+    paiesParEmploye[Number(id)].sort((x: any, y: any) => {
+      const ix = Number(x.annee) * 12 + (MOIS_ORDRE[String(x.mois).toUpperCase()] ?? 0);
+      const iy = Number(y.annee) * 12 + (MOIS_ORDRE[String(y.mois).toUpperCase()] ?? 0);
+      return iy - ix;
+    });
+  }
+
   let count = 0;
   for (const emp of employesActifs) {
     const exist = (store.paies || []).some(
@@ -265,7 +290,25 @@ export async function initMoisPaie(
     );
     if (exist) continue;
 
+    // Reprise des accessoires du dernier bulletin du salarié (AVANCE et MED
+    // repartent à 0, conformément à la consigne).
+    const dernier = (paiesParEmploye[Number(emp.id)] || []).find(
+      (p: any) => Number(p.annee) * 12 + (MOIS_ORDRE[String(p.mois).toUpperCase()] ?? 0) < a * 12 + (MOIS_ORDRE[m] ?? 0)
+    );
+    const accessoires = dernier
+      ? {
+          augmentation_divers: Number(dernier.augmentation_divers || 0),
+          prime_de_garde: Number(dernier.prime_de_garde || 0),
+          anciennete2: Number(dernier.anciennete2 || 0),
+          risque: Number(dernier.risque || 0),
+          repr_rec: Number(dernier.repr_rec || 0),
+        }
+      : {};
+
     const annees = calculerAnciennete(emp.date_embauche, a);
+    const enMaternite =
+      emp.conge_maternite === 1 ||
+      estEnCongeMaternite(emp.date_debut_maternite, a, m);
     const empCalc = {
       base_aj: emp.base_aj,
       logement_transport: emp.logement_transport,
@@ -274,9 +317,9 @@ export async function initMoisPaie(
       enfant_a_charge: emp.enfant_a_charge,
       rib: emp.rib,
       rap: true,
-      conge_maternite: emp.conge_maternite,
+      conge_maternite: enMaternite ? 1 : 0,
     };
-    const r = calculerPaieEmploye(empCalc, 0, 0, {});
+    const r = calculerPaieEmploye(empCalc, 0, 0, accessoires);
 
     const newPaie: any = {
       id: nextPaieId(),
@@ -301,12 +344,12 @@ export async function initMoisPaie(
       salaire_imposable: r.salaire_imposable,
       irsa: r.irsa,
       salaire_net: r.salaire_net,
-      augmentation_divers: 0,
-      prime_de_garde: 0,
-      anciennete2: 0,
-      risque: 0,
-      repr_rec: 0,
-      accessoir: 0,
+      augmentation_divers: r.augmentation_divers,
+      prime_de_garde: r.prime_de_garde,
+      anciennete2: r.anciennete2,
+      risque: r.risque,
+      repr_rec: r.repr_rec,
+      accessoir: r.accessoir,
       brut: r.brut,
       avance: 0,
       med: 0,
@@ -316,7 +359,8 @@ export async function initMoisPaie(
       rap: 1,
       rib: emp.rib || '',
       verrouille: 0,
-      conge_maternite: emp.conge_maternite || 0,
+      conge_maternite: enMaternite ? 1 : 0,
+      date_debut_maternite: emp.date_debut_maternite || '',
       date_modification: nowStamp(),
     };
 

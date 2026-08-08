@@ -130,7 +130,7 @@ const BulletinCard: React.FC<CardProps> = ({ paie, titre, large = false }) => {
         </div>
         <div className={`bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2 sm:p-3 border dark:border-slate-600 grid grid-cols-2 gap-1.5 mt-3 ${large ? 'text-xs sm:text-sm dark:text-slate-200' : 'text-[11px]'}`}>
           <div className="truncate">Mat: <b className="text-salfa-dark dark:text-white">{paie.numero_matricule} ({paie.categorie || '—'})</b></div><div className="truncate">Mode: <b>{paie.rib ? "Virement" : "Espèces"}</b></div>
-          <div className="col-span-2 flex items-center gap-1.5 min-w-0"><span className="text-slate-500 dark:text-slate-400">Nom:</span><span className="font-extrabold truncate dark:text-white">{paie.nom_prenoms}</span>{isMaternite && <span className="px-1.5 py-0.5 rounded bg-pink-100 dark:bg-pink-900/30 text-pink-800 dark:text-pink-300 text-[9px] font-bold">MAT 50%</span>}</div>
+          <div className="col-span-2 flex items-center gap-1.5 min-w-0"><span className="text-slate-500 dark:text-slate-400">Nom:</span><span className="font-extrabold truncate dark:text-white">{paie.nom_prenoms}</span>{isMaternite && <span title="Congé de maternité (3 mois, base brute à 50%)" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-200 text-[9px] font-bold ring-1 ring-pink-300 dark:ring-pink-700">MATERNITÉ · 3 mois</span>}</div>
           <div className="col-span-2 truncate">Fonction: {paie.jobs || '—'} ({paie.nombre_annees || 0} ans)</div>
         </div>
         <div className="border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden mt-3 w-full overflow-x-auto thin-scrollbar">

@@ -21,6 +21,7 @@ import { MonetaryInput, formatSpace } from '../MonetaryInput';
 import {
   Calendar, Lock, Unlock, RefreshCw, ShieldCheck, CheckCircle, CheckCircle2,
   Search, Plus, Edit2, UserX, UserCheck, History, X, Award, Info, Save,
+  HeartHandshake,
 } from 'lucide-react';
 
 function fmt(val: number | undefined | null): string {
@@ -152,11 +153,12 @@ export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, 
       logement_transport: p.logt_trsp || 0,
       rendement: p.rendement || 0,
       responsabilite_representation: p.resp_repres || 0,
-      rib: p.rib || '',
-      mode_paiement: 'ESPECES',
-      actif: 1,
-      conge_maternite: p.conge_maternite || 0,
-    };
+    rib: p.rib || '',
+    mode_paiement: 'ESPECES',
+    actif: 1,
+    conge_maternite: p.conge_maternite || 0,
+    date_debut_maternite: p.date_debut_maternite || '',
+  };
 
   const isActif = (p: PaieMensuelle): boolean => {
     const emp = employesById[Number(p.employe_id)];
@@ -232,12 +234,16 @@ export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, 
     loadData();
   };
 
+  const isMaternite = (p: PaieMensuelle) =>
+    p.conge_maternite === 1 || (p.conge_maternite as any) === true;
+
   const badges = (p: PaieMensuelle) => {
-    const isMaternite = p.conge_maternite === 1 || (p.conge_maternite as any) === true;
     return (
       <>
-        {isMaternite && (
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-pink-100 dark:bg-pink-900/30 text-pink-800 dark:text-pink-300 font-bold uppercase shrink-0">Maternité 50%</span>
+        {isMaternite(p) && (
+          <span title="Congé de maternité (3 mois, base brute à 50%)" className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-200 font-bold uppercase shrink-0 ring-1 ring-pink-300 dark:ring-pink-700">
+            <HeartHandshake className="w-2.5 h-2.5" />Maternité · 3 mois
+          </span>
         )}
         {!isActif(p) && (
           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold uppercase shrink-0">Départ</span>
@@ -259,7 +265,7 @@ export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, 
         </div>
         {userRole === 'Administrateur' && onOpenAdmin && (
           <button onClick={onOpenAdmin} className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs shrink-0 shadow w-full sm:w-auto justify-center">
-            <ShieldCheck className="w-4 h-4" /><span>Admin : Formules & Colonnes</span>
+            <ShieldCheck className="w-4 h-4" /><span>Admin : Formules, IRSA & Colonnes</span>
           </button>
         )}
       </div>
@@ -320,7 +326,7 @@ export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, 
         ) : rows.length === 0 ? (
           <EmptyState search={q} mois={mois} annee={annee} verrouille={verrouille} onInit={handleInitMois} />
         ) : rows.map((p) => (
-          <div key={p.id} onDoubleClick={() => openFiche(p)} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-3 shadow-sm w-full">
+          <div key={p.id} onDoubleClick={() => openFiche(p)} className={`rounded-xl border p-3 shadow-sm w-full ${isMaternite(p) ? 'bg-pink-50 dark:bg-pink-950/30 border-pink-300 dark:border-pink-800 ring-1 ring-pink-200 dark:ring-pink-900' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -338,10 +344,10 @@ export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, 
             </div>
 
             <div className="grid grid-cols-4 gap-1.5 mt-2.5">
-              <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-1.5 text-center"><div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Brut</div><div className="font-mono text-[11px] font-bold dark:text-slate-200">{fmt(p.brut)}</div></div>
-              <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-1.5 text-center"><div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Net base</div><div className="font-mono text-[11px] font-bold dark:text-slate-200">{fmt(p.salaire_net)}</div></div>
-              <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-1.5 text-center"><div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Access.</div><div className="font-mono text-[11px] font-bold dark:text-slate-200">{fmt(p.accessoir)}</div></div>
-              <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-1.5 text-center"><div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Base AJ</div><div className="font-mono text-[11px] font-bold dark:text-slate-200">{fmt(p.base_aj)}</div></div>
+              <div className={`rounded-lg p-1.5 text-center ${isMaternite(p) ? 'bg-white/70 dark:bg-slate-800/60' : 'bg-slate-50 dark:bg-slate-700/50'}`}><div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Brut</div><div className="font-mono text-[11px] font-bold dark:text-slate-200">{fmt(p.brut)}</div></div>
+              <div className={`rounded-lg p-1.5 text-center ${isMaternite(p) ? 'bg-white/70 dark:bg-slate-800/60' : 'bg-slate-50 dark:bg-slate-700/50'}`}><div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Net base</div><div className="font-mono text-[11px] font-bold dark:text-slate-200">{fmt(p.salaire_net)}</div></div>
+              <div className={`rounded-lg p-1.5 text-center ${isMaternite(p) ? 'bg-white/70 dark:bg-slate-800/60' : 'bg-slate-50 dark:bg-slate-700/50'}`}><div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Access.</div><div className="font-mono text-[11px] font-bold dark:text-slate-200">{fmt(p.accessoir)}</div></div>
+              <div className={`rounded-lg p-1.5 text-center ${isMaternite(p) ? 'bg-white/70 dark:bg-slate-800/60' : 'bg-slate-50 dark:bg-slate-700/50'}`}><div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Base AJ</div><div className="font-mono text-[11px] font-bold dark:text-slate-200">{fmt(p.base_aj)}</div></div>
             </div>
 
             {/* Saisie directe AVANCE / MED */}
@@ -412,7 +418,7 @@ export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, 
                   </td>
                 </tr>
               ) : rows.map((p) => (
-                <tr key={p.id} onDoubleClick={() => openFiche(p)} className="hover:bg-sky-50/70 dark:hover:bg-slate-700/50 cursor-pointer transition">
+                <tr key={p.id} onDoubleClick={() => openFiche(p)} className={`cursor-pointer transition ${isMaternite(p) ? 'bg-pink-50/80 dark:bg-pink-950/20 hover:bg-pink-100/80 dark:hover:bg-pink-900/30 border-l-4 border-l-pink-400 dark:border-l-pink-600' : 'hover:bg-sky-50/70 dark:hover:bg-slate-700/50'}`}>
                   <td className="py-2.5 px-3 text-center font-bold text-salfa-dark dark:text-white">{p.numero_matricule}</td>
                   <td className="py-2.5 px-4 font-semibold text-slate-800 dark:text-slate-100">
                     <div className="flex items-center gap-2">
@@ -543,6 +549,7 @@ const EmployeModalForm: React.FC<ModalFormProps> = ({ employe, onClose, onSaved 
     rib: employe?.rib || '',
     mode_paiement: employe?.mode_paiement || 'ESPECES',
     conge_maternite: employe ? (employe.conge_maternite === 1 || employe.conge_maternite === true) : false,
+    date_debut_maternite: employe?.date_debut_maternite || '',
     actif: employe ? employe.actif : 1,
   });
   const [saving, setSaving] = useState(false);
@@ -553,6 +560,21 @@ const EmployeModalForm: React.FC<ModalFormProps> = ({ employe, onClose, onSaved 
   const baseReval = Math.round(Number(form.base_aj || 0) * indice * 100) / 100;
   const baseBruteNormale = Number(form.base_aj || 0) + Number(form.logement_transport || 0) + Number(form.rendement || 0) + Number(form.responsabilite_representation || 0);
   const baseBrutAffichee = form.conge_maternite ? baseBruteNormale / 2.0 : baseBruteNormale;
+
+  // Période de 3 mois couverte par le congé maternité
+  const MOIS_LIB = ['JANVIER','FEVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOUT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DECEMBRE'];
+  const periodeMaternite = (() => {
+    if (!form.conge_maternite || !form.date_debut_maternite) return null;
+    const parts = String(form.date_debut_maternite).split('-');
+    if (parts.length < 2) return null;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    if (!y || m < 0) return null;
+    const debut = MOIS_LIB[m] + ' ' + y;
+    const finIdx = y * 12 + m + 2;
+    const fin = MOIS_LIB[finIdx % 12] + ' ' + Math.floor(finIdx / 12);
+    return { debut, fin };
+  })();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -605,8 +627,49 @@ const EmployeModalForm: React.FC<ModalFormProps> = ({ employe, onClose, onSaved 
             <div><label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">RESP REPRES</label><MonetaryInput value={form.responsabilite_representation} onChange={(num) => setForm({ ...form, responsabilite_representation: num })} className="w-full rounded-lg border bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" /></div>
           </div>
           <div><label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">RIB</label><input type="text" value={form.rib} onChange={(e) => setForm({ ...form, rib: e.target.value })} className="w-full rounded-lg border bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono" /></div>
-          <div className="p-3 sm:p-4 rounded-xl bg-pink-50 dark:bg-pink-900/20 border-2 border-pink-200 dark:border-pink-800">
-            <label className="flex items-start gap-3 cursor-pointer"><input type="checkbox" checked={form.conge_maternite} onChange={(e) => setForm({ ...form, conge_maternite: e.target.checked })} className="mt-0.5 rounded text-pink-600 w-4 h-4" /><div className="text-xs"><span className="font-extrabold text-pink-900 dark:text-pink-300 block">Congé de Maternité (÷2 Base Brute)</span><span className="text-slate-600 dark:text-slate-400 block">Base brute: <b className="text-pink-800 dark:text-pink-300 font-mono">{fmt(baseBrutAffichee)}</b> au lieu de {fmt(baseBruteNormale)}</span></div></label>
+          <div className="p-3 sm:p-4 rounded-xl bg-pink-50 dark:bg-pink-900/20 border-2 border-pink-200 dark:border-pink-800 space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.conge_maternite}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setForm({
+                    ...form,
+                    conge_maternite: checked,
+                    date_debut_maternite: checked ? (form.date_debut_maternite || new Date().toISOString().slice(0, 10)) : '',
+                  });
+                }}
+                className="mt-0.5 rounded text-pink-600 w-4 h-4"
+              />
+              <div className="text-xs">
+                <span className="font-extrabold text-pink-900 dark:text-pink-300 block">Congé de Maternité (3 mois — base brute à 50%)</span>
+                <span className="text-slate-600 dark:text-slate-400 block">
+                  La personne est <b>mise en évidence</b> et sa base brute passe à <b className="text-pink-800 dark:text-pink-300 font-mono">{fmt(baseBrutAffichee)}</b> au lieu de {fmt(baseBruteNormale)} pendant la durée du congé.
+                </span>
+              </div>
+            </label>
+            {form.conge_maternite && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-7">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase mb-1 text-pink-900 dark:text-pink-300">Date de début du congé</label>
+                  <input
+                    type="date"
+                    value={form.date_debut_maternite}
+                    onChange={(e) => setForm({ ...form, date_debut_maternite: e.target.value })}
+                    className="w-full rounded-lg border border-pink-300 dark:border-pink-700 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <div className="w-full rounded-lg bg-white/70 dark:bg-slate-800/60 border border-pink-200 dark:border-pink-800 px-3 py-2 text-[11px] text-pink-900 dark:text-pink-200">
+                    <b>Durée :</b> 3 mois (mois du début inclus).
+                    {periodeMaternite && (
+                      <div className="mt-0.5 font-mono">Période : <b>{periodeMaternite.debut}</b> → <b>{periodeMaternite.fin}</b></div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <div className="p-3 sm:p-4 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 text-xs space-y-1 dark:text-slate-300">
             <div className="font-bold text-salfa-teal dark:text-sky-300 flex items-center gap-1.5"><Award className="w-4 h-4" /><span>Ancienneté:</span></div>
