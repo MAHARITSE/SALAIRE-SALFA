@@ -6,19 +6,18 @@ import { UserSession } from './types';
 import { Header } from './components/Header';
 import { LoginModal } from './components/LoginModal';
 import { AdminModal } from './components/AdminModal';
-import { EmployesTab } from './components/tabs/EmployesTab';
-import { SaisieTab } from './components/tabs/SaisieTab';
+import { SalariesSaisieTab } from './components/tabs/SalariesSaisieTab';
 import { BulletinsTab } from './components/tabs/BulletinsTab';
 import { RapportsTab } from './components/tabs/RapportsTab';
 import { resetStore } from './local/store';
 import { initTheme, applyThemeClass, storeTheme, ThemeMode } from './local/theme';
 import {
-  Users, Calendar, FileText, BarChart3, CheckCircle2
+  Users, FileText, BarChart3, CheckCircle2
 } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<UserSession | null>(null);
-  const [activeTab, setActiveTab] = useState<'employes' | 'saisie' | 'bulletins' | 'rapports'>('employes');
+  const [activeTab, setActiveTab] = useState<'salaries' | 'bulletins' | 'rapports'>('salaries');
   const [showLogin, setShowLogin] = useState(true);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>('light');
@@ -88,29 +87,16 @@ export const App: React.FC = () => {
             <div className="w-full max-w-[1920px] mx-auto px-2 xs:px-3 sm:px-6 lg:px-8">
               <nav className="flex gap-1.5 sm:gap-3 lg:gap-6 overflow-x-auto no-scrollbar py-2 sm:py-2.5 scroll-smooth snap-x">
                 <button
-                  onClick={() => setActiveTab('employes')}
+                  onClick={() => setActiveTab('salaries')}
                   className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] xs:text-xs sm:text-sm font-bold whitespace-nowrap transition snap-start shrink-0 ${
-                    activeTab === 'employes'
+                    activeTab === 'salaries'
                       ? 'bg-salfa-dark dark:bg-slate-700 text-white shadow-md'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white bg-slate-50 dark:bg-slate-700/50 sm:bg-transparent'
                   }`}
                 >
                   <Users className="w-4 h-4 shrink-0" />
-                  <span className="hidden xs:inline">1. Salariés & Fiches</span>
-                  <span className="xs:hidden">1. Salariés</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab('saisie')}
-                  className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] xs:text-xs sm:text-sm font-bold whitespace-nowrap transition snap-start shrink-0 ${
-                    activeTab === 'saisie'
-                      ? 'bg-salfa-dark dark:bg-slate-700 text-white shadow-md'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white bg-slate-50 dark:bg-slate-700/50 sm:bg-transparent'
-                  }`}
-                >
-                  <Calendar className="w-4 h-4 shrink-0" />
-                  <span className="hidden md:inline">2. Saisie Mensuelle (AVANCE / MED)</span>
-                  <span className="md:hidden">2. Saisie</span>
+                  <span className="hidden md:inline">1. Salariés & Saisie (AVANCE / MED)</span>
+                  <span className="md:hidden">1. Salariés</span>
                 </button>
 
                 <button
@@ -122,8 +108,8 @@ export const App: React.FC = () => {
                   }`}
                 >
                   <FileText className="w-4 h-4 shrink-0" />
-                  <span className="hidden lg:inline">3. Bulletins de Paie (2 Ex. sur A4)</span>
-                  <span className="lg:hidden">3. Bulletins</span>
+                  <span className="hidden lg:inline">2. Bulletins de Paie (2 Ex. sur A4)</span>
+                  <span className="lg:hidden">2. Bulletins</span>
                 </button>
 
                 <button
@@ -135,8 +121,8 @@ export const App: React.FC = () => {
                   }`}
                 >
                   <BarChart3 className="w-4 h-4 shrink-0" />
-                  <span className="hidden lg:inline">4. Rapports & Exports Excel / JSON</span>
-                  <span className="lg:hidden">4. Rapports</span>
+                  <span className="hidden lg:inline">3. Rapports & Exports Excel / JSON</span>
+                  <span className="lg:hidden">3. Rapports</span>
                 </button>
               </nav>
             </div>
@@ -144,8 +130,7 @@ export const App: React.FC = () => {
 
           <main className="flex-1 w-full max-w-[1920px] mx-auto px-2 xs:px-3 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6 overflow-x-hidden">
             <div className="w-full max-w-full overflow-x-hidden">
-              {activeTab === 'employes' && <EmployesTab onOpenAdmin={() => setShowAdminModal(true)} userRole={user.role} />}
-              {activeTab === 'saisie' && <SaisieTab userRole={user.role} />}
+              {activeTab === 'salaries' && <SalariesSaisieTab onOpenAdmin={() => setShowAdminModal(true)} userRole={user.role} />}
               {activeTab === 'bulletins' && <BulletinsTab />}
               {activeTab === 'rapports' && <RapportsTab />}
             </div>
