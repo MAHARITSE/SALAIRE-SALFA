@@ -181,7 +181,7 @@ const EmployeModalForm: React.FC<ModalFormProps> = ({ employe, onClose, onSaved 
   const indice = getIndice(ancYears);
   const baseReval = Math.round(Number(form.base_aj || 0) * indice * 100) / 100;
   const baseBruteNormale = Number(form.base_aj || 0) + Number(form.logement_transport || 0) + Number(form.rendement || 0) + Number(form.responsabilite_representation || 0);
-  const baseBrutAffichee = form.conge_maternite ? baseBruteNormale / 2.0 : baseBrutNormale;
+  const baseBrutAffichee = form.conge_maternite ? baseBruteNormale / 2.0 : baseBruteNormale;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
