@@ -18,6 +18,7 @@ import {
   toggleActifEmploye,
 } from '../../api';
 import { MonetaryInput, formatSpace } from '../MonetaryInput';
+import { downloadPayrollBookletPDF } from '../../pdf/bulletinsPdf';
 import {
   Calendar, Lock, Unlock, RefreshCw, ShieldCheck, CheckCircle, CheckCircle2,
   Search, Plus, Edit2, UserX, UserCheck, History, X, Award, Info, Save,
@@ -202,9 +203,23 @@ export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, 
   };
 
   const handleCloturer = async () => {
-    if (!window.confirm(`Clôturer ${mois} ${annee} ?`)) return;
-    await cloturerMois(annee, mois);
-    loadData();
+    if (!window.confirm(`Clôturer ${mois} ${annee} ?
+
+Un fichier PDF unique contenant tous les états, avec sa page de couverture, sera téléchargé.`)) return;
+    const success = await cloturerMois(annee, mois);
+    if (!success) {
+      alert('La clôture a échoué. Aucun état PDF n’a été exporté.');
+      return;
+    }
+    // Recharger les valeurs définitives avant de produire l'archive imprimable.
+    const data = await fetchPaiesMois(annee, mois);
+    const etats = data.employes || [];
+    if (etats.length === 0) {
+      alert('Période clôturée, mais aucun bulletin n’est disponible à exporter.');
+    } else {
+      downloadPayrollBookletPDF(etats, mois, annee);
+    }
+    await loadData();
   };
 
   const handleDeverrouiller = async () => {

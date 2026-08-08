@@ -3,8 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { PaieMensuelle } from '../../types';
 import { fetchPaiesMois } from '../../api';
 import { Calendar, Printer, Download, FileText, Eye } from 'lucide-react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { downloadSingleBulletinPDF } from '../../pdf/bulletinsPdf';
 
 function fmt(val: number | undefined): string {
   if (val === undefined || val === null) return '0,00';
@@ -36,56 +35,7 @@ export const BulletinsTab: React.FC = () => {
 
   const handlePrint = () => window.print();
   const handleDownloadPDF = () => {
-    if (!selectedPaie) return;
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const p = selectedPaie;
-    const drawExemplaire = (startX: number, widthX: number, titreExemplaire: string) => {
-      const centerX = startX + (widthX / 2);
-      doc.setFont("helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(26, 54, 93);
-      doc.text("FIANGONANA LOTERANA MALAGASY (EGLISE LUTHERIENNE MALGACHE)", centerX, 13, { align: "center" });
-      doc.setFont("helvetica", "normal"); doc.setFontSize(8.2); doc.setTextColor(43, 108, 176);
-      doc.text("SAMPAN'ASA LOTERANA MOMBA NY FAHASALAMANA", centerX, 18, { align: "center" });
-      doc.setFont("helvetica", "bold"); doc.text("DISPENSAIRE TANAMBAO - TOBY BETELA TOLIARA", centerX, 22.5, { align: "center" });
-      doc.setFont("helvetica", "normal"); doc.setFontSize(7.2); doc.setTextColor(100, 116, 139);
-      doc.text("NIF: 5000767080 | STAT: 851 125 120 120 001 36", centerX, 26.5, { align: "center" });
-      doc.setDrawColor(203, 213, 225); doc.line(startX, 29, startX + widthX, 29);
-      doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); doc.setTextColor(26, 54, 93);
-      doc.text("FILAZANA NY KARAMA", centerX, 34, { align: "center" });
-      doc.setFontSize(8.2); doc.setTextColor(43, 108, 176);
-      doc.text(`PÉRIODE : ${p.mois} ${p.annee} | ${titreExemplaire}`, centerX, 39, { align: "center" });
-      const empRows = [
-        ["N° Mat :", `${p.numero_matricule} (${p.categorie || '—'})`, "Nom :", p.nom_prenoms],
-        ["N° CNaPS :", String(p.numero_cnaps || '—'), "Fonction :", `${p.jobs || '—'} (${p.nombre_annees || 0} ans)`],
-        ["Enfant(s) :", String(p.enfant_a_charge || 0), "Règlement :", p.rib ? "Virement" : "Espèces"]
-      ];
-      autoTable(doc, { startY: 42, body: empRows, theme: 'grid', styles: { font: "helvetica", fontSize: 8, cellPadding: 2.2 }, columnStyles: { 0: { fontStyle: 'bold', cellWidth: 19 }, 1: { fontStyle: 'bold', cellWidth: 36 }, 2: { fontStyle: 'bold', cellWidth: 18 }, 3: { fontStyle: 'bold', cellWidth: 61 } }, margin: { left: startX, right: 297 - (startX + widthX) } });
-      const finalYEmp = (doc as any).lastAutoTable.finalY || 64;
-      const rubriquesRows: any[] = [
-        ["Salaire Base (BASE AJ)", "30 j", fmt(p.base_aj), ""],
-        ["Logement & Transport", "Forf", fmt(p.logt_trsp), ""]
-      ];
-      if ((p.rendement || 0) > 0) rubriquesRows.push(["Prime Rendement", "Rend", fmt(p.rendement), ""]);
-      if ((p.resp_repres || 0) > 0) rubriquesRows.push(["RESP REPRES", "RESP", fmt(p.resp_repres), ""]);
-      rubriquesRows.push(["SALAIRE BRUT SOUMIS", "", fmt(p.salaire_brut), ""]);
-      rubriquesRows.push(["CNaPS (1%)", "1%", "", fmt(p.cnaps)]);
-      rubriquesRows.push(["SALAIRE IMPOSABLE", "Impôt", fmt(p.salaire_imposable), ""]);
-      rubriquesRows.push([`IRSA (Enf: ${p.enfant_a_charge || 0})`, "Barème", "", fmt(p.irsa)]);
-      rubriquesRows.push(["SALAIRE NET BASE", "Base", fmt(p.salaire_net), ""]);
-      if ((p.accessoir || 0) > 0) rubriquesRows.push(["TOTAL ACCESSOIRES", "Acc", fmt(p.accessoir), ""]);
-      rubriquesRows.push(["TOTAL BRUT À PAYER", "Net+Acc", fmt(p.brut), ""]);
-      if ((p.avance || 0) > 0) rubriquesRows.push(["Avance / Prêt", "Ret", "", fmt(p.avance)]);
-      if ((p.med || 0) > 0) rubriquesRows.push(["Médicaments MED", "Ret", "", fmt(p.med)]);
-      autoTable(doc, { startY: finalYEmp + 4, head: [["RUBRIQUES", "BASE", "GAINS", "RETENUES"]], body: rubriquesRows, theme: 'grid', headStyles: { fillColor: [226,232,240], textColor: [26,54,93], fontStyle: 'bold', halign: 'center', fontSize: 8 }, styles: { font: "helvetica", fontSize: 7.8, cellPadding: 2.1 }, columnStyles: { 0: { cellWidth: 54 }, 1: { cellWidth: 22, halign: 'center' }, 2: { cellWidth: 29, halign: 'right' }, 3: { cellWidth: 29, halign: 'right' } }, margin: { left: startX, right: 297 - (startX + widthX) } });
-      const finalYRub = (doc as any).lastAutoTable.finalY || 148;
-      doc.setFillColor(26, 54, 93); doc.rect(startX, finalYRub + 5, widthX, 14, "F");
-      doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(255,255,255); doc.text("NET À PAYER", startX + 4, finalYRub + 13.5);
-      doc.setFontSize(12.5); doc.text(fmt(p.net), startX + widthX - 4, finalYRub + 14, { align: "right" });
-      doc.setFont("helvetica", "normal"); doc.setFontSize(7.8); doc.setTextColor(26,32,44);
-      doc.text(`Virement: ${fmt(p.virement || 0)} | Espèces: ${fmt(p.especes || 0)} — RIB: ${p.rib || "Aucun"}`, startX, finalYRub + 25);
-      doc.setFont("helvetica", "bold"); doc.text("Employeur", startX + (widthX * 0.25), finalYRub + 35, { align: "center" }); doc.text("Employé", startX + (widthX * 0.75), finalYRub + 35, { align: "center" });
-    };
-    drawExemplaire(20, 134, "EX1: EMPLOYEUR"); doc.setDrawColor(148,163,184); doc.setLineDashPattern([3,2],0); doc.line(158.5,10,158.5,200); doc.setLineDashPattern([],0); drawExemplaire(162,131,"EX2: SALARIÉ");
-    const cleanNom = p.nom_prenoms.replace(/[^a-z0-9]/gi, '_'); doc.save(`Bulletin_${p.mois}_${p.annee}_Mat_${p.numero_matricule}_${cleanNom}.pdf`);
+    if (selectedPaie) downloadSingleBulletinPDF(selectedPaie);
   };
 
   return (
