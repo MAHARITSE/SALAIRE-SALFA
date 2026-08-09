@@ -19,24 +19,24 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, onOpenAdminModal
   return (
     <header className="bg-salfa-dark dark:bg-slate-800 text-white shadow-lg border-b-4 border-salfa-teal dark:border-slate-600 no-print w-full max-w-[100vw] overflow-hidden transition-colors">
       <div className="w-full max-w-[1920px] mx-auto px-2 xs:px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3.5">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5 sm:gap-4">
+        <div className="flex flex-col gap-2.5 sm:gap-4">
           
-          <div className="space-y-0.5 sm:space-y-1 min-w-0 flex-1">
-            <div className="text-[9px] xs:text-[10px] sm:text-xs uppercase tracking-wider text-salfa-light dark:text-slate-300 font-semibold flex items-center gap-1 sm:gap-1.5 truncate">
+          <div className="space-y-0.5 sm:space-y-1 min-w-0 w-full text-center flex flex-col items-center justify-center">
+            <div className="text-[9px] xs:text-[10px] sm:text-xs uppercase tracking-wider text-salfa-light dark:text-slate-300 font-semibold flex items-center justify-center gap-1 sm:gap-1.5 text-center w-full">
               <Building2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-salfa-teal dark:text-sky-300 shrink-0" />
-              <span className="truncate">Fiangonana Loterana Malagasy — Sampan'asa Loterana Momba ny Fahasalamana</span>
+              <span>Fiangonana Loterana Malagasy — Sampan'asa Loterana Momba ny Fahasalamana</span>
             </div>
-            <h1 className="text-[13px] xs:text-sm sm:text-lg md:text-xl font-extrabold tracking-tight text-white leading-tight">
+            <h1 className="text-[13px] xs:text-sm sm:text-lg md:text-xl font-extrabold tracking-tight text-white leading-tight text-center w-full">
               <span className="hidden sm:inline">DISPENSAIRE TANAMBAO - TOBY BETELA TOLIARA</span>
               <span className="sm:hidden">DISPENSAIRE TANAMBAO - TOLIARA</span>
             </h1>
-            <p className="text-[9px] xs:text-[10px] sm:text-xs text-slate-300 dark:text-slate-400 font-mono truncate">
+            <p className="text-[9px] xs:text-[10px] sm:text-xs text-slate-300 dark:text-slate-400 font-mono text-center w-full">
               <span className="hidden sm:inline">NIF: 5000767080 | STAT: 851 125 120 120 001 36 | E-mail: salfa.tulear@gmail.com</span>
               <span className="sm:hidden">NIF: 5000767080 | salfa.tulear@gmail.com</span>
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 lg:gap-3 shrink-0">
+          <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 lg:gap-3 shrink-0 w-full">
             {/* Bouton DarkMode - comme RECEPTION-SALFA */}
             <button
               onClick={toggleTheme}
