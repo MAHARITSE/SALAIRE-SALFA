@@ -1,9 +1,11 @@
 // ==============================================================================
 // CLIENT LOCAL : MOTEUR DE CALCUL DE PAIE - SALFA TANAMBAO (TYPESCRIPT)
 // Porté depuis server/calcul.ts pour tourner à 100% dans le navigateur.
+// MODIFIÉ pour lire TOUT le paramétrage depuis loadConfig() (IRSA, ancienneté,
+// arrondis, plafond espèces, etc.) afin que l'admin puisse modifier les formules.
 // ==============================================================================
 
-import { loadConfig } from './config';
+import { loadConfig, PaieConfig, DEFAULT_BAREME_ANCIENNETE, DEFAULT_BAREME_IRSA, BaremeAncienneteConfig, TrancheIrsaConfig } from './config';
 
 export interface BaremeAnciennete {
   min: number;
@@ -11,19 +13,24 @@ export interface BaremeAnciennete {
   indice: number;
 }
 
-export const BAREME_ANCIENNETE_SALFA: BaremeAnciennete[] = [
-  { min: 0, max: 1, indice: 1.00 },
-  { min: 2, max: 3, indice: 1.09 },
-  { min: 4, max: 5, indice: 1.18 },
-  { min: 6, max: 7, indice: 1.27 },
-  { min: 8, max: 9, indice: 1.36 },
-  { min: 10, max: 11, indice: 1.45 },
-  { min: 12, max: 13, indice: 1.53 },
-  { min: 14, max: 15, indice: 1.60 },
-  { min: 16, max: 17, indice: 1.65 },
-  { min: 18, max: 19, indice: 1.68 },
-  { min: 20, max: 100, indice: 1.70 }
-];
+// Conserve l'ancien export pour compat, mais la source de vérité est désormais le config
+export const BAREME_ANCIENNETE_SALFA: BaremeAnciennete[] = DEFAULT_BAREME_ANCIENNETE.map(b => ({ ...b }));
+
+function getBaremeAnciennete(): BaremeAncienneteConfig[] {
+  try {
+    const cfg = loadConfig();
+    if (Array.isArray(cfg.baremeAnciennete) && cfg.baremeAnciennete.length > 0) return cfg.baremeAnciennete;
+  } catch { /* ignore */ }
+  return DEFAULT_BAREME_ANCIENNETE;
+}
+
+function getBaremeIrsa(): TrancheIrsaConfig[] {
+  try {
+    const cfg = loadConfig();
+    if (Array.isArray(cfg.baremeIrsa) && cfg.baremeIrsa.length > 0) return cfg.baremeIrsa;
+  } catch { /* ignore */ }
+  return DEFAULT_BAREME_IRSA;
+}
 
 export function calculerAnciennete(dateEmbauche: string, anneeRef: number = 2026): number {
   if (!dateEmbauche) return 0;
@@ -56,8 +63,6 @@ export function moisToIndex(mois: string): number {
 
 /**
  * Détermine si un salarié est en congé maternité pour le mois demandé.
- * Le congé dure `dureeMaterniteMois` mois (3 mois par défaut) à partir de la
- * date de début (mois de début inclus).
  */
 export function estEnCongeMaternite(
   dateDebut: string | undefined | null,
@@ -83,10 +88,31 @@ export function estEnCongeMaternite(
 
 export function obtenirIndiceAnciennete(annees: number): number {
   const ans = typeof annees === 'number' ? annees : 0;
-  for (const b of BAREME_ANCIENNETE_SALFA) {
+  const bareme = getBaremeAnciennete();
+  for (const b of bareme) {
     if (ans >= b.min && ans <= b.max) {
       return b.indice;
     }
+  }
+  // fallback: dernier indice si au-delà, sinon max
+  if (bareme.length > 0) {
+    const sorted = [...bareme].sort((a, b) => a.max - b.max);
+    const last = sorted[sorted.length - 1];
+    if (ans > last.max) return last.indice;
+  }
+  return 1.70;
+}
+
+// Version qui prend un bareme custom (pour prévisualisation admin)
+export function obtenirIndiceAncienneteAvecBareme(annees: number, bareme: BaremeAncienneteConfig[]): number {
+  const ans = typeof annees === 'number' ? annees : 0;
+  for (const b of bareme) {
+    if (ans >= b.min && ans <= b.max) return b.indice;
+  }
+  if (bareme.length > 0) {
+    const sorted = [...bareme].sort((a, b) => a.max - b.max);
+    const last = sorted[sorted.length - 1];
+    if (ans > last.max) return last.indice;
   }
   return 1.70;
 }
@@ -103,46 +129,83 @@ export function evaluerBaseRevalorisee(baseInitiale: number, dateEmbauche: strin
   };
 }
 
-export function calculerIrsa(salaireImposable: number, enfantsACharge: number = 0): number {
+// --- Cœur générique IRSA utilisable avec une config custom ---
+
+function arrondirBase(base: number, pas: number): number {
+  if (!pas || pas <= 0) return Math.floor(base);
+  return Math.floor(base / pas) * pas;
+}
+
+function calculerIrsaCore(salaireImposable: number, enfantsACharge: number, cfg: PaieConfig) {
   const enfants = (typeof enfantsACharge === 'number' && enfantsACharge > 0) ? enfantsACharge : 0;
+  const pas = Number(cfg.arrondiIrsaBase) || 0;
+  const base = pas > 0 ? arrondirBase(salaireImposable, pas) : Math.floor(salaireImposable);
+  const bareme = Array.isArray(cfg.baremeIrsa) && cfg.baremeIrsa.length ? cfg.baremeIrsa : DEFAULT_BAREME_IRSA;
+  const sorted = [...bareme].sort((a, b) => a.min - b.min);
+
+  let irsaBrut = 0;
+  for (const tr of sorted) {
+    if (base <= tr.min) continue;
+    const haut = tr.max === null || tr.max === undefined ? Infinity : tr.max;
+    const part = Math.min(base, haut) - tr.min;
+    if (part > 0 && tr.taux > 0) {
+      irsaBrut += part * (tr.taux / 100);
+    }
+  }
+  const deductionFamille = enfants * Number(cfg.deductionEnfant || 0);
+  const avantMin = irsaBrut - deductionFamille;
+  const irsaFinal = Math.max(Number(cfg.minIrsa || 0), avantMin);
+  return { base, irsaBrut, deductionFamille, avantMin, irsaFinal, bareme: sorted };
+}
+
+export function calculerIrsa(salaireImposable: number, enfantsACharge: number = 0): number {
   const cfg = loadConfig();
+  const { irsaFinal } = calculerIrsaCore(salaireImposable, enfantsACharge, cfg);
+  return Math.round(irsaFinal * 100) / 100;
+}
 
-  // 1. Arrondi de la base imposable à la centaine inférieure (CGI Madagascar)
-  const base = Math.floor(salaireImposable / 100) * 100;
-
-  // 2. Barème IRSA Madagascar (progressif)
-  let irsaBrut = 0.0;
-  if (base > 350000) irsaBrut += Math.min(base - 350000, 50000) * 0.05;
-  if (base > 400000) irsaBrut += Math.min(base - 400000, 100000) * 0.10;
-  if (base > 500000) irsaBrut += Math.min(base - 500000, 100000) * 0.15;
-  if (base > 600000) irsaBrut += (base - 600000) * 0.20;
-
-  // 3. Réduction charges de famille : déduction forfaitaire par enfant
-  const irsaNet = irsaBrut - (enfants * Number(cfg.deductionEnfant || 0));
-
-  // 4. Minimum de perception IRSA
-  const irsaFinal = Math.max(Number(cfg.minIrsa || 0), irsaNet);
+export function calculerIrsaAvecConfig(salaireImposable: number, enfantsACharge: number, cfg: PaieConfig): number {
+  const { irsaFinal } = calculerIrsaCore(salaireImposable, enfantsACharge, cfg);
   return Math.round(irsaFinal * 100) / 100;
 }
 
 /**
- * Calcule le détail de l'IRSA pour l'affichage dans l'administration.
+ * Calcule le détail de l'IRSA pour l'affichage dans l'administration (avec config courante).
  */
 export function detailIrsa(salaireImposable: number, enfantsACharge: number = 0) {
-  const enfants = (typeof enfantsACharge === 'number' && enfantsACharge > 0) ? enfantsACharge : 0;
   const cfg = loadConfig();
-  const base = Math.floor(salaireImposable / 100) * 100;
+  return detailIrsaAvecConfig(salaireImposable, enfantsACharge, cfg);
+}
 
-  const tranches: { libelle: string; montant: number }[] = [];
-  let irsaBrut = 0.0;
-  const pushTranche = (label: string, montant: number) => {
-    if (montant > 0) tranches.push({ libelle: label, montant: Math.round(montant * 100) / 100 });
-  };
-  pushTranche('350 001 — 400 000 (5%)', Math.min(Math.max(base - 350000, 0), 50000) * 0.05);
-  pushTranche('400 001 — 500 000 (10%)', Math.min(Math.max(base - 400000, 0), 100000) * 0.10);
-  pushTranche('500 001 — 600 000 (15%)', Math.min(Math.max(base - 500000, 0), 100000) * 0.15);
-  pushTranche('Au-delà de 600 000 (20%)', Math.max(base - 600000, 0) * 0.20);
-  irsaBrut = tranches.reduce((s, t) => s + t.montant, 0);
+export function detailIrsaAvecConfig(salaireImposable: number, enfantsACharge: number, cfg: PaieConfig) {
+  const enfants = (typeof enfantsACharge === 'number' && enfantsACharge > 0) ? enfantsACharge : 0;
+  const pas = Number(cfg.arrondiIrsaBase) || 0;
+  const base = pas > 0 ? arrondirBase(salaireImposable, pas) : Math.floor(salaireImposable);
+  const bareme = Array.isArray(cfg.baremeIrsa) && cfg.baremeIrsa.length ? cfg.baremeIrsa : DEFAULT_BAREME_IRSA;
+  const sorted = [...bareme].sort((a, b) => a.min - b.min);
+
+  const tranches: { libelle: string; montant: number; min: number; max: number | null; taux: number; baseTaxable: number }[] = [];
+  let irsaBrut = 0;
+  for (const tr of sorted) {
+    if (base <= tr.min) continue;
+    const haut = tr.max === null || tr.max === undefined ? Infinity : tr.max;
+    const part = Math.min(base, haut) - tr.min;
+    if (part > 0) {
+      const mont = part * (tr.taux / 100);
+      if (mont > 0 || tr.taux === 0) {
+        // on n'affiche que les tranches avec montant >0 ou si toutes à 0, on affiche quand même la première
+      }
+      tranches.push({
+        libelle: tr.max === null ? `Au-delà de ${tr.min.toLocaleString('fr-FR')} (${tr.taux}%)` : `${tr.min.toLocaleString('fr-FR')} — ${tr.max.toLocaleString('fr-FR')} (${tr.taux}%)`,
+        montant: Math.round(mont * 100) / 100,
+        min: tr.min,
+        max: tr.max,
+        taux: tr.taux,
+        baseTaxable: Math.round(part * 100) / 100,
+      });
+      irsaBrut += mont;
+    }
+  }
 
   const deductionFamille = enfants * Number(cfg.deductionEnfant || 0);
   const avantMin = irsaBrut - deductionFamille;
@@ -150,12 +213,14 @@ export function detailIrsa(salaireImposable: number, enfantsACharge: number = 0)
 
   return {
     baseArrondie: base,
+    pasArrondi: pas,
     tranches,
     irsaBrut: Math.round(irsaBrut * 100) / 100,
     deductionFamille,
     avantMin: Math.round(avantMin * 100) / 100,
     minIrsa: Number(cfg.minIrsa || 0),
     irsaFinal: Math.round(irsaFinal * 100) / 100,
+    bareme: sorted,
   };
 }
 
@@ -199,18 +264,20 @@ export function calculerPaieEmploye(
   const av = parseFloat(String(avance || 0));
   const md = parseFloat(String(med || 0));
 
-  // Net à payer au 100 Ar inférieur
+  // Net à payer arrondi à l'unité configurée à l'inférieur (défaut 100 Ar)
   const net_brut_calc = Math.max(0, brut - av - md);
-  const net_a_payer = Math.floor(net_brut_calc / 100) * 100;
+  const pasNet = Number(cfg.arrondiNet) || 0;
+  const net_a_payer = pasNet > 0 ? Math.floor(net_brut_calc / pasNet) * pasNet : Math.floor(net_brut_calc);
 
   const rap_val = employe.rap !== false && employe.rap !== 0;
   let virement: number | null = null;
   let especes: number | null = null;
 
   if (rap_val) {
+    const plafond = Number(cfg.plafondEspeces) || 0;
     if (rib && rib.length >= 5) {
-      especes = Math.min(5000.0, net_a_payer);
-      virement = Math.max(0.0, net_a_payer - especes);
+      especes = plafond > 0 ? Math.min(plafond, net_a_payer) : net_a_payer;
+      virement = Math.max(0.0, net_a_payer - (especes as number));
     } else {
       virement = null;
       especes = net_a_payer;
