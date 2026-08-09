@@ -17,22 +17,20 @@ function safeFilePart(value: string): string {
 function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
   const drawCopy = (x: number, width: number, title: string) => {
     const center = x + width / 2;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.2); doc.setTextColor(...NAVY);
-    doc.text('FIANGONANA LOTERANA MALAGASY', center, 11, { align: 'center' });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.6); doc.setTextColor(...BLUE);
-    doc.text("SAMPAN'ASA LOTERANA MOMBA NY FAHASALAMANA", center, 15, { align: 'center' });
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...NAVY);
-    doc.text('DISPENSAIRE TANAMBAO - TOBY BETELA TOLIARA', center, 19, { align: 'center' });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); doc.setTextColor(100, 116, 139);
-    doc.text('NIF: 5000767080  |  STAT: 851 125 120 120 001 36', center, 22, { align: 'center' });
-    doc.setDrawColor(203, 213, 225); doc.line(x, 24.5, x + width, 24.5);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2); doc.setTextColor(...NAVY);
+    doc.text('Fiangonana Loterana Malagasy — Sampan\'asa Loterana Momba ny Fahasalamana', center, 9, { align: 'center' });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(...NAVY);
+    doc.text('DISPENSAIRE TANAMBAO - TOBY BETELA TOLIARA', center, 13, { align: 'center' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(5.2); doc.setTextColor(100, 116, 139);
+    doc.text('NIF: 5000767080  |  STAT: 851 125 120 120 001 36', center, 16.5, { align: 'center' });
+    doc.setDrawColor(203, 213, 225); doc.line(x, 18.5, x + width, 18.5);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...NAVY);
-    doc.text('FILAZANA NY KARAMA', center, 30, { align: 'center' });
+    doc.text('FILAZANA NY KARAMA', center, 24.5, { align: 'center' });
     doc.setFontSize(7); doc.setTextColor(...BLUE);
-    doc.text(`PÉRIODE : ${p.mois} ${p.annee}  |  ${title}`, center, 34, { align: 'center' });
+    doc.text(`PÉRIODE : ${p.mois} ${p.annee}  |  ${title}`, center, 28.5, { align: 'center' });
 
     autoTable(doc, {
-      startY: 37,
+      startY: 31,
       body: [
         ['N° Mat :', `${p.numero_matricule} (${p.categorie || '—'})`, 'Nom :', p.nom_prenoms],
         ['N° CNaPS :', String(p.numero_cnaps || '—'), 'Fonction :', `${p.jobs || '—'} (${p.nombre_annees || 0} ans)`],
