@@ -9,6 +9,7 @@ import { Employe, PaieMensuelle, TotauxMois, ComparaisonNet, UserSession } from 
 import { getStore, saveStore, nextEmployeId, nextPaieId, nowStamp } from './local/store';
 import { calculerPaieEmploye, calculerAnciennete, estEnCongeMaternite } from './local/calcul';
 import { hashPassword } from './local/hash';
+import { ImportWorkbookResult, ImportedEmploye, ImportedPaie, MOIS_FR } from './local/importExcel';
 
 // ------------------------------------------------------------------------------
 // AUTHENTIFICATION (locale)
@@ -248,24 +249,12 @@ export async function fetchPaiesMois(
   return { employes, verrouille, totaux };
 }
 
-export async function initMoisPaie(
-  annee: number,
-  mois: string
-): Promise<{ success: boolean; initializedCount: number }> {
-  const store = getStore();
-  const a = Number(annee);
-  const m = String(mois).toUpperCase();
+const MOIS_ORDRE: Record<string, number> = {
+  JANVIER: 0, FEVRIER: 1, MARS: 2, AVRIL: 3, MAI: 4, JUIN: 5,
+  JUILLET: 6, AOUT: 7, SEPTEMBRE: 8, OCTOBRE: 9, NOVEMBRE: 10, DECEMBRE: 11,
+};
 
-  const employesActifs = (store.employes || [])
-    .filter((e: any) => Number(e.actif) === 1)
-    .sort((x: any, y: any) => Number(x.numero_matricule) - Number(y.numero_matricule));
-
-  // Indexer les paies existantes par (employe_id -> liste triée du plus récent
-  // au plus ancien) afin de reprendre les accessoires du dernier mois saisi.
-  const MOIS_ORDRE: Record<string, number> = {
-    JANVIER: 0, FEVRIER: 1, MARS: 2, AVRIL: 3, MAI: 4, JUIN: 5,
-    JUILLET: 6, AOUT: 7, SEPTEMBRE: 8, OCTOBRE: 9, NOVEMBRE: 10, DECEMBRE: 11,
-  };
+function indexPaiesParEmploye(store: any): Record<number, any[]> {
   const paiesParEmploye: Record<number, any[]> = {};
   for (const p of store.paies || []) {
     const id = Number(p.employe_id);
@@ -279,6 +268,126 @@ export async function initMoisPaie(
       return iy - ix;
     });
   }
+  return paiesParEmploye;
+}
+
+/** Construit (sans l'enregistrer) le bulletin d'un salarié pour une période. */
+function construirePaie(
+  emp: any,
+  a: number,
+  m: string,
+  paiesParEmploye: Record<number, any[]>
+): any {
+  const dernier = (paiesParEmploye[Number(emp.id)] || []).find(
+    (p: any) => Number(p.annee) * 12 + (MOIS_ORDRE[String(p.mois).toUpperCase()] ?? 0) < a * 12 + (MOIS_ORDRE[m] ?? 0)
+  );
+  const accessoires = dernier
+    ? {
+        augmentation_divers: Number(dernier.augmentation_divers || 0),
+        prime_de_garde: Number(dernier.prime_de_garde || 0),
+        anciennete2: Number(dernier.anciennete2 || 0),
+        risque: Number(dernier.risque || 0),
+        repr_rec: Number(dernier.repr_rec || 0),
+      }
+    : {};
+
+  const annees = calculerAnciennete(emp.date_embauche, a);
+  const enMaternite = emp.conge_maternite === 1 || estEnCongeMaternite(emp.date_debut_maternite, a, m);
+  const empCalc = {
+    base_aj: emp.base_aj,
+    logement_transport: emp.logement_transport,
+    rendement: emp.rendement,
+    responsabilite_representation: emp.responsabilite_representation,
+    enfant_a_charge: emp.enfant_a_charge,
+    rib: emp.rib,
+    rap: true,
+    conge_maternite: enMaternite ? 1 : 0,
+  };
+  const r = calculerPaieEmploye(empCalc, 0, 0, accessoires);
+
+  return {
+    id: nextPaieId(),
+    employe_id: emp.id,
+    numero_matricule: emp.numero_matricule,
+    annee: a,
+    mois: m,
+    nom_prenoms: emp.nom_prenoms,
+    numero_cnaps: emp.numero_cnaps || '',
+    categorie: emp.categorie || '',
+    jobs: emp.jobs || '',
+    date_embauche: emp.date_embauche || '',
+    nombre_annees: annees,
+    enfant_a_charge: emp.enfant_a_charge || 0,
+    base_aj: emp.base_aj || 0,
+    logt_trsp: emp.logement_transport || 0,
+    rendement: emp.rendement || 0,
+    resp_repres: emp.responsabilite_representation || 0,
+    salaire_brut: r.salaire_brut,
+    cnaps: r.cnaps,
+    patronal: r.patronal,
+    salaire_imposable: r.salaire_imposable,
+    irsa: r.irsa,
+    salaire_net: r.salaire_net,
+    augmentation_divers: r.augmentation_divers,
+    prime_de_garde: r.prime_de_garde,
+    anciennete2: r.anciennete2,
+    risque: r.risque,
+    repr_rec: r.repr_rec,
+    accessoir: r.accessoir,
+    brut: r.brut,
+    avance: 0,
+    med: 0,
+    net: r.net,
+    virement: r.virement,
+    especes: r.especes,
+    rap: 1,
+    rib: emp.rib || '',
+    verrouille: 0,
+    conge_maternite: enMaternite ? 1 : 0,
+    date_debut_maternite: emp.date_debut_maternite || '',
+    date_modification: nowStamp(),
+  };
+}
+
+/** Crée le bulletin d'UN seul salarié pour une période (s'il n'existe pas). */
+export async function initPaieEmploye(
+  employeId: number,
+  annee: number,
+  mois: string
+): Promise<{ success: boolean; created: boolean }> {
+  const store = getStore();
+  const a = Number(annee);
+  const m = String(mois).toUpperCase();
+  const emp = (store.employes || []).find((e: any) => Number(e.id) === Number(employeId));
+  if (!emp) return { success: false, created: false };
+
+  const dejaCree = (store.paies || []).some(
+    (p: any) =>
+      Number(p.employe_id) === Number(employeId) &&
+      Number(p.annee) === a &&
+      String(p.mois).toUpperCase() === m
+  );
+  if (dejaCree) return { success: true, created: false };
+
+  const paiesParEmploye = indexPaiesParEmploye(store);
+  store.paies.push(construirePaie(emp, a, m, paiesParEmploye));
+  saveStore();
+  return { success: true, created: true };
+}
+
+export async function initMoisPaie(
+  annee: number,
+  mois: string
+): Promise<{ success: boolean; initializedCount: number }> {
+  const store = getStore();
+  const a = Number(annee);
+  const m = String(mois).toUpperCase();
+
+  const employesActifs = (store.employes || [])
+    .filter((e: any) => Number(e.actif) === 1)
+    .sort((x: any, y: any) => Number(x.numero_matricule) - Number(y.numero_matricule));
+
+  const paiesParEmploye = indexPaiesParEmploye(store);
 
   let count = 0;
   for (const emp of employesActifs) {
@@ -290,81 +399,7 @@ export async function initMoisPaie(
     );
     if (exist) continue;
 
-    // Reprise des accessoires du dernier bulletin du salarié (AVANCE et MED
-    // repartent à 0, conformément à la consigne).
-    const dernier = (paiesParEmploye[Number(emp.id)] || []).find(
-      (p: any) => Number(p.annee) * 12 + (MOIS_ORDRE[String(p.mois).toUpperCase()] ?? 0) < a * 12 + (MOIS_ORDRE[m] ?? 0)
-    );
-    const accessoires = dernier
-      ? {
-          augmentation_divers: Number(dernier.augmentation_divers || 0),
-          prime_de_garde: Number(dernier.prime_de_garde || 0),
-          anciennete2: Number(dernier.anciennete2 || 0),
-          risque: Number(dernier.risque || 0),
-          repr_rec: Number(dernier.repr_rec || 0),
-        }
-      : {};
-
-    const annees = calculerAnciennete(emp.date_embauche, a);
-    const enMaternite =
-      emp.conge_maternite === 1 ||
-      estEnCongeMaternite(emp.date_debut_maternite, a, m);
-    const empCalc = {
-      base_aj: emp.base_aj,
-      logement_transport: emp.logement_transport,
-      rendement: emp.rendement,
-      responsabilite_representation: emp.responsabilite_representation,
-      enfant_a_charge: emp.enfant_a_charge,
-      rib: emp.rib,
-      rap: true,
-      conge_maternite: enMaternite ? 1 : 0,
-    };
-    const r = calculerPaieEmploye(empCalc, 0, 0, accessoires);
-
-    const newPaie: any = {
-      id: nextPaieId(),
-      employe_id: emp.id,
-      numero_matricule: emp.numero_matricule,
-      annee: a,
-      mois: m,
-      nom_prenoms: emp.nom_prenoms,
-      numero_cnaps: emp.numero_cnaps || '',
-      categorie: emp.categorie || '',
-      jobs: emp.jobs || '',
-      date_embauche: emp.date_embauche || '',
-      nombre_annees: annees,
-      enfant_a_charge: emp.enfant_a_charge || 0,
-      base_aj: emp.base_aj || 0,
-      logt_trsp: emp.logement_transport || 0,
-      rendement: emp.rendement || 0,
-      resp_repres: emp.responsabilite_representation || 0,
-      salaire_brut: r.salaire_brut,
-      cnaps: r.cnaps,
-      patronal: r.patronal,
-      salaire_imposable: r.salaire_imposable,
-      irsa: r.irsa,
-      salaire_net: r.salaire_net,
-      augmentation_divers: r.augmentation_divers,
-      prime_de_garde: r.prime_de_garde,
-      anciennete2: r.anciennete2,
-      risque: r.risque,
-      repr_rec: r.repr_rec,
-      accessoir: r.accessoir,
-      brut: r.brut,
-      avance: 0,
-      med: 0,
-      net: r.net,
-      virement: r.virement,
-      especes: r.especes,
-      rap: 1,
-      rib: emp.rib || '',
-      verrouille: 0,
-      conge_maternite: enMaternite ? 1 : 0,
-      date_debut_maternite: emp.date_debut_maternite || '',
-      date_modification: nowStamp(),
-    };
-
-    store.paies.push(newPaie);
+    store.paies.push(construirePaie(emp, a, m, paiesParEmploye));
     count++;
   }
 
@@ -509,4 +544,240 @@ export async function fetchComparaison(
   }
 
   return data;
+}
+
+// ------------------------------------------------------------------------------
+// IMPORT D'UN CLASSEUR EXCEL (.xlsx / .xlsm) : PERSONNEL + ÉTATS MENSUELS
+// ------------------------------------------------------------------------------
+export interface ImportOptions {
+  /** « fusion » : complète les données existantes — « remplacement » : repart de zéro. */
+  mode: 'fusion' | 'remplacement';
+  /** Importer également les états de paie mensuels trouvés dans le classeur. */
+  importPaies: boolean;
+  /** Écraser les bulletins déjà présents pour une même période. */
+  ecraserPaies: boolean;
+}
+
+export interface ImportRapport {
+  employesAjoutes: number;
+  employesMisAJour: number;
+  paiesAjoutees: number;
+  paiesMisesAJour: number;
+  periodes: { annee: number; mois: string }[];
+}
+
+const CHAMPS_TEXTE: (keyof ImportedEmploye)[] = [
+  'nom_prenoms', 'numero_cnaps', 'categorie', 'jobs', 'date_embauche', 'rib', 'mode_paiement',
+];
+const CHAMPS_NOMBRE: (keyof ImportedEmploye)[] = [
+  'nombre_annees', 'enfant_a_charge', 'base_aj', 'logement_transport', 'rendement',
+  'responsabilite_representation',
+];
+
+function fusionnerEmploye(base: any, src: ImportedEmploye): any {
+  const out: any = { ...base };
+  for (const k of CHAMPS_TEXTE) {
+    const v = String((src as any)[k] || '').trim();
+    if (v) out[k] = v;
+  }
+  for (const k of CHAMPS_NOMBRE) {
+    const v = Number((src as any)[k] || 0);
+    if (v > 0) out[k] = v;
+  }
+  out.nom_prenoms = out.nom_prenoms || src.nom_prenoms;
+  return out;
+}
+
+function nouveauEmploye(src: ImportedEmploye): any {
+  return {
+    id: nextEmployeId(),
+    numero_matricule: Number(src.numero_matricule),
+    nom_prenoms: src.nom_prenoms || `SALARIÉ ${src.numero_matricule}`,
+    numero_cnaps: src.numero_cnaps || '',
+    categorie: src.categorie || '',
+    jobs: src.jobs || '',
+    date_embauche: src.date_embauche || '',
+    nombre_annees: src.nombre_annees || calculerAnciennete(src.date_embauche, 2026),
+    enfant_a_charge: src.enfant_a_charge || 0,
+    base_aj: src.base_aj || 0,
+    logement_transport: src.logement_transport || 0,
+    rendement: src.rendement || 0,
+    responsabilite_representation: src.responsabilite_representation || 0,
+    rib: src.rib || '',
+    mode_paiement: src.mode_paiement || 'ESPECES',
+    actif: 1,
+    conge_maternite: src.conge_maternite ? 1 : 0,
+    date_debut_maternite: src.date_debut_maternite || '',
+    date_creation: nowStamp(),
+  };
+}
+
+function lignePaie(src: ImportedPaie, employeId: number, id: number): any {
+  return {
+    id,
+    employe_id: employeId,
+    numero_matricule: Number(src.numero_matricule),
+    annee: Number(src.annee),
+    mois: String(src.mois).toUpperCase(),
+    nom_prenoms: src.nom_prenoms || '',
+    numero_cnaps: src.numero_cnaps || '',
+    categorie: src.categorie || '',
+    jobs: src.jobs || '',
+    date_embauche: src.date_embauche || '',
+    nombre_annees: src.nombre_annees || 0,
+    enfant_a_charge: src.enfant_a_charge || 0,
+    base_aj: src.base_aj || 0,
+    logt_trsp: src.logt_trsp || 0,
+    rendement: src.rendement || 0,
+    resp_repres: src.resp_repres || 0,
+    salaire_brut: src.salaire_brut || 0,
+    cnaps: src.cnaps || 0,
+    patronal: src.patronal || 0,
+    salaire_imposable: src.salaire_imposable || 0,
+    irsa: src.irsa || 0,
+    salaire_net: src.salaire_net || 0,
+    augmentation_divers: src.augmentation_divers || 0,
+    prime_de_garde: src.prime_de_garde || 0,
+    anciennete2: src.anciennete2 || 0,
+    risque: src.risque || 0,
+    repr_rec: src.repr_rec || 0,
+    accessoir: src.accessoir || 0,
+    brut: src.brut || 0,
+    avance: src.avance || 0,
+    med: src.med || 0,
+    net: src.net || 0,
+    virement: src.virement,
+    especes: src.especes,
+    rap: src.rap === 0 ? 0 : 1,
+    rib: src.rib || '',
+    verrouille: 0,
+    conge_maternite: 0,
+    date_debut_maternite: '',
+    date_modification: nowStamp(),
+  };
+}
+
+export async function importerClasseur(
+  result: ImportWorkbookResult,
+  options: ImportOptions
+): Promise<ImportRapport> {
+  const store = getStore();
+
+  if (options.mode === 'remplacement') {
+    store.employes = [];
+    store.paies = [];
+  }
+
+  const rapport: ImportRapport = {
+    employesAjoutes: 0,
+    employesMisAJour: 0,
+    paiesAjoutees: 0,
+    paiesMisesAJour: 0,
+    periodes: [],
+  };
+
+  // Index matricule -> employé
+  const parMatricule = new Map<number, any>();
+  for (const e of store.employes) parMatricule.set(Number(e.numero_matricule), e);
+
+  for (const src of result.employes) {
+    if (!src.numero_matricule) continue;
+    const exist = parMatricule.get(Number(src.numero_matricule));
+    if (exist) {
+      const merged = fusionnerEmploye(exist, src);
+      Object.assign(exist, merged);
+      rapport.employesMisAJour++;
+    } else {
+      const created = nouveauEmploye(src);
+      store.employes.push(created);
+      parMatricule.set(Number(src.numero_matricule), created);
+      rapport.employesAjoutes++;
+    }
+  }
+
+  // Les bulletins peuvent référencer un matricule absent de la liste du personnel
+  for (const p of result.paies) {
+    if (!parMatricule.has(Number(p.numero_matricule))) {
+      const created = nouveauEmploye({
+        numero_matricule: p.numero_matricule,
+        nom_prenoms: p.nom_prenoms,
+        numero_cnaps: p.numero_cnaps,
+        categorie: p.categorie,
+        jobs: p.jobs,
+        date_embauche: p.date_embauche,
+        nombre_annees: p.nombre_annees,
+        enfant_a_charge: p.enfant_a_charge,
+        base_aj: p.base_aj,
+        logement_transport: p.logt_trsp,
+        rendement: p.rendement,
+        responsabilite_representation: p.resp_repres,
+        rib: p.rib,
+        mode_paiement: p.rib ? 'VIREMENT' : 'ESPECES',
+        conge_maternite: 0,
+        date_debut_maternite: '',
+      });
+      store.employes.push(created);
+      parMatricule.set(Number(p.numero_matricule), created);
+      rapport.employesAjoutes++;
+    }
+  }
+
+  if (options.importPaies) {
+    const periodesSet = new Set<string>();
+    for (const src of result.paies) {
+      const emp = parMatricule.get(Number(src.numero_matricule));
+      if (!emp) continue;
+      const idx = store.paies.findIndex(
+        (p: any) =>
+          Number(p.employe_id) === Number(emp.id) &&
+          Number(p.annee) === Number(src.annee) &&
+          String(p.mois).toUpperCase() === String(src.mois).toUpperCase()
+      );
+      if (idx >= 0) {
+        if (!options.ecraserPaies) continue;
+        const existing = store.paies[idx];
+        store.paies[idx] = {
+          ...lignePaie(src, Number(emp.id), Number(existing.id)),
+          verrouille: Number(existing.verrouille) || 0,
+        };
+        rapport.paiesMisesAJour++;
+      } else {
+        store.paies.push(lignePaie(src, Number(emp.id), nextPaieId()));
+        rapport.paiesAjoutees++;
+      }
+      periodesSet.add(`${src.mois} ${src.annee}`);
+    }
+    rapport.periodes = result.periodes.map((p) => ({ annee: p.annee, mois: p.mois }));
+  }
+
+  // Mise à jour de l'en-tête (année / mois disponibles)
+  try {
+    const annees = Array.from(new Set(store.paies.map((p: any) => Number(p.annee)))).sort();
+    if (annees.length) store.meta.annee = annees[annees.length - 1];
+    store.meta.mois_disponibles = MOIS_FR.filter((m) =>
+      store.paies.some((p: any) => String(p.mois).toUpperCase() === m)
+    );
+  } catch {
+    /* ignore */
+  }
+
+  saveStore();
+  return rapport;
+}
+
+/** Liste des périodes (année + mois) effectivement présentes dans les données. */
+export async function fetchPeriodes(): Promise<{ annee: number; mois: string; nb: number }[]> {
+  const store = getStore();
+  const map = new Map<string, { annee: number; mois: string; nb: number }>();
+  for (const p of store.paies || []) {
+    const a = Number(p.annee);
+    const m = String(p.mois).toUpperCase();
+    const k = `${a}|${m}`;
+    const cur = map.get(k);
+    if (cur) cur.nb++;
+    else map.set(k, { annee: a, mois: m, nb: 1 });
+  }
+  return Array.from(map.values()).sort(
+    (x, y) => x.annee - y.annee || MOIS_FR.indexOf(x.mois) - MOIS_FR.indexOf(y.mois)
+  );
 }

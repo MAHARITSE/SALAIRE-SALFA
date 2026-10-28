@@ -102,10 +102,57 @@ src/
 
 ---
 
+## 📥 Importer votre classeur Excel (personnel + états de paie)
+
+L'application lit directement votre fichier **`SALAIRE_SALFA_….xlsm` / `.xlsx`**
+(100 % dans le navigateur, aucune donnée envoyée sur Internet) :
+
+1. Connectez-vous, puis ouvrez l'onglet **1. Salariés**.
+2. Cliquez sur **« Importer Excel »**.
+3. Déposez le classeur (ou cliquez pour le choisir).
+4. Vérifiez l'aperçu : feuilles reconnues, nombre de salariés, périodes détectées.
+5. Choisissez le mode :
+   - **Fusionner** (recommandé) : ajoute les nouveaux salariés et complète les fiches existantes ;
+   - **Remplacer tout** : efface personnel + paies puis recharge tout depuis le fichier.
+6. Cliquez sur **Importer**.
+
+Le lecteur reconnaît automatiquement :
+
+- les feuilles de **personnel** (colonnes `MATRICULE` / `N° MAT`, `NOM ET PRENOMS`, `N° CNAPS`, `CAT`, `JOB`, `DATE EMB`, `BASE AJ`…) ;
+- les feuilles d'**état mensuel** (le mois est lu dans le nom de la feuille ou dans le titre,
+  p. ex. « PAIE JANVIER 2026 ») et toutes leurs colonnes : `BASE AJ`, `LOGT/TRSP`, `RENDEMENT`,
+  `RESP/REPRES`, `SALAIRE BRUT`, `CNaPS`, `PATRONAL`, `SAL IMPOSABLE`, `IRSA`, `SALAIRE NET`,
+  `AUGMENTATION DIVERS`, `PRIME DE GARDE`, `ANC 2`, `RISQUE`, `REPR/REC`, `ACCESSOIR`, `BRUT`,
+  `AVANCE`, `MED`, `NET`, `VIREMENT`, `ESPECES`, `RAP` ;
+- les lignes **TOTAL / TOTAUX** sont ignorées ;
+- les montants écrits à la française (`1 234,56`) et les dates (`23/08/2024`, date Excel).
+
+> Les données importées sont conservées dans le navigateur (localStorage).
+> Le bouton « Réinit. données » du bandeau restaure les données d'origine.
+
+---
+
+## 📄 État de paie mensuel (onglet 2)
+
+Reproduction du classeur Excel, en plein écran et imprimable :
+
+- 32 colonnes regroupées en 5 blocs (Identification, Salaire de base, Cotisations & impôt,
+  Accessoires, Retenues & règlement) + ligne **TOTAUX** ;
+- sélecteur de période (les mois réellement présents dans l'application) ;
+- recherche par matricule / nom / fonction ;
+- **Impression A3 paysage** (le tableau tient sur une page) ;
+- **Export Excel** au même format ;
+- les salariés actifs sans bulletin apparaissent avec un bouton **« Créer »**
+  directement dans l'onglet *Salariés*.
+
+---
+
 ## ✨ Fonctionnalités
 
 - Authentification locale (`admin` / `comptable`)
 - Gestion des salariés (fiches, matricules, ancienneté, congé maternité)
+- **Import du classeur Excel** (personnel + états mensuels) avec aperçu avant import
+- **État de paie mensuel** complet (32 colonnes + totaux), impression A3 et export Excel
 - Saisie mensuelle (AVANCE / MED), clôture et déverrouillage des mois
 - Bulletins de paie (2 exemplaires, export PDF via jsPDF)
 - Rapports & comparaisons, exports Excel (xlsx) et JSON

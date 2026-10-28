@@ -107,3 +107,43 @@
   @page { margin: 0.8cm; size: A4 landscape; }
   .dark * { background: white !important; color: black !important; border-color: #e2e8f0 !important; }
 }
+
+/* ----------------------------------------------------------------------------
+   ÉTAT DE PAIE — impression A3 paysage (reproduction du classeur Excel)
+   ---------------------------------------------------------------------------- */
+@page etat-a3 {
+  size: A3 landscape;
+  margin: 6mm;
+}
+
+@media print {
+  .etat-a3 { page: etat-a3; }
+
+  .etat-scroll {
+    max-height: none !important;
+    overflow: visible !important;
+    overflow-x: visible !important;
+  }
+
+  .etat-table {
+    font-size: 6.4pt !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: auto !important;
+  }
+
+  .etat-table th,
+  .etat-table td {
+    padding: 1px 2px !important;
+    border-color: #94a3b8 !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+  }
+
+  .etat-table thead { display: table-header-group; }
+  .etat-table tfoot { display: table-footer-group; }
+  .etat-table thead th { position: static !important; z-index: auto !important; }
+  .etat-table tbody td,
+  .etat-table tfoot td { position: static !important; z-index: auto !important; }
+  .etat-table tbody tr { break-inside: avoid; page-break-inside: avoid; }
+}
