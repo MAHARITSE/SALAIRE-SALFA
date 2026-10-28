@@ -1,8 +1,9 @@
+import { YearSelect, YearProps } from '../YearSelect';
 // ==============================================================================
 // ONGLET « ÉTAT DE PAIE » — REPRODUCTION FIDÈLE DU CLASSEUR EXCEL SALFA
 // Toutes les colonnes de l'état mensuel : identification, salaire de base,
 // charges (CNaPS / IRSA), accessoires, retenues et règlement + ligne TOTAUX.
-// Impression A3 paysage et export Excel au même format.
+// Impression A4 paysage en deux parties et export Excel au même format.
 // ==============================================================================
 import React, { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
@@ -48,7 +49,6 @@ const num = (v: any): number => {
 
 const COLONNES: ColDef[] = [
   // 0 — Identification
-  { key: 'index', label: 'N°', width: 42, align: 'center', group: 0, value: (_p, i) => i + 1 },
   { key: 'mat', label: 'MAT', width: 60, align: 'center', group: 0, value: (p) => num(p.numero_matricule) },
   { key: 'nom', label: 'NOM ET PRÉNOMS', width: 230, align: 'left', group: 0, value: (p) => p.nom_prenoms || '' },
   { key: 'cnaps', label: 'N° CNAPS', width: 105, align: 'center', group: 0, value: (p) => p.numero_cnaps || '' },
@@ -88,19 +88,19 @@ const COLONNES: ColDef[] = [
   { key: 'virement', label: 'VIREMENT', width: 100, align: 'right', money: true, group: 4, value: (p) => (p.virement === null || p.virement === undefined ? 0 : num(p.virement)) },
   { key: 'especes', label: 'ESPÈCES', width: 100, align: 'right', money: true, group: 4, value: (p) => (p.especes === null || p.especes === undefined ? 0 : num(p.especes)) },
   { key: 'rap', label: 'RAP', width: 48, align: 'center', group: 4, value: (p) => (num(p.rap) ? 'X' : '') },
+  { key: 'rib', label: 'RIB', width: 180, align: 'left', group: 4, value: (p) => p.rib || '' },
 ];
 
 const fmt = (v: number): string =>
   Number(v || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Colonnes gelées à gauche
-const STICKY_KEYS = ['index', 'mat', 'nom'];
+const STICKY_KEYS = ['mat', 'nom'];
 
-export const EtatTab: React.FC = () => {
+export const EtatTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
   const now = new Date();
   const [periodes, setPeriodes] = useState<{ annee: number; mois: string; nb: number }[]>([]);
   const [mois, setMois] = useState(MOIS_LISTE[now.getMonth()]);
-  const [annee, setAnnee] = useState(now.getFullYear());
   const [paies, setPaies] = useState<PaieMensuelle[]>([]);
   const [totaux, setTotaux] = useState<TotauxMois>({});
   const [verrouille, setVerrouille] = useState(false);
@@ -122,32 +122,8 @@ export const EtatTab: React.FC = () => {
     setLoading(false);
   };
 
-  // Au 1er chargement : se placer sur la dernière période disponible
-  useEffect(() => {
-    (async () => {
-      const list = await chargerPeriodes();
-      if (list.length) {
-        const last = list[list.length - 1];
-        setAnnee(last.annee);
-        setMois(last.mois);
-        await charger(last.annee, last.mois);
-      } else {
-        await charger();
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    charger(annee, mois);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [annee, mois]);
-
-  const anneesDispo = useMemo(() => {
-    const s = new Set<number>([now.getFullYear(), annee]);
-    periodes.forEach((p) => s.add(p.annee));
-    return Array.from(s).sort();
-  }, [periodes, annee, now]);
+  useEffect(() => { chargerPeriodes(); }, []);
+  useEffect(() => { charger(annee, mois); }, [annee, mois]);
 
   const q = search.trim().toLowerCase();
   const lignes = useMemo(
@@ -201,7 +177,7 @@ export const EtatTab: React.FC = () => {
     });
 
     const corps = lignes.map((p, i) => COLONNES.map((c) => c.value(p, i)));
-    const totalLigne = COLONNES.map((c) => (c.money ? Math.round((totals[c.key] || 0) * 100) / 100 : ''));
+    const totalLigne = COLONNES.map((c, i) => i === 0 ? 'TOTAUX' : (c.money ? Math.round((totals[c.key] || 0) * 100) / 100 : ''));
 
     const aoa = [...titre, ligneGroupe, ligneEntete, ...corps, totalLigne];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -228,7 +204,7 @@ export const EtatTab: React.FC = () => {
   const imprimer = () => window.print();
 
   return (
-    <div className="space-y-3 w-full max-w-full etat-a3">
+    <div className="space-y-3 w-full max-w-full etat-page-root">
       {/* Barre d'outils */}
       <div className="bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col gap-3 no-print">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -238,9 +214,7 @@ export const EtatTab: React.FC = () => {
             <select value={mois} onChange={(e) => setMois(e.target.value)} className="rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-bold">
               {MOIS_LISTE.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
-            <select value={annee} onChange={(e) => setAnnee(Number(e.target.value))} className="rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-bold">
-              {anneesDispo.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
+            <YearSelect annee={annee} setAnnee={setAnnee} />
           </div>
 
           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold ${
@@ -256,21 +230,20 @@ export const EtatTab: React.FC = () => {
             <Users className="w-3.5 h-3.5" />{lignes.length} salarié(s)
           </span>
 
-          <div className="flex-1" />
-
-          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-            <button onClick={handleInit} disabled={verrouille} className="flex-1 sm:flex-initial bg-sky-100 dark:bg-sky-900/30 hover:bg-sky-200 dark:hover:bg-sky-800 text-salfa-teal dark:text-sky-300 disabled:opacity-50 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
+          <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto sm:ml-auto">
+            <button onClick={handleInit} disabled={verrouille} className="order-1 sm:order-none min-h-9 flex-1 sm:flex-initial bg-sky-100 dark:bg-sky-900/30 hover:bg-sky-200 dark:hover:bg-sky-800 text-salfa-teal dark:text-sky-300 disabled:opacity-50 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
               <RefreshCw className="w-4 h-4" /><span>Initialiser le mois</span>
             </button>
-            <button onClick={imprimer} className="flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
-              <Printer className="w-4 h-4" /><span>Imprimer (A3)</span>
+            <button onClick={imprimer} className="order-3 sm:order-none col-span-2 min-h-9 flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
+              <Printer className="w-4 h-4" /><span>Imprimer (A4 · 2 pages)</span>
             </button>
-            <button onClick={exportExcel} className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
+            <button onClick={exportExcel} className="order-2 sm:order-none min-h-9 flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
               <FileSpreadsheet className="w-4 h-4" /><span>Excel</span>
             </button>
           </div>
         </div>
 
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">Impression A4 paysage : deux pages, mêmes salariés sur chaque page. La recherche filtre aussi l’impression.</p>
         <div className="relative w-full sm:max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -283,15 +256,21 @@ export const EtatTab: React.FC = () => {
         </div>
       </div>
 
+      {annee === 2026 && mois === 'OCTOBRE' && (
+        <div className="no-print rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          Dans le classeur, la feuille OCTOBRE porte le titre « SEPTEMBRE 2026 ». Les données sont classées sous octobre d’après le nom de la feuille ; vérifiez la période avant utilisation.
+        </div>
+      )}
+
       {/* Document */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-2 sm:p-4 w-full">
+      <div className="no-print bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-2 sm:p-4 w-full">
         {/* En-tête imprimé */}
         <div className="text-center mb-3 space-y-0.5">
           <div className="text-[11px] sm:text-sm font-extrabold uppercase text-salfa-dark dark:text-white">
-            Fiangonana Loterana Malagasy — Sampan'asa Loterana Momba ny Fahasalamana
+            SALFA TANAMBAO
           </div>
           <div className="text-sm sm:text-lg font-extrabold text-salfa-dark dark:text-white">
-            DISPENSAIRE TANAMBAO — TOBY BETELA TOLIARA
+            FILAZANA NY KARAMA SY NY TOA AZY ISAM-BATAN'OLONA
           </div>
           <div className="text-xs sm:text-sm font-extrabold text-salfa-teal dark:text-sky-300 uppercase tracking-wide">
             État de paie — Mois de {mois} {annee}
@@ -449,6 +428,8 @@ export const EtatTab: React.FC = () => {
         </div>
       </div>
 
+      <EtatImpression lignes={lignes} totals={totals} mois={mois} annee={annee} />
+
       {periodes.length > 1 && (
         <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 no-print">
           <div className="text-[11px] font-bold uppercase text-slate-600 dark:text-slate-300 mb-2 flex items-center gap-1.5">
@@ -471,6 +452,68 @@ export const EtatTab: React.FC = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+
+// Les deux parties utilisent exactement les mêmes lignes et un espacement commun.
+const PRINT_KEYS = [
+  ['mat', 'nom', 'cnaps', 'cat', 'job', 'dateEmb', 'annees', 'enfants', 'base_aj', 'logt_trsp', 'rendement', 'resp_repres', 'salaire_brut', 'cnaps_sal', 'patronal', 'imposable', 'irsa', 'salaire_net'],
+  ['mat', 'nom', 'cnaps', 'cat', 'job', 'salaire_net', 'augmentation_divers', 'prime_de_garde', 'anciennete2', 'risque', 'repr_rec', 'accessoir', 'brut', 'avance', 'med', 'net'],
+];
+
+const printValue = (c: ColDef, p: PaieMensuelle, index: number) => {
+  const v = c.value(p, index);
+  return c.money ? fmt(Number(v)) : String(v);
+};
+
+const EtatImpression: React.FC<{
+  lignes: PaieMensuelle[]; totals: Record<string, number>; mois: string; annee: number;
+}> = ({ lignes, totals, mois, annee }) => {
+  const groups = PRINT_KEYS.map(keys => keys.map(key => COLONNES.find(c => c.key === key)!));
+  // Mesurer le contenu réel pour réserver assez de largeur à chaque colonne,
+  // notamment les noms, sans couper ni arrondir les montants.
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (ctx) ctx.font = 'bold 5pt Arial';
+  const measure = (text: string) => ctx ? ctx.measureText(text).width : text.length * 4;
+  const layouts = groups.map(cols => {
+    const widths = cols.map((c, ci) => {
+      const values = lignes.map((p, i) => printValue(c, p, i));
+      if (c.money) values.push(fmt(totals[c.key] || 0));
+      if (ci === 1) values.push('TOTAUX');
+      // Conversion pixels vers millimètres, plus marge et bordure.
+      return Math.max(c.key === 'mat' || c.key === 'cat' ? 6 : 8, Math.max(0, ...values.map(measure)) * 25.4 / 96 + 1.2);
+    });
+    const total = widths.reduce((a, b) => a + b, 0);
+    return { widths, total };
+  });
+  const rowHeight = Math.min(2.65, 150 / Math.max(lignes.length, 1));
+  // Réduire aussi la police quand les noms ou le nombre de lignes sont importants.
+  const fontPt = Math.min(5, 5 * 278 / Math.max(...layouts.map(l => l.total)), rowHeight * 2.1);
+
+  return (
+    <div className="etat-print" aria-hidden="true" style={{ '--etat-row-height': `${rowHeight}mm`, '--etat-font-size': `${fontPt}pt` } as React.CSSProperties}>
+      {groups.map((cols, part) => (
+        <section className="etat-print-page" key={part}>
+          <div className="etat-print-heading">
+            <strong>SALFA TANAMBAO</strong>
+            <strong>FILAZANA NY KARAMA SY NY TOA AZY ISAM-BATAN'OLONA</strong>
+            <strong>État de paie — Mois de {mois} {annee} · Page {part + 1}/2</strong>
+          </div>
+          <table className="etat-print-table">
+            <colgroup>{cols.map((c, i) => <col key={c.key} style={{ width: `${layouts[part].widths[i] / layouts[part].total * 100}%` }} />)}</colgroup>
+            <thead><tr>{cols.map(c => <th key={c.key}>{c.label}</th>)}</tr></thead>
+            <tbody>{lignes.map((p, i) => (
+              <tr key={p.id}>{cols.map(c => <td key={c.key} style={{ textAlign: c.align }}>{printValue(c, p, i)}</td>)}</tr>
+            ))}</tbody>
+            {lignes.length > 0 && <tfoot><tr><td colSpan={2}>TOTAUX</td>{cols.slice(2).map(c => (
+              <td key={c.key} style={{ textAlign: c.align }}>{c.money ? fmt(totals[c.key] || 0) : ''}</td>
+            ))}</tr></tfoot>}
+          </table>
+        </section>
+      ))}
     </div>
   );
 };

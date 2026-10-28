@@ -1,5 +1,7 @@
 # Clinique SALFA TANAMBAO — Logiciel de Paie Mensuelle
 
+> **Variante réseau WAMP / MySQL :** voir [wamp/GUIDE-WAMP.md](wamp/GUIDE-WAMP.md). Elle démarre avec une base vide et reste à valider sur Windows avant toute utilisation réelle. La description ci-dessous concerne la version locale dans le navigateur.
+
 Application **100 % locale** (client-side / React + Vite + TypeScript), déployable en tant que
 **site statique** sur **Cloudflare Pages**. Il n'y a **plus aucun serveur Node/Express ni base
 de données distante** : toutes les données sont stockées dans le `localStorage` du navigateur,
@@ -128,7 +130,7 @@ Le lecteur reconnaît automatiquement :
 - les montants écrits à la française (`1 234,56`) et les dates (`23/08/2024`, date Excel).
 
 > Les données importées sont conservées dans le navigateur (localStorage).
-> Le bouton « Réinit. données » du bandeau restaure les données d'origine.
+> Les données sont propres à chaque navigateur ; exportez régulièrement une sauvegarde JSON.
 
 ---
 
@@ -140,7 +142,7 @@ Reproduction du classeur Excel, en plein écran et imprimable :
   Accessoires, Retenues & règlement) + ligne **TOTAUX** ;
 - sélecteur de période (les mois réellement présents dans l'application) ;
 - recherche par matricule / nom / fonction ;
-- **Impression A3 paysage** (le tableau tient sur une page) ;
+- **Impression A4 paysage en deux pages** : salaire de base et charges sur la première, accessoires et net sur la seconde ;
 - **Export Excel** au même format ;
 - les salariés actifs sans bulletin apparaissent avec un bouton **« Créer »**
   directement dans l'onglet *Salariés*.
@@ -152,8 +154,84 @@ Reproduction du classeur Excel, en plein écran et imprimable :
 - Authentification locale (`admin` / `comptable`)
 - Gestion des salariés (fiches, matricules, ancienneté, congé maternité)
 - **Import du classeur Excel** (personnel + états mensuels) avec aperçu avant import
-- **État de paie mensuel** complet (32 colonnes + totaux), impression A3 et export Excel
+- **État de paie mensuel** complet (32 colonnes + totaux), impression A4 en deux pages et export Excel
 - Saisie mensuelle (AVANCE / MED), clôture et déverrouillage des mois
 - Bulletins de paie (2 exemplaires, export PDF via jsPDF)
 - Rapports & comparaisons, exports Excel (xlsx) et JSON
 - Conformité CGI Madagascar (IRSA) et calcul CNaPS
+
+## Données du classeur fourni
+
+Les données initiales proviennent de `SALAIRE SALFA 2026.xlsm` : 48 salariés
+présents dans **LISTE SALARIE**, deux salariés supplémentaires retrouvés uniquement
+sur des états anciens (marqués inactifs), et 470 lignes des feuilles mensuelles de
+janvier à octobre 2026. Les montants sont les valeurs enregistrées dans Excel,
+sans recalcul. Les fiches utilisent les informations du dernier mois disponible.
+Les feuilles annexes (SOCIAL, états anciens, primes…) ne sont pas utilisées comme
+liste du personnel : certaines ont une numérotation différente des matricules.
+
+**À vérifier :** la feuille nommée `OCTOBRE` porte encore le titre « SEPTEMBRE
+2026 ». L'application la classe en octobre selon son nom ; confirmez la période
+avant utilisation. Le titre de certaines autres feuilles indique 2025 alors que
+leur mois indique 2026 ; c'est l'année associée au mois qui a été retenue.
+
+Sur un navigateur ayant déjà des données, les salariés et lignes manquants sont
+ajoutés une seule fois, sans remplacer les fiches et paies existantes et sans
+compléter les mois verrouillés. Les données déjà enregistrées ne sont pas remplacées automatiquement ; exportez
+une sauvegarde JSON avant toute opération de remplacement des données. Les valeurs de paie doivent être vérifiées
+avant tout paiement. Pour régénérer les données embarquées à partir du classeur,
+installer `openpyxl` puis exécuter `python scripts/extract_salfa.py`.
+
+**Confidentialité :** les données embarquées dans le site statique peuvent être
+consultées par toute personne ayant accès aux fichiers du site, indépendamment de
+la connexion locale. Ne publiez pas cette version sur un site public sans mettre
+en place un véritable contrôle d'accès côté serveur et protéger le classeur.
+
+### Année et bulletins individuels
+
+L'année de paie est commune aux onglets et vaut l'année en cours à l'ouverture.
+Vous pouvez sélectionner un autre exercice sans écraser les paies des années
+précédentes. L'initialisation reste **mensuelle** : elle crée uniquement les
+bulletins de la période choisie, sans remplacer les bulletins existants.
+
+L'aperçu, l'impression et le PDF individuel reprennent les rubriques de la feuille
+`BULLETIN` du classeur (deux exemplaires A4 paysage). Comme dans cette feuille,
+le net du bulletin correspond au total des gains moins les retenues. L'état de
+paie mensuel peut contenir un net enregistré différent, notamment à cause de
+l'arrondi : cet écart est indiqué sur le bulletin, sans modifier les données.
+Les montants doivent être contrôlés avant paiement.
+
+### Saisie en lot des avances et médicaments
+
+Dans **Salariés & Saisie**, choisissez le mois et l'année, puis cliquez sur
+**Saisie en lot AVANCE / MED**. Recherchez chaque salarié par nom ou matricule,
+saisissez l'avance et/ou le montant médicament, puis ajoutez-le à la liste.
+Vous pouvez modifier ou retirer une ligne avant **Enregistrer le lot**. Un champ
+vide laisse l'ancien montant inchangé ; `0` le remet à zéro. Les montants saisis
+remplacent les valeurs existantes, ils ne s'y additionnent pas.
+
+La saisie porte uniquement sur les bulletins déjà créés du mois sélectionné.
+Un salarié sans bulletin est signalé dans la recherche : créez son bulletin
+ou initialisez le mois avant de saisir. Une période clôturée doit d'abord être
+déverrouillée. À la validation, le net est recalculé depuis le brut déjà
+présent et l'arrondi configuré, sans recalculer les gains ou les cotisations
+importés ; la ventilation existante entre espèces et virement est conservée
+lorsqu'elle est connue. Vérifiez les montants et les règlements avant paiement.
+
+### Entête et reliure des bulletins
+
+Dans **Bulletins**, le bouton **Entête** permet de remplacer l'image complète ou
+bien de personnaliser séparément les sept lignes de texte et les deux logos.
+Choisissez des images PNG ou JPEG de 1 Mo maximum, puis cliquez sur **Enregistrer**.
+Le bouton **Restaurer l'entête fourni** remet le modèle d'origine dans l'éditeur ;
+il faut ensuite l'enregistrer. Chaque mode conserve ses réglages lors du passage
+à l'autre. L'entête est stocké dans le navigateur de cet appareil : il n'est pas
+inclus dans les sauvegardes JSON des paies et doit être reconfiguré sur un autre
+navigateur ou après effacement des données locales.
+
+Cet entête s'applique à l'aperçu, à l'impression et aux PDF, individuels ou en
+lot. Les pages de bulletins conservent deux exemplaires en A4 paysage avec une
+marge de reliure de 3 cm à gauche. Pour l'impression depuis le navigateur, gardez
+le format A4 paysage et l'échelle 100 % / par défaut (sans marges supplémentaires
+ni ajustement automatique), afin de préserver cette marge. La page de couverture
+et les états de paie ne sont pas modifiés.

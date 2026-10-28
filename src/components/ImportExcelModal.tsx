@@ -17,7 +17,7 @@ interface Props {
   anneeDefaut?: number;
 }
 
-export const ImportExcelModal: React.FC<Props> = ({ onClose, onImported, anneeDefaut = 2026 }) => {
+export const ImportExcelModal: React.FC<Props> = ({ onClose, onImported, anneeDefaut = new Date().getFullYear() }) => {
   const [analyse, setAnalyse] = useState<ImportWorkbookResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -60,10 +60,12 @@ export const ImportExcelModal: React.FC<Props> = ({ onClose, onImported, anneeDe
     if (!analyse) return;
     setImporting(true);
     const opts: ImportOptions = { mode, importPaies, ecraserPaies };
-    const res = await importerClasseur(analyse, opts);
-    setImporting(false);
-    setRapport(res);
-    if (onImported) onImported(res);
+    try {
+      const res = await importerClasseur(analyse, opts);
+      setRapport(res);
+      if (onImported) onImported(res);
+    } catch (e) { setErreur(e instanceof Error ? e.message : 'Import non confirmé.'); }
+    finally { setImporting(false); }
   };
 
   const nbEmployes = analyse?.employes.length || 0;

@@ -76,6 +76,11 @@ export const DEFAULT_CONFIG: PaieConfig = {
 const CONFIG_KEY = 'salfa_paie_config_v1';
 
 let configCache: PaieConfig | null = null;
+let remoteConfig = false;
+export function setRemoteConfig(config: Partial<PaieConfig> | null): void {
+  remoteConfig = true;
+  configCache = { ...DEFAULT_CONFIG, ...(config || {}), baremeAnciennete: config?.baremeAnciennete || [...DEFAULT_CONFIG.baremeAnciennete], baremeIrsa: config?.baremeIrsa || [...DEFAULT_CONFIG.baremeIrsa] };
+}
 
 function sanitizeBaremeAnciennete(raw: any): BaremeAncienneteConfig[] {
   if (!Array.isArray(raw)) return [...DEFAULT_BAREME_ANCIENNETE];
@@ -163,7 +168,7 @@ export function saveConfig(cfg: Partial<PaieConfig>): PaieConfig {
 
   configCache = nextRaw;
   try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(nextRaw));
+    if (!remoteConfig) localStorage.setItem(CONFIG_KEY, JSON.stringify(nextRaw));
   } catch (e) {
     console.error('[CONFIG] Sauvegarde config impossible.', e);
   }
@@ -177,7 +182,7 @@ export function resetConfig(): PaieConfig {
     baremeIrsa: [...DEFAULT_CONFIG.baremeIrsa.map(t => ({ ...t }))],
   };
   try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(configCache));
+    if (!remoteConfig) localStorage.setItem(CONFIG_KEY, JSON.stringify(configCache));
   } catch (e) {
     /* ignore */
   }

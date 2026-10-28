@@ -1,3 +1,4 @@
+import { YearSelect, YearProps } from '../YearSelect';
 // ==============================================================================
 // ONGLET 1 FUSIONNÉ - SALARIÉS & FICHES + SAISIE MENSUELLE (AVANCE / MED)
 // Vue unique intégrée : la période en haut, chaque ligne = un salarié avec les
@@ -18,13 +19,14 @@ import {
   toggleActifEmploye,
   initPaieEmploye,
 } from '../../api';
-import { MonetaryInput, formatSpace } from '../MonetaryInput';
+import { MonetaryInput } from '../MonetaryInput';
 import { downloadPayrollBookletPDF } from '../../pdf/bulletinsPdf';
 import { ImportExcelModal } from '../ImportExcelModal';
+import { SaisieLotModal } from '../SaisieLotModal';
 import {
   Calendar, Lock, Unlock, RefreshCw, ShieldCheck, CheckCircle, CheckCircle2,
   Search, Plus, Edit2, UserX, UserCheck, History, X, Award, Info, Save,
-  HeartHandshake, Upload, FileSpreadsheet, CalendarPlus,
+  HeartHandshake, Upload, FileSpreadsheet, CalendarPlus, ClipboardList,
 } from 'lucide-react';
 
 function fmt(val: number | undefined | null): string {
@@ -56,43 +58,44 @@ const InlineMoneyInput: React.FC<InlineMoneyInputProps> = ({
   className = '',
 }) => {
   const [focused, setFocused] = useState(false);
-  const [txt, setTxt] = useState<string>(formatSpace(value || 0));
+  const formatInput = (n: number) => Number(n || 0).toLocaleString('fr-FR', { maximumFractionDigits: 10 });
+  const [txt, setTxt] = useState<string>(formatInput(value));
 
   // Resynchronise l'affichage quand la valeur sauvegardée change (hors édition)
   useEffect(() => {
-    if (!focused) setTxt(formatSpace(value || 0));
+    if (!focused) setTxt(formatInput(value));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, focused]);
 
-  const parseNum = (s: string): number => {
-    const raw = s.replace(/\D/g, '');
-    return raw ? parseInt(raw, 10) : 0;
+  const parseNum = (s: string): number | null => {
+    const raw = s.replace(/\s/g, '').replace(',', '.');
+    if (!raw) return 0;
+    if (!/^\d+(?:\.\d*)?$/.test(raw)) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
   };
 
   const commit = () => {
     const num = parseNum(txt);
-    if (num !== Number(value || 0)) {
-      onCommit(num);
-    } else {
-      setTxt(formatSpace(value || 0));
-    }
+    if (num !== null && num !== Number(value || 0)) onCommit(num);
+    else setTxt(formatInput(value));
   };
 
   return (
     <input
       type="text"
-      inputMode="numeric"
+      inputMode="decimal"
       disabled={disabled}
       value={txt}
       onFocus={() => setFocused(true)}
-      onChange={(e) => setTxt(formatSpace(parseNum(e.target.value)))}
+      onChange={(e) => setTxt(e.target.value.replace(/[^0-9.,\s]/g, ''))}
       onBlur={() => { setFocused(false); commit(); }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           (e.target as HTMLInputElement).blur();
         } else if (e.key === 'Escape') {
-          setTxt(formatSpace(value || 0));
+          setTxt(formatInput(value));
           requestAnimationFrame(() => (e.target as HTMLInputElement).blur());
         }
       }}
@@ -104,14 +107,13 @@ const InlineMoneyInput: React.FC<InlineMoneyInputProps> = ({
 interface SalariesSaisieTabProps {
   userRole?: string;
   onOpenAdmin?: () => void;
+  annee: number;
+  setAnnee: YearProps['setAnnee'];
 }
 
-export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, onOpenAdmin }) => {
+export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, onOpenAdmin, annee, setAnnee }) => {
   const now = new Date();
-  const currentYear = now.getFullYear();
   const [mois, setMois] = useState(MOIS_LISTE[now.getMonth()]);
-  const [annee, setAnnee] = useState(currentYear);
-  const yearOptions = [currentYear - 1, currentYear, currentYear + 1];
 
   const [paies, setPaies] = useState<PaieMensuelle[]>([]);
   const [employesById, setEmployesById] = useState<Record<number, Employe>>({});
@@ -127,6 +129,8 @@ export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, 
   const [paiesHistory, setPaiesHistory] = useState<PaieMensuelle[]>([]);
   const [accessoiresPaie, setAccessoiresPaie] = useState<PaieMensuelle | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [showSaisieLot, setShowSaisieLot] = useState(false);
+  const [lotMessage, setLotMessage] = useState('');
 
   const loadData = async () => {
     setLoading(true);
@@ -315,19 +319,19 @@ Un fichier PDF unique contenant tous les états, avec sa page de couverture, ser
       </div>
 
       {/* Barre période + clôture */}
-      <div className="bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col gap-3 w-full">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="flex items-center gap-2">
+      <div className="bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2 sm:gap-3 w-full">
+          <div className="flex flex-wrap items-center gap-2">
             <Calendar className="w-4 h-4 text-salfa-teal dark:text-sky-300" />
             <span className="text-[11px] sm:text-xs font-bold uppercase text-slate-700 dark:text-slate-300 hidden xs:inline">Période :</span>
             <select value={mois} onChange={(e) => setMois(e.target.value)} className="rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-bold">
               {MOIS_LISTE.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
-            <select value={annee} onChange={(e) => setAnnee(Number(e.target.value))} className="rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-bold">
-              {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
+            <YearSelect annee={annee} setAnnee={setAnnee} />
           </div>
-          <button onClick={handleInitMois} disabled={verrouille} className="bg-sky-100 dark:bg-sky-900/30 hover:bg-sky-200 dark:hover:bg-sky-800 text-salfa-teal dark:text-sky-300 disabled:opacity-50 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center gap-1.5">
+          <button onClick={() => { setLotMessage(''); setShowSaisieLot(true); }} aria-label="Saisie en lot AVANCE / MED" disabled={loading || verrouille || savingId !== null} title={verrouille ? 'Déverrouillez la période avant de saisir' : 'Saisir plusieurs avances et médicaments'} className="min-h-9 bg-salfa-teal hover:bg-sky-800 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5">
+            <ClipboardList className="w-4 h-4" /><span className="lg:hidden xl:inline">Saisie en lot AVANCE / MED</span><span className="hidden lg:inline xl:hidden">Saisie en lot</span>
+          </button>
+          <button onClick={handleInitMois} disabled={verrouille} className="min-h-9 bg-sky-100 dark:bg-sky-900/30 hover:bg-sky-200 dark:hover:bg-sky-800 text-salfa-teal dark:text-sky-300 disabled:opacity-50 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1.5">
             <RefreshCw className="w-3.5 h-3.5" /><span className="hidden xs:inline">Ouvrir / Initialiser</span><span className="xs:hidden">Init</span>
           </button>
           {verrouille
@@ -338,13 +342,14 @@ Un fichier PDF unique contenant tous les états, avec sa page de couverture, ser
               <Info className="w-3.5 h-3.5" />{missingCount} actif(s) sans bulletin — initialiser
             </button>
           )}
-        </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+        <div className="flex items-center w-full sm:w-auto sm:ml-auto">
           {!verrouille
-            ? <button onClick={handleCloturer} className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow"><CheckCircle className="w-4 h-4" /><span>Clôturer / Valider</span></button>
-            : userRole === 'Administrateur' && <button onClick={handleDeverrouiller} className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow"><ShieldCheck className="w-4 h-4" /><span>Déverrouiller (Admin)</span></button>}
+            ? <button onClick={handleCloturer} className="w-full sm:w-auto min-h-9 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow"><CheckCircle className="w-4 h-4" /><span>Clôturer / Valider</span></button>
+            : userRole === 'Administrateur' && <button onClick={handleDeverrouiller} className="w-full sm:w-auto min-h-9 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow"><ShieldCheck className="w-4 h-4" /><span>Déverrouiller (Admin)</span></button>}
         </div>
       </div>
+
+      {lotMessage && <div role="status" className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 px-3 py-2 text-sm">{lotMessage}</div>}
 
       {/* Barre recherche + nouveau salarié */}
       <div className="bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
@@ -598,6 +603,7 @@ Un fichier PDF unique contenant tous les états, avec sa page de couverture, ser
       </div>
 
       {/* Modales */}
+      {showSaisieLot && <SaisieLotModal annee={annee} mois={mois} paies={paies} employes={Object.values(employesById)} onClose={() => setShowSaisieLot(false)} onSaved={(count) => { setShowSaisieLot(false); setLotMessage(count ? `${count} bulletin(s) mis à jour pour ${mois} ${annee}.` : 'Aucun montant modifié.'); loadData(); }} />}
       {showModal && (
         <EmployeModalForm
           employe={editEmploye}
@@ -676,7 +682,7 @@ const EmployeModalForm: React.FC<ModalFormProps> = ({ employe, onClose, onSaved 
     actif: employe ? employe.actif : 1,
   });
   const [saving, setSaving] = useState(false);
-  const calculateAncYear = (d: string) => { if (!d) return 0; try { const y = parseInt(d.split('-')[0] || d.split('/')[2] || '0', 10); if (y > 1900 && y <= 2026) return Math.max(0, 2026 - y); } catch { /* ignore */ } return 0; };
+  const calculateAncYear = (d: string) => { if (!d) return 0; try { const y = parseInt(d.split('-')[0] || d.split('/')[2] || '0', 10); if (y > 1900 && y <= new Date().getFullYear()) return Math.max(0, new Date().getFullYear() - y); } catch { /* ignore */ } return 0; };
   const ancYears = calculateAncYear(form.date_embauche);
   const getIndice = (y: number) => { if (y < 2) return 1.00; if (y < 4) return 1.09; if (y < 6) return 1.18; if (y < 8) return 1.27; if (y < 10) return 1.36; if (y < 12) return 1.45; if (y < 14) return 1.53; if (y < 16) return 1.60; if (y < 18) return 1.65; if (y < 20) return 1.68; return 1.70; };
   const indice = getIndice(ancYears);

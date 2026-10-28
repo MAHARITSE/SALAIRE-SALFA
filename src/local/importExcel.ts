@@ -174,11 +174,11 @@ const ALIASES: { key: string; test: RegExp }[] = [
   // « CNaPS » seul = cotisation salariale
   { key: 'cnaps', test: /CNAPS|C N A P S/ },
   { key: 'prenoms', test: /^PRENOM/ },
-  { key: 'nom_prenoms', test: /NOM|PRENOM/ },
+  { key: 'nom_prenoms', test: /\bNOM\b|\bPRENOMS?\b/ },
   { key: 'index', test: /^(N|NO|NUM|NUMERO|ORDRE|ORD)$/ },
 
   // Gains / retenues (ordre critique : du plus spécifique au plus générique)
-  { key: 'salaire_imposable', test: /IMPOSABLE/ },
+  { key: 'salaire_imposable', test: /IMPOSABLE|SALAIRE\s+IMP\b/ },
   { key: 'patronal', test: /PATRONAL/ },
   { key: 'salaire_net', test: /SALAIRE\s?NET/ },
   { key: 'net', test: /NET\s?A\s?PAYER|A\s?PAYER/ },
@@ -209,7 +209,7 @@ const ALIASES: { key: string; test: RegExp }[] = [
   { key: 'jobs', test: /JOB|FONCTION|POSTE|EMPLOI/ },
   { key: 'date_embauche', test: /DATE.*EMB|EMBAUCHE|DATE.*ENTREE|ANCIENNETE.*DATE/ },
   { key: 'enfant_a_charge', test: /ENFANT/ },
-  { key: 'nombre_annees', test: /^(ANNEE|ANNEES|AN|NB\s?AN|NB\s?ANNEE|ANCIENNETE)$/ },
+  { key: 'nombre_annees', test: /^(ANNEE|ANNEES|AN|NB\s?AN|NB\s?ANNEE|ANCIENNETE|NOMBRE D ANNEE)$/ },
   { key: 'mois', test: /^MOIS|PERIODE/ },
   { key: 'conge_maternite', test: /MATERNITE|CONGE/ },
 ];
@@ -262,7 +262,7 @@ export function detectMoisEtAnnee(texte: string, anneeDefaut: number): { mois: s
     annee = parseInt(numMatch[2], 10);
     return { mois, annee };
   }
-  const y4 = t.match(/(20\d{2})/);
+  const y4 = t.match(/(?:JANV[A-Z]*|FEV[A-Z]*|MARS|AVR[A-Z]*|MAI|JUIN|JUIL[A-Z]*|AOUT|SEPT[A-Z]*|OCT[A-Z]*|NOV[A-Z]*|DEC[A-Z]*)\s+(20\d{2})\b/) || t.match(/(20\d{2})/);
   if (y4) annee = parseInt(y4[1], 10);
   else {
     const y2 = t.match(/(^|\s)'?(\d{2})(\s|$)/);
@@ -346,7 +346,7 @@ const MONEY_KEYS = [
 // ------------------------------------------------------------------------------
 // Lecture principale du classeur
 // ------------------------------------------------------------------------------
-export function parseWorkbook(data: ArrayBuffer, fileName: string, anneeDefaut = 2026): ImportWorkbookResult {
+export function parseWorkbook(data: ArrayBuffer, fileName: string, anneeDefaut = new Date().getFullYear()): ImportWorkbookResult {
   const wb = XLSX.read(data, { type: 'array', cellDates: true, cellText: false });
   const result: ImportWorkbookResult = {
     fichier: fileName,
@@ -359,8 +359,16 @@ export function parseWorkbook(data: ArrayBuffer, fileName: string, anneeDefaut =
 
   const employesMap = new Map<number, ImportedEmploye>();
   const paiesMap = new Map<string, ImportedPaie>();
+  // Ce classeur contient aussi des listes anciennes, des primes et une feuille
+  // SOCIAL dont la numérotation n'est pas le matricule. Ne pas les confondre.
+  const salfa2026 = wb.SheetNames.some((n) => norm(n) === 'LISTE SALARIE') &&
+    wb.SheetNames.filter((n) => MOIS_FR.includes(norm(n))).length >= 2;
 
   for (const sheetName of wb.SheetNames) {
+    if (salfa2026 && norm(sheetName) !== 'LISTE SALARIE' && !MOIS_FR.includes(norm(sheetName))) {
+      result.feuilles.push({ nom: sheetName, type: 'ignore', ligneEntete: -1, nbLignes: 0, colonnes: [], message: 'Feuille annexe ignorée' });
+      continue;
+    }
     const ws = wb.Sheets[sheetName];
     if (!ws) continue;
 
@@ -389,10 +397,11 @@ export function parseWorkbook(data: ArrayBuffer, fileName: string, anneeDefaut =
         delete map.cnaps;
       }
     }
+    if (salfa2026 && norm(sheetName) === 'JUIN' && map.jobs === undefined) map.jobs = 4;
     const colonnes = Object.keys(map);
     const hasIdentity = map.nom_prenoms !== undefined || map.numero_matricule !== undefined;
 
-    if (headerIdx < 0 || score < 3 || !hasIdentity) {
+    if (headerIdx < 0 || score < 2 || !hasIdentity || map.nom_prenoms === undefined || map.numero_matricule === undefined) {
       result.feuilles.push({
         nom: sheetName,
         type: 'ignore',
@@ -423,8 +432,12 @@ export function parseWorkbook(data: ArrayBuffer, fileName: string, anneeDefaut =
     // même si elle contient des colonnes de montants (base, brut…).
     const aUneColonneMois = map.mois !== undefined;
     let type: TypeFeuille = hasMoney && (!!moisDetecte || aUneColonneMois) ? 'etat' : 'personnel';
-    let moisCourant = moisDetecte;
+    let moisCourant = salfa2026 && MOIS_FR.includes(norm(sheetName)) ? norm(sheetName) : moisDetecte;
     let anneeCourante = anneeDetectee;
+    if (salfa2026 && norm(sheetName) === 'OCTOBRE' && /SEPTEMBRE/.test(norm(titleText))) {
+      result.avertissements.push('La feuille OCTOBRE porte le titre SEPTEMBRE : période OCTOBRE retenue selon le nom de la feuille. Vérifiez ce titre dans le classeur.');
+    }
+
 
     // Feuille « horizontale » (un mois par colonne) : non gérée finement ici,
     // mais la feuille est signalée pour que l'utilisateur puisse la corriger.
@@ -444,8 +457,7 @@ export function parseWorkbook(data: ArrayBuffer, fileName: string, anneeDefaut =
         .join(' ')
         .trim();
       const matNum = Math.round(toNumber(row[map.numero_matricule]));
-      if (!nom && !matNum) continue;
-      if (matNum <= 0 && !nom) continue;
+      if (!nom || matNum <= 0) continue;
 
       nbLignesTraitees.push(i);
 
@@ -487,6 +499,8 @@ export function parseWorkbook(data: ArrayBuffer, fileName: string, anneeDefaut =
         const exist = employesMap.get(matricule);
         if (!exist) {
           employesMap.set(matricule, emp);
+        } else if (salfa2026 && type === 'etat') {
+          employesMap.set(matricule, { ...emp, nom_prenoms: exist.nom_prenoms || emp.nom_prenoms });
         } else {
           // Fusion : on complète les champs vides de la fiche existante
           const merged: ImportedEmploye = { ...exist };
@@ -519,7 +533,7 @@ export function parseWorkbook(data: ArrayBuffer, fileName: string, anneeDefaut =
       const resp_repres = num('resp_repres');
 
       let salaire_brut = num('salaire_brut');
-      if (!has('salaire_brut') || salaire_brut === 0) {
+      if (!has('salaire_brut')) {
         salaire_brut = Math.round((base_aj + logt_trsp + rendement + resp_repres) * 100) / 100;
       }
       let cnaps = num('cnaps');
@@ -557,12 +571,12 @@ export function parseWorkbook(data: ArrayBuffer, fileName: string, anneeDefaut =
       };
       let virement: number | null = vide('virement') ? null : num('virement');
       let especes: number | null = vide('especes') ? null : num('especes');
-      if (virement === null && especes === null) {
+      if (!salfa2026 && virement === null && especes === null) {
         // Pas d'information de règlement : tout en espèces par défaut
         especes = net;
-      } else if (virement === null) {
+      } else if (!salfa2026 && virement === null) {
         virement = 0;
-      } else if (especes === null) {
+      } else if (!salfa2026 && especes === null) {
         especes = 0;
       }
 
@@ -662,7 +676,7 @@ export function parseWorkbook(data: ArrayBuffer, fileName: string, anneeDefaut =
 }
 
 /** Lit un fichier navigateur (File) et renvoie le résultat d'analyse. */
-export async function lireFichierExcel(file: File, anneeDefaut = 2026): Promise<ImportWorkbookResult> {
+export async function lireFichierExcel(file: File, anneeDefaut = new Date().getFullYear()): Promise<ImportWorkbookResult> {
   const buf = await file.arrayBuffer();
   return parseWorkbook(buf, file.name, anneeDefaut);
 }

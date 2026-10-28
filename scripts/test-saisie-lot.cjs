@@ -1,0 +1,42 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const esbuild = require('esbuild');
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-lot-'));
+const outfile = path.join(dir, 'api.cjs');
+esbuild.buildSync({ entryPoints: ['src/api-local.ts'], bundle: true, platform: 'node', format: 'cjs', outfile, logLevel: 'silent' });
+const storage = new Map();
+let fail = false;
+global.localStorage = { getItem: k => storage.get(k) || null, setItem: (k, v) => { if (fail) throw Error('quota'); storage.set(k, v); }, removeItem: k => storage.delete(k) };
+const api = require(outfile);
+(async () => {
+  let rows = (await api.fetchPaiesMois(2026, 'OCTOBRE')).employes;
+  const first = rows.find(p => p.numero_matricule === 1);
+  const cash = rows.find(p => p.numero_matricule === 3);
+  const l = (p, values) => ({ paieId: p.id, avanceInitiale: p.avance, medInitial: p.med, ...values });
+  const r = await api.enregistrerSaisieLot(2026, 'OCTOBRE', [l(first, { avance: 12345.5 }), l(cash, { med: 1010.25 })]);
+  assert.equal(r.success, true); assert.equal(r.count, 2);
+  rows = (await api.fetchPaiesMois(2026, 'OCTOBRE')).employes;
+  const a = rows.find(p => p.id === first.id), b = rows.find(p => p.id === cash.id);
+  for (const key of ['salaire_brut','cnaps','patronal','salaire_imposable','irsa','salaire_net','accessoir','brut']) assert.equal(a[key], first[key], key);
+  assert.equal(a.avance, 12345.5); assert.equal(a.med, first.med);
+  assert.equal(a.net, Math.floor(Math.max(0, first.brut - 12345.5 - first.med) / 100) * 100);
+  assert.equal(a.virement + a.especes, a.net);
+  assert.equal(b.avance, cash.avance); assert.equal(b.med, 1010.25); assert.equal(b.especes, b.net);
+  assert.equal((await api.enregistrerSaisieLot(2026, 'OCTOBRE', [l(first, { avance: 1 })])).success, false); // conflit
+  assert.equal((await api.enregistrerSaisieLot(2027, 'OCTOBRE', [l(a, { avance: 1 })])).success, false);
+  assert.equal((await api.enregistrerSaisieLot(2026, 'OCTOBRE', [l(a, { avance: -1 })])).success, false);
+  assert.equal((await api.enregistrerSaisieLot(2026, 'OCTOBRE', [l(a, { avance: 1 }), l(b, { med: NaN })])).success, false);
+  assert.equal((await api.fetchPaiesMois(2026, 'OCTOBRE')).employes.find(p => p.id === a.id).avance, a.avance); // validation atomique
+  const key = 'salfa_paie_store_v1'; const before = storage.get(key);
+  fail = true; const quota = await api.enregistrerSaisieLot(2026, 'OCTOBRE', [l(a, { avance: 5 })]); fail = false;
+  assert.equal(quota.success, false); assert.equal(storage.get(key), before);
+  assert.equal((await api.fetchPaiesMois(2026, 'OCTOBRE')).employes.find(p => p.id === a.id).avance, a.avance);
+  const external = JSON.parse(before); external.paies.find(p => p.id === a.id).avance = 999; storage.set(key, JSON.stringify(external));
+  assert.equal((await api.enregistrerSaisieLot(2026, 'OCTOBRE', [l(a, { avance: 5 })])).success, false);
+  storage.set(key, before);
+  await api.cloturerMois(2026, 'OCTOBRE');
+  assert.equal((await api.enregistrerSaisieLot(2026, 'OCTOBRE', [l(a, { avance: 5 })])).success, false);
+  console.log('Saisie en lot, verrouillage et sauvegarde atomique : OK');
+})().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => fs.rmSync(dir, { recursive: true, force: true }));
