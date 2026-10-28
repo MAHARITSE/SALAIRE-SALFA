@@ -7,17 +7,18 @@ import { Header } from './components/Header';
 import { LoginModal } from './components/LoginModal';
 import { AdminModal } from './components/AdminModal';
 import { SalariesSaisieTab } from './components/tabs/SalariesSaisieTab';
+import { EtatTab } from './components/tabs/EtatTab';
 import { BulletinsTab } from './components/tabs/BulletinsTab';
 import { RapportsTab } from './components/tabs/RapportsTab';
 import { resetStore } from './local/store';
 import { initTheme, applyThemeClass, storeTheme, ThemeMode } from './local/theme';
 import {
-  Users, FileText, BarChart3, CheckCircle2
+  Users, FileText, BarChart3, CheckCircle2, ClipboardList
 } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<UserSession | null>(null);
-  const [activeTab, setActiveTab] = useState<'salaries' | 'bulletins' | 'rapports'>('salaries');
+  const [activeTab, setActiveTab] = useState<'salaries' | 'etat' | 'bulletins' | 'rapports'>('salaries');
   const [showLogin, setShowLogin] = useState(true);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>('light');
@@ -100,6 +101,19 @@ export const App: React.FC = () => {
                 </button>
 
                 <button
+                  onClick={() => setActiveTab('etat')}
+                  className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] xs:text-xs sm:text-sm font-bold whitespace-nowrap transition snap-start shrink-0 ${
+                    activeTab === 'etat'
+                      ? 'bg-salfa-dark dark:bg-slate-700 text-white shadow-md'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white bg-slate-50 dark:bg-slate-700/50 sm:bg-transparent'
+                  }`}
+                >
+                  <ClipboardList className="w-4 h-4 shrink-0" />
+                  <span className="hidden md:inline">2. État de paie mensuel (comme le fichier Excel)</span>
+                  <span className="md:hidden">2. État</span>
+                </button>
+
+                <button
                   onClick={() => setActiveTab('bulletins')}
                   className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] xs:text-xs sm:text-sm font-bold whitespace-nowrap transition snap-start shrink-0 ${
                     activeTab === 'bulletins'
@@ -108,8 +122,8 @@ export const App: React.FC = () => {
                   }`}
                 >
                   <FileText className="w-4 h-4 shrink-0" />
-                  <span className="hidden lg:inline">2. Bulletins de Paie (2 Ex. sur A4)</span>
-                  <span className="lg:hidden">2. Bulletins</span>
+                  <span className="hidden lg:inline">3. Bulletins de Paie (2 Ex. sur A4)</span>
+                  <span className="lg:hidden">3. Bulletins</span>
                 </button>
 
                 <button
@@ -121,8 +135,8 @@ export const App: React.FC = () => {
                   }`}
                 >
                   <BarChart3 className="w-4 h-4 shrink-0" />
-                  <span className="hidden lg:inline">3. Rapports & Exports Excel / JSON</span>
-                  <span className="lg:hidden">3. Rapports</span>
+                  <span className="hidden lg:inline">4. Rapports & Exports Excel / JSON</span>
+                  <span className="lg:hidden">4. Rapports</span>
                 </button>
               </nav>
             </div>
@@ -131,6 +145,7 @@ export const App: React.FC = () => {
           <main className="flex-1 w-full max-w-[1920px] mx-auto px-2 xs:px-3 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6 overflow-x-hidden">
             <div className="w-full max-w-full overflow-x-hidden">
               {activeTab === 'salaries' && <SalariesSaisieTab onOpenAdmin={() => setShowAdminModal(true)} userRole={user.role} />}
+              {activeTab === 'etat' && <EtatTab />}
               {activeTab === 'bulletins' && <BulletinsTab />}
               {activeTab === 'rapports' && <RapportsTab />}
             </div>

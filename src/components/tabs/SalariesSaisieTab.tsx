@@ -16,13 +16,15 @@ import {
   createEmploye,
   updateEmploye,
   toggleActifEmploye,
+  initPaieEmploye,
 } from '../../api';
 import { MonetaryInput, formatSpace } from '../MonetaryInput';
 import { downloadPayrollBookletPDF } from '../../pdf/bulletinsPdf';
+import { ImportExcelModal } from '../ImportExcelModal';
 import {
   Calendar, Lock, Unlock, RefreshCw, ShieldCheck, CheckCircle, CheckCircle2,
   Search, Plus, Edit2, UserX, UserCheck, History, X, Award, Info, Save,
-  HeartHandshake,
+  HeartHandshake, Upload, FileSpreadsheet, CalendarPlus,
 } from 'lucide-react';
 
 function fmt(val: number | undefined | null): string {
@@ -124,6 +126,7 @@ export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, 
   const [historyEmp, setHistoryEmp] = useState<Employe | null>(null);
   const [paiesHistory, setPaiesHistory] = useState<PaieMensuelle[]>([]);
   const [accessoiresPaie, setAccessoiresPaie] = useState<PaieMensuelle | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -169,6 +172,32 @@ export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, 
   const actifs = Object.values(employesById).filter((e) => Number(e.actif) === 1);
   const paieEmpIds = new Set(paies.map((p) => Number(p.employe_id)));
   const missingCount = actifs.filter((e) => !paieEmpIds.has(Number(e.id))).length;
+
+  // Salariés actifs qui n'ont PAS encore de bulletin pour la période affichée
+  const sansBulletin = actifs
+    .filter((e) => !paieEmpIds.has(Number(e.id)))
+    .filter((e) => {
+      const s = search.trim().toLowerCase();
+      return (
+        !s ||
+        String(e.nom_prenoms || '').toLowerCase().includes(s) ||
+        String(e.jobs || '').toLowerCase().includes(s) ||
+        String(e.categorie || '').toLowerCase().includes(s) ||
+        String(e.numero_matricule || '').includes(s)
+      );
+    })
+    .sort((a, b) => Number(a.numero_matricule) - Number(b.numero_matricule));
+
+  const handleCreerBulletin = async (employeId: number, nom: string) => {
+    if (verrouille) return;
+    const res = await initPaieEmploye(employeId, annee, mois);
+    if (res.created) {
+      await loadData();
+    } else {
+      alert(`Le bulletin de ${nom} existe déjà pour ${mois} ${annee}.`);
+      await loadData();
+    }
+  };
 
   const q = search.trim().toLowerCase();
   const rows = paies.filter(
@@ -329,16 +358,21 @@ Un fichier PDF unique contenant tous les états, avec sa page de couverture, ser
             className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-salfa-teal"
           />
         </div>
-        <button onClick={() => { setEditEmploye(null); setShowModal(true); }} className="bg-salfa-dark dark:bg-slate-700 hover:bg-salfa-teal dark:hover:bg-slate-600 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 shadow-sm shrink-0 w-full sm:w-auto">
-          <Plus className="w-4 h-4" /><span>Nouveau Salarié</span>
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2 shrink-0 w-full sm:w-auto">
+          <button onClick={() => setShowImport(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto">
+            <Upload className="w-4 h-4" /><span>Importer Excel</span>
+          </button>
+          <button onClick={() => { setEditEmploye(null); setShowModal(true); }} className="bg-salfa-dark dark:bg-slate-700 hover:bg-salfa-teal dark:hover:bg-slate-600 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto">
+            <Plus className="w-4 h-4" /><span>Nouveau Salarié</span>
+          </button>
+        </div>
       </div>
 
       {/* ------------------------- VERSION MOBILE : cartes ------------------------- */}
       <div className="block lg:hidden space-y-2 w-full">
         {loading ? (
           <div className="bg-white dark:bg-slate-800 rounded-xl p-6 text-center text-sm text-slate-500 border dark:border-slate-700">Chargement...</div>
-        ) : rows.length === 0 ? (
+        ) : rows.length === 0 && sansBulletin.length === 0 ? (
           <EmptyState search={q} mois={mois} annee={annee} verrouille={verrouille} onInit={handleInitMois} />
         ) : rows.map((p) => (
           <div key={p.id} onDoubleClick={() => openFiche(p)} className={`rounded-xl border p-3 shadow-sm w-full ${isMaternite(p) ? 'bg-pink-50 dark:bg-pink-950/30 border-pink-300 dark:border-pink-800 ring-1 ring-pink-200 dark:ring-pink-900' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
@@ -397,6 +431,34 @@ Un fichier PDF unique contenant tous les états, avec sa page de couverture, ser
             </div>
           </div>
         ))}
+
+        {/* Salariés actifs n'ayant pas encore de bulletin pour la période */}
+        {sansBulletin.map((e) => (
+          <div key={`sans-${e.id}`} className="rounded-xl border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/10 p-3 shadow-sm w-full">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-salfa-dark dark:text-white text-sm">Mat {e.numero_matricule}</span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/30 text-salfa-teal dark:text-sky-300">{e.categorie || '—'}</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 font-bold uppercase">Sans bulletin</span>
+                </div>
+                <div className="font-semibold text-slate-800 dark:text-slate-100 text-sm truncate mt-1">{e.nom_prenoms}</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{e.jobs || '—'}</div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">BASE AJ</div>
+                <div className="font-mono font-bold text-slate-700 dark:text-slate-200 text-sm">{fmt(e.base_aj)}</div>
+              </div>
+            </div>
+            <button
+              onClick={() => handleCreerBulletin(Number(e.id), e.nom_prenoms)}
+              disabled={verrouille}
+              className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-[11px] font-bold"
+            >
+              <CalendarPlus className="w-3.5 h-3.5" />Créer le bulletin {mois} {annee}
+            </button>
+          </div>
+        ))}
       </div>
 
       {/* ------------------------- VERSION DESKTOP : table ------------------------- */}
@@ -426,7 +488,7 @@ Un fichier PDF unique contenant tous les états, avec sa page de couverture, ser
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm dark:text-slate-200">
               {loading ? (
                 <tr><td colSpan={16} className="py-8 text-center text-slate-500">Chargement...</td></tr>
-              ) : rows.length === 0 ? (
+              ) : rows.length === 0 && sansBulletin.length === 0 ? (
                 <tr>
                   <td colSpan={16} className="py-8 text-center text-slate-500">
                     {q ? 'Aucun salarié ne correspond à la recherche.' : `Aucun bulletin pour ${mois} ${annee}. Cliquez sur « Ouvrir / Initialiser » pour générer les bulletins des salariés actifs.`}
@@ -487,6 +549,38 @@ Un fichier PDF unique contenant tous les états, avec sa page de couverture, ser
                   </td>
                 </tr>
               ))}
+              {/* Salariés actifs sans bulletin pour la période affichée */}
+              {!loading && sansBulletin.map((e) => (
+                <tr key={`sans-${e.id}`} className="bg-amber-50/50 dark:bg-amber-900/10 border-l-4 border-l-amber-400 dark:border-l-amber-600">
+                  <td className="py-2.5 px-3 text-center font-bold text-salfa-dark dark:text-white">{e.numero_matricule}</td>
+                  <td className="py-2.5 px-4 font-semibold text-slate-800 dark:text-slate-100">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate max-w-[180px]">{e.nom_prenoms}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 font-bold uppercase shrink-0">Sans bulletin</span>
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-2 text-center text-xs font-bold text-salfa-teal dark:text-sky-300">{e.categorie || '—'}</td>
+                  <td className="py-2.5 px-3 text-xs truncate max-w-[120px]">{e.jobs || '—'}</td>
+                  <td className="py-2.5 px-3 text-xs">
+                    <div className="font-semibold">{e.mode_paiement || '—'}</div>
+                    <div className="font-mono text-slate-500 dark:text-slate-400 text-[11px] truncate max-w-[110px]">{e.rib || 'Aucun'}</div>
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono">{fmt(e.base_aj)}</td>
+                  <td colSpan={10} className="py-2.5 px-3 text-center text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                    Aucun bulletin pour {mois} {annee} — cliquez sur « Créer » pour générer sa paie
+                  </td>
+                  <td className="py-2.5 px-3 text-center">
+                    <button
+                      onClick={() => handleCreerBulletin(Number(e.id), e.nom_prenoms)}
+                      disabled={verrouille}
+                      title={`Créer le bulletin de ${mois} ${annee}`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-[10px] font-bold whitespace-nowrap"
+                    >
+                      <CalendarPlus className="w-3.5 h-3.5" />Créer
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -517,6 +611,20 @@ Un fichier PDF unique contenant tous les états, avec sa page de couverture, ser
           paie={accessoiresPaie}
           onClose={() => setAccessoiresPaie(null)}
           onSaved={() => { setAccessoiresPaie(null); loadData(); }}
+        />
+      )}
+      {showImport && (
+        <ImportExcelModal
+          anneeDefaut={annee}
+          onClose={() => { setShowImport(false); loadData(); }}
+          onImported={(rap) => {
+            // Se positionner sur la dernière période présente dans le classeur
+            const derniere = rap.periodes[rap.periodes.length - 1];
+            if (derniere) {
+              setAnnee(derniere.annee);
+              setMois(derniere.mois);
+            }
+          }}
         />
       )}
     </div>
