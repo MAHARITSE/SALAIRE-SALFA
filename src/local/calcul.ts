@@ -32,7 +32,7 @@ function getBaremeIrsa(): TrancheIrsaConfig[] {
   return DEFAULT_BAREME_IRSA;
 }
 
-export function calculerAnciennete(dateEmbauche: string, anneeRef: number = 2026): number {
+export function calculerAnciennete(dateEmbauche: string, anneeRef: number = new Date().getFullYear()): number {
   if (!dateEmbauche) return 0;
   try {
     let y = 0;
@@ -117,7 +117,7 @@ export function obtenirIndiceAncienneteAvecBareme(annees: number, bareme: Bareme
   return 1.70;
 }
 
-export function evaluerBaseRevalorisee(baseInitiale: number, dateEmbauche: string, anneeRef: number = 2026) {
+export function evaluerBaseRevalorisee(baseInitiale: number, dateEmbauche: string, anneeRef: number = new Date().getFullYear()) {
   const annees = calculerAnciennete(dateEmbauche, anneeRef);
   const indice = obtenirIndiceAnciennete(annees);
   const baseRevalorisee = Math.round(baseInitiale * indice * 100) / 100;

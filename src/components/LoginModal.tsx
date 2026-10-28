@@ -6,6 +6,7 @@ import { UserSession } from '../types';
 import { apiLogin } from '../api';
 import { Lock, UserCheck, Shield, AlertCircle, Moon, Sun } from 'lucide-react';
 import { ThemeMode } from '../local/theme';
+import { WAMP } from '../runtime';
 
 interface LoginModalProps {
   onSuccess: (user: UserSession) => void;
@@ -14,8 +15,8 @@ interface LoginModalProps {
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggleTheme }) => {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState(WAMP ? '' : 'admin');
+  const [password, setPassword] = useState(WAMP ? '' : 'admin123');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -26,7 +27,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggle
     try {
       const user = await apiLogin(username, password);
       if (user) onSuccess(user);
-      else setError("Identifiants incorrects. (admin / admin123 ou comptable / comptable123)");
+      else setError(WAMP ? "Identifiants incorrects." : "Identifiants incorrects. (admin / admin123 ou comptable / comptable123)");
     } catch (err: any) {
       setError(err?.message || "Impossible de se connecter.");
     } finally { setLoading(false); }
@@ -50,17 +51,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggle
             <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-sky-300" />
           </div>
           <h2 className="text-base sm:text-xl font-bold">CLINIQUE SALFA TANAMBAO</h2>
-          <p className="text-[11px] sm:text-xs text-slate-300 mt-1 px-2">Logiciel de Paie Mensuelle — Authentification <span className="text-sky-300">(100% Local)</span></p>
+          <p className="text-[11px] sm:text-xs text-slate-300 mt-1 px-2">Logiciel de Paie Mensuelle — Authentification <span className="text-sky-300">{WAMP ? "(serveur réseau)" : "(100% Local)"}</span></p>
         </div>
 
         <div className="p-4 sm:p-6">
-          <div className="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1.5 rounded-lg">
+          {!WAMP && <div className="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1.5 rounded-lg">
             <Lock className="w-3.5 h-3.5 shrink-0" />
             <span className="font-semibold">Mode 100% local</span>
             <span className="hidden xs:inline text-emerald-600 dark:text-emerald-400">— données dans ce navigateur</span>
-          </div>
+          </div>}
 
-          <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-lg p-3 mb-4 sm:mb-5 text-xs text-salfa-dark dark:text-slate-200">
+          {!WAMP && <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-lg p-3 mb-4 sm:mb-5 text-xs text-salfa-dark dark:text-slate-200">
             <div className="font-semibold mb-2 flex items-center gap-1.5 text-salfa-teal dark:text-sky-300 text-[11px] sm:text-xs">
               <UserCheck className="w-4 h-4" />Comptes de test (cliquez pour remplir) :
             </div>
@@ -72,7 +73,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggle
                 comptable / comptable123
               </button>
             </div>
-          </div>
+          </div>}
 
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs flex items-start gap-2">
@@ -83,21 +84,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggle
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">Nom d'utilisateur</label>
-              <select value={username} onChange={(e) => setUsername(e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-salfa-teal focus:outline-none dark:text-white">
+              {WAMP ? <input value={username} onChange={e => setUsername(e.target.value)} autoComplete="username" required className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2.5 sm:py-2 text-sm" /> : <select value={username} onChange={(e) => setUsername(e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-salfa-teal focus:outline-none dark:text-white">
                 <option value="admin">admin (Administrateur)</option>
                 <option value="comptable">comptable (Comptable)</option>
-              </select>
+              </select>}
             </div>
             <div>
               <label className="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">Mot de passe</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-salfa-teal focus:outline-none dark:text-white" required placeholder="admin123 ou comptable123" />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-salfa-teal focus:outline-none dark:text-white" required autoComplete="current-password" placeholder={WAMP ? 'Mot de passe' : 'admin123 ou comptable123'} />
             </div>
 
             <button type="submit" disabled={loading} className="w-full mt-2 bg-salfa-dark dark:bg-slate-700 hover:bg-salfa-teal dark:hover:bg-slate-600 active:bg-slate-800 text-white font-bold py-3 sm:py-2.5 px-4 rounded-lg transition shadow-md flex items-center justify-center gap-2 disabled:opacity-50 text-sm">
               <Lock className="w-4 h-4" /><span>{loading ? "Connexion..." : "Se connecter"}</span>
             </button>
             <div className="text-[10px] sm:text-[11px] text-center text-slate-400 dark:text-slate-500 mt-2 leading-snug">
-              Application 100% locale : vos données ne quittent jamais votre navigateur.
+              {WAMP ? 'Version réseau : données enregistrées sur le serveur MySQL.' : 'Application 100% locale : vos données ne quittent jamais votre navigateur.'}
             </div>
           </form>
         </div>

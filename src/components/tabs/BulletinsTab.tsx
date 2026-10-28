@@ -1,97 +1,102 @@
-// BULLETINS - SANS Ar + DARKMODE
 import React, { useState, useEffect } from 'react';
 import { PaieMensuelle } from '../../types';
 import { fetchPaiesMois } from '../../api';
-import { Calendar, Printer, Download, FileText, Eye } from 'lucide-react';
+import { Calendar, Printer, Download, FileText, Eye, Settings2 } from 'lucide-react';
 import { downloadSingleBulletinPDF } from '../../pdf/bulletinsPdf';
+import { YearProps, YearSelect } from '../YearSelect';
+import { construireBulletin, formatDate, formatMontant, montantEnLettres } from '../../bulletin/model';
+import { loadBulletinHeader, setRemoteHeader } from '../../bulletin/header';
+import { WAMP } from '../../runtime';
+import { BulletinHeaderModal } from '../BulletinHeaderModal';
 
-function fmt(val: number | undefined): string {
-  if (val === undefined || val === null) return '0,00';
-  return val.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+const MOIS = ['JANVIER','FEVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOUT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DECEMBRE'];
 
-export const BulletinsTab: React.FC = () => {
-  const [mois, setMois] = useState('JANVIER');
-  const [annee, setAnnee] = useState(2026);
+export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
+  const [mois, setMois] = useState(() => MOIS[new Date().getMonth()]);
   const [paies, setPaies] = useState<PaieMensuelle[]>([]);
   const [selectedPaie, setSelectedPaie] = useState<PaieMensuelle | null>(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const moisListe = ["JANVIER","FEVRIER","MARS","AVRIL","MAI","JUIN","JUILLET","AOUT","SEPTEMBRE","OCTOBRE","NOVEMBRE","DECEMBRE"];
+  const [header, setHeader] = useState(loadBulletinHeader);
+  const [headerOpen, setHeaderOpen] = useState(false);
 
-  const loadData = async () => {
+  useEffect(() => {
+    const update = () => setHeader(loadBulletinHeader());
+    window.addEventListener('storage', update);
+    return () => window.removeEventListener('storage', update);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     setLoading(true);
-    const d = await fetchPaiesMois(annee, mois);
-    const list = d.employes || [];
-    setPaies(list); setLoading(false);
-    if (list.length > 0) { if (!selectedPaie || !list.some(p => p.id === selectedPaie.id)) setSelectedPaie(list[0]); } else setSelectedPaie(null);
-  };
-  useEffect(() => { loadData(); /* eslint-disable-next-line */ }, [mois, annee]);
+    // Ne jamais afficher ni imprimer un bulletin d'une autre période pendant le chargement.
+    setSelectedPaie(null);
+    fetchPaiesMois(annee, mois).then(d => {
+      if (!active) return;
+      const list = d.employes || [];
+      setPaies(list);
+      if (WAMP) setHeader(loadBulletinHeader());
+      setSelectedPaie(list[0] || null);
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [mois, annee]);
 
-  const filteredPaies = paies.filter((p) => {
-    const s = search.toLowerCase();
-    return String(p.numero_matricule).includes(s) || p.nom_prenoms.toLowerCase().includes(s) || (p.jobs && p.jobs.toLowerCase().includes(s));
+  const filtered = paies.filter(p => {
+    const q = search.trim().toLowerCase();
+    return String(p.numero_matricule).includes(q) || p.nom_prenoms.toLowerCase().includes(q) || (p.jobs || '').toLowerCase().includes(q);
   });
-
-  const handlePrint = () => window.print();
-  const handleDownloadPDF = () => {
-    if (selectedPaie) downloadSingleBulletinPDF(selectedPaie);
-  };
-
-  return (
-    <div className="space-y-3 sm:space-y-6 w-full max-w-full overflow-x-hidden">
-      <div className="bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 no-print">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3"><Calendar className="w-4 h-4 text-salfa-teal dark:text-sky-300" /><span className="text-[11px] sm:text-xs font-bold uppercase text-slate-700 dark:text-slate-300">Période :</span><select value={mois} onChange={(e) => setMois(e.target.value)} className="rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-bold">{["JANVIER","FEVRIER","MARS","AVRIL","MAI","JUIN","JUILLET","AOUT","SEPTEMBRE","OCTOBRE","NOVEMBRE","DECEMBRE"].map((m) => <option key={m} value={m}>{m}</option>)}</select><select value={annee} onChange={(e) => setAnnee(Number(e.target.value))} className="rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-bold"><option value={2025}>2025</option><option value={2026}>2026</option><option value={2027}>2027</option></select></div>
-        <div className="flex flex-col xs:flex-row items-stretch gap-2 w-full sm:w-auto"><button onClick={handleDownloadPDF} disabled={!selectedPaie} className="bg-salfa-dark dark:bg-slate-700 hover:bg-salfa-teal disabled:opacity-50 text-white px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow"><Download className="w-4 h-4" /><span>PDF 2 Ex.</span></button><button onClick={handlePrint} disabled={!selectedPaie} className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 sm:px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5"><Printer className="w-4 h-4" /><span>Imprimer</span></button></div>
+  return <div className="bulletin-root space-y-3 sm:space-y-6 w-full">
+    <div className="no-print bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl border dark:border-slate-700 flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+      <Calendar className="w-4 h-4 text-salfa-teal" /><span className="font-bold text-xs">Période :</span>
+      <select aria-label="Mois de paie" value={mois} onChange={e => setMois(e.target.value)} className="rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-1.5 text-sm font-bold">{MOIS.map(m => <option key={m}>{m}</option>)}</select>
+      <YearSelect annee={annee} setAnnee={setAnnee} />
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6 w-full">
-        <div className="lg:col-span-1 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-2 sm:p-4 space-y-3 no-print w-full max-w-full overflow-hidden flex flex-col max-h-[40vh] lg:max-h-[75vh]">
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-xs shrink-0" />
-          <div className="space-y-1 overflow-y-auto thin-scrollbar pr-1 flex-1">
-            {loading ? <div className="text-center py-4 text-xs text-slate-500">Chargement...</div> : filteredPaies.length === 0 ? <div className="text-center py-4 text-xs text-slate-500">Aucun bulletin.</div> : filteredPaies.map((p) => { const isSelected = selectedPaie?.id === p.id; return (<button key={p.id} onClick={() => setSelectedPaie(p)} className={`w-full text-left p-2.5 sm:p-3 rounded-lg border transition ${isSelected ? 'bg-salfa-dark dark:bg-slate-600 text-white border-salfa-dark dark:border-slate-600 shadow' : 'bg-white dark:bg-slate-700 hover:bg-sky-50 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600'}`}><div className="flex justify-between"><span className="text-[11px] font-bold font-mono">Mat {p.numero_matricule}</span><span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${isSelected ? 'bg-white/20 text-white' : 'bg-salfa-teal/10 dark:bg-slate-500 text-salfa-teal dark:text-slate-200'}`}>{p.categorie || '—'}</span></div><div className="text-xs font-semibold truncate mt-1">{p.nom_prenoms}</div><div className={`text-[11px] font-mono mt-0.5 ${isSelected ? 'text-sky-200' : 'text-slate-500 dark:text-slate-400'}`}>NET: {fmt(p.net)}</div></button>); })}
-          </div>
-        </div>
-
-        <div className="lg:col-span-2 xl:col-span-3 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 p-2 sm:p-4 lg:p-6 print:shadow-none print:border-none print:p-0 w-full max-w-full overflow-x-hidden">
-          {!selectedPaie ? <div className="text-center py-12 text-slate-500 dark:text-slate-400"><FileText className="w-10 h-10 mx-auto mb-3 text-slate-300" /><p className="text-sm font-semibold">Aucun bulletin sélectionné.</p></div> : (
-            <div className="space-y-3 w-full max-w-full">
-              <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 p-2.5 rounded-lg text-[11px] sm:text-xs text-salfa-dark dark:text-slate-200 flex items-center gap-2 no-print"><Eye className="w-4 h-4 text-salfa-teal dark:text-sky-300" /><span>Écran: 1 exemplaire. Impression: 2 côte à côte A4 Paysage.</span></div>
-              <div className="block print:hidden w-full"><div className="max-w-2xl mx-auto w-full"><BulletinCard paie={selectedPaie} titre="BULLETIN DE PAIE (Vue Écran)" large /></div></div>
-              <div className="hidden print:grid grid-cols-2 gap-6 relative border-l-[16px] border-slate-200 pl-4"><BulletinCard paie={selectedPaie} titre="EX1: EMPLOYEUR" /><BulletinCard paie={selectedPaie} titre="EX2: SALARIÉ" /></div>
-            </div>
-          )}
-        </div>
+      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ml-auto">
+      <button onClick={() => setHeaderOpen(true)} className="flex-1 sm:flex-initial min-h-9 justify-center bg-slate-100 dark:bg-slate-700 px-4 py-2 rounded-lg text-xs font-bold flex gap-1.5 items-center"><Settings2 className="w-4 h-4" />Entête</button>
+      <button onClick={() => selectedPaie && downloadSingleBulletinPDF(selectedPaie)} disabled={!selectedPaie || loading} className="flex-1 sm:flex-initial min-h-9 justify-center bg-salfa-dark hover:bg-salfa-teal disabled:opacity-50 text-white px-4 py-2 rounded-lg text-xs font-bold flex gap-1.5 items-center"><Download className="w-4 h-4" />PDF 2 ex.</button>
+      <button onClick={() => window.print()} disabled={!selectedPaie || loading} className="flex-1 sm:flex-initial min-h-9 justify-center bg-slate-100 dark:bg-slate-700 disabled:opacity-50 px-4 py-2 rounded-lg text-xs font-bold flex gap-1.5 items-center"><Printer className="w-4 h-4" />Imprimer</button>
       </div>
     </div>
-  );
+    <div className="no-print grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 space-y-2 max-h-[65vh] flex flex-col">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher..." className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 p-2 text-sm" />
+        <div className="overflow-y-auto space-y-1">{loading ? <p>Chargement…</p> : filtered.length === 0 ? <p className="text-sm text-slate-500">Aucun bulletin pour {mois} {annee}.</p> : filtered.map(p => <button key={p.id} onClick={() => setSelectedPaie(p)} className={`w-full text-left p-2 rounded-lg border text-sm ${selectedPaie?.id === p.id ? 'bg-salfa-dark text-white' : 'dark:bg-slate-700'}`}><b>Mat {p.numero_matricule}</b> — {p.nom_prenoms}<div className="text-xs">Net enregistré : {formatMontant(p.net)}</div></button>)}</div>
+      </div>
+      <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-3 sm:p-5 overflow-x-auto">
+        {!selectedPaie ? <div className="text-center p-10 text-slate-500"><FileText className="w-8 h-8 mx-auto" />Aucun bulletin sélectionné.</div> : <>
+          <div className="flex items-center gap-2 text-xs mb-3 text-slate-600 dark:text-slate-300"><Eye className="w-4 h-4" />Aperçu du bulletin Excel — deux exemplaires à l'impression.</div>
+          <BulletinCard paie={selectedPaie} header={header.image} />
+        </>}
+      </div>
+    </div>
+    {headerOpen && <BulletinHeaderModal onClose={() => setHeaderOpen(false)} onSaved={cfg => { if (WAMP) setRemoteHeader(cfg); setHeader(cfg); setHeaderOpen(false); }} />}
+    {selectedPaie && !loading && <div className="bulletin-print"><BulletinCard paie={selectedPaie} header={header.image} /><BulletinCard paie={selectedPaie} header={header.image} /></div>}
+  </div>;
 };
 
-interface CardProps { paie: PaieMensuelle; titre: string; large?: boolean; }
-const BulletinCard: React.FC<CardProps> = ({ paie, titre, large = false }) => {
-  const isMaternite = paie.conge_maternite === 1 || paie.conge_maternite === true;
-  return (
-    <div className={`border border-slate-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-800 space-y-3 shadow-sm flex flex-col justify-between w-full max-w-full overflow-hidden ${large ? 'p-3 sm:p-6 lg:p-8 min-h-[550px]' : 'p-3 min-h-[500px]'}`}>
-      <div className="w-full">
-        <div className="text-center space-y-1 border-b border-slate-200 dark:border-slate-700 pb-3">
-          <div className="text-[10px] sm:text-xs font-extrabold uppercase text-salfa-dark dark:text-white">FIANGONANA LOTERANA MALAGASY</div>
-          <div className="text-xs sm:text-sm font-extrabold text-salfa-dark dark:text-white">DISPENSAIRE TANAMBAO - TOLIARA</div>
-          <div className="pt-2"><h2 className="text-sm sm:text-base font-extrabold text-salfa-dark dark:text-white">FILAZANA NY KARAMA</h2><div className="text-[10px] sm:text-xs font-bold text-salfa-teal dark:text-sky-300 mt-0.5">{paie.mois} {paie.annee} | {titre}</div></div>
-        </div>
-        <div className={`bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2 sm:p-3 border dark:border-slate-600 grid grid-cols-2 gap-1.5 mt-3 ${large ? 'text-xs sm:text-sm dark:text-slate-200' : 'text-[11px]'}`}>
-          <div className="truncate">Mat: <b className="text-salfa-dark dark:text-white">{paie.numero_matricule} ({paie.categorie || '—'})</b></div><div className="truncate">Mode: <b>{paie.rib ? "Virement" : "Espèces"}</b></div>
-          <div className="col-span-2 flex items-center gap-1.5 min-w-0"><span className="text-slate-500 dark:text-slate-400">Nom:</span><span className="font-extrabold truncate dark:text-white">{paie.nom_prenoms}</span>{isMaternite && <span title="Congé de maternité (3 mois, base brute à 50%)" className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-200 text-[9px] font-bold ring-1 ring-pink-300 dark:ring-pink-700">MATERNITÉ · 3 mois</span>}</div>
-          <div className="col-span-2 truncate">Fonction: {paie.jobs || '—'} ({paie.nombre_annees || 0} ans)</div>
-        </div>
-        <div className="border border-slate-200 dark:border-slate-600 rounded-lg overflow-hidden mt-3 w-full overflow-x-auto thin-scrollbar">
-          <table className="w-full text-left border-collapse min-w-[320px]"><thead><tr className="bg-salfa-light/60 dark:bg-slate-700 border-b dark:border-slate-600 text-salfa-dark dark:text-white font-extrabold text-[10px] sm:text-[11px]"><th className="py-2 px-3">RUBRIQUES</th><th className="py-2 px-1 text-center">BASE</th><th className="py-2 px-3 text-right">GAINS</th><th className="py-2 px-3 text-right">RET</th></tr></thead><tbody className="divide-y dark:divide-slate-700 text-[10px] sm:text-[11px] dark:text-slate-200"><tr><td className="py-1 px-3">BASE AJ</td><td className="text-center text-slate-500">30 j</td><td className="text-right font-mono font-medium">{fmt(paie.base_aj)}</td><td></td></tr><tr><td className="py-1 px-3">Logt & Trsp</td><td className="text-center text-slate-500">Forf</td><td className="text-right font-mono">{fmt(paie.logt_trsp)}</td><td></td></tr>{(paie.rendement || 0) > 0 && <tr><td className="py-1 px-3">Prime Rend</td><td className="text-center">Rend</td><td className="text-right font-mono">{fmt(paie.rendement)}</td><td></td></tr>}{(paie.resp_repres || 0) > 0 && <tr><td className="py-1 px-3">RESP</td><td className="text-center">RESP</td><td className="text-right font-mono">{fmt(paie.resp_repres)}</td><td></td></tr>}<tr className="bg-slate-50 dark:bg-slate-700 font-bold"><td className="py-1.5 px-3">BRUT SOUMIS{isMaternite && <span className="ml-1 text-[9px] text-pink-700 dark:text-pink-300">÷2</span>}</td><td></td><td className="text-right font-mono">{fmt(paie.salaire_brut)}</td><td></td></tr><tr><td className="py-1 px-3">CNaPS 1%</td><td className="text-center">1%</td><td></td><td className="text-right font-mono">{fmt(paie.cnaps)}</td></tr><tr className="bg-slate-50 dark:bg-slate-700 font-bold"><td className="py-1 px-3">Imposable</td><td className="text-center">Imp</td><td className="text-right font-mono">{fmt(paie.salaire_imposable)}</td><td></td></tr><tr><td className="py-1 px-3">IRSA</td><td></td><td></td><td className="text-right font-mono">{fmt(paie.irsa)}</td></tr><tr className="bg-slate-50 dark:bg-slate-700 font-bold"><td className="py-1 px-3">NET BASE</td><td className="text-center">Base</td><td className="text-right font-mono">{fmt(paie.salaire_net)}</td><td></td></tr>{(paie.accessoir || 0) > 0 && <tr><td className="py-1 px-3 font-semibold text-salfa-teal dark:text-sky-300">ACCESSOIRES</td><td className="text-center">Acc</td><td className="text-right font-mono font-bold">{fmt(paie.accessoir)}</td><td></td></tr>}<tr className="bg-slate-50 dark:bg-slate-700 font-extrabold"><td className="py-1 px-3">BRUT À PAYER</td><td></td><td className="text-right font-mono">{fmt(paie.brut)}</td><td></td></tr>{(paie.avance || 0) > 0 && <tr><td className="py-1 px-3">Avance</td><td className="text-center">Ret</td><td></td><td className="text-right font-mono text-red-600 dark:text-red-300">{fmt(paie.avance)}</td></tr>}{(paie.med || 0) > 0 && <tr><td className="py-1 px-3">MED</td><td className="text-center">Ret</td><td></td><td className="text-right font-mono text-red-600 dark:text-red-300">{fmt(paie.med)}</td></tr>}</tbody></table>
-        </div>
-      </div>
-      <div className="space-y-2 pt-2">
-        <div className="bg-salfa-dark dark:bg-slate-900 text-white px-3 sm:px-4 py-2.5 rounded-xl shadow flex items-center justify-between"><div><div className="text-[10px] sm:text-xs font-extrabold uppercase">NET À PAYER</div><div className="text-[9px] text-slate-300">Arrondi CGI</div></div><div className={`${large ? 'text-lg sm:text-2xl' : 'text-base'} font-extrabold font-mono`}>{fmt(paie.net)}</div></div>
-        <div className="flex justify-between text-[10px] sm:text-xs bg-slate-50 dark:bg-slate-700/50 px-3 py-2 rounded-lg border dark:border-slate-600 dark:text-slate-300"><div>Vir: {fmt(paie.virement || 0)} | Esp: {fmt(paie.especes || 0)}</div><div>RIB: <b className="font-mono">{paie.rib || "Aucun"}</b></div></div>
-        <div className="grid grid-cols-2 gap-4 text-center pt-1 text-[10px]"><div><div className="font-extrabold dark:text-white">Employeur</div><div className="text-slate-400">Cachet</div></div><div><div className="font-extrabold dark:text-white">Employé</div><div className="text-slate-400">Signature</div></div></div>
-      </div>
+const BulletinCard: React.FC<{ paie: PaieMensuelle; header: string }> = ({ paie, header }) => {
+  const bulletin = construireBulletin(paie);
+  return <div className="bulletin-card">
+    <img className="bulletin-header-image" src={header} alt="Entête de l’établissement" />
+    <div className="bulletin-heading"><strong>BULLETIN DE PAIE</strong><div>Mois de : {paie.mois} {paie.annee}</div></div>
+    <div className="bulletin-identity">
+      <div><b>Employé :</b> {paie.nom_prenoms}</div>
+      <div><b>Fonction :</b> {paie.jobs || '—'}</div>
+      <div><b>N° Matricule :</b> {paie.numero_matricule}</div>
+      <div><b>Embauche :</b> {formatDate(paie.date_embauche)}</div>
+      <div><b>Classification :</b> {paie.categorie || '—'} <span className="bulletin-cnaps"><b>N° CNaPS :</b> {paie.numero_cnaps || '—'}</span></div>
     </div>
-  );
+    <table className="bulletin-table"><colgroup><col style={{width:'54%'}} /><col style={{width:'23%'}} /><col style={{width:'23%'}} /></colgroup>
+      <thead><tr><th>RUBRIQUES DE PAIE</th><th>GAINS</th><th>RETENUES</th></tr></thead>
+      <tbody>{bulletin.lignes.map((r, i) => <tr key={i} className={r.total ? 'bulletin-total' : ''}><td>{r.libelle}</td><td>{r.gain === undefined ? '' : formatMontant(r.gain)}</td><td>{r.retenue === undefined ? '' : formatMontant(r.retenue)}</td></tr>)}</tbody>
+    </table>
+    <div className="bulletin-net"><b>NET à PAYER :</b> <b>{formatMontant(bulletin.net)}</b></div>
+    <div className="bulletin-words">Arrêtée à la somme de : {montantEnLettres(bulletin.net)}</div>
+    <div className="bulletin-payment"><span>Paiement :</span><span>Virement : {formatMontant(paie.virement)}<br />Espèce : {formatMontant(paie.especes)}</span></div>
+    {bulletin.ecartNet && <div className="bulletin-note">Net enregistré dans l'état : {formatMontant(bulletin.netEnregistre)} (différent du net calculé ci-dessus).</div>}
+    <div>NB CONGÉS RESTANTS : ……… jrs</div>
+    <div className="bulletin-date">Tulear le, {new Date().toLocaleDateString('fr-FR')}</div>
+  </div>;
 };

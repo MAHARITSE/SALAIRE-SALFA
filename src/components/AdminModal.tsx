@@ -1,5 +1,7 @@
 // ADMIN MODAL - CALCUL ÉDITABLE DANS L'ADMIN + DARKMODE
 import React, { useState, useMemo } from 'react';
+import { WAMP } from '../runtime';
+import { remoteSaveSetting } from '../wampClient';
 import {
   ShieldCheck, X, Plus, Trash2, HeartHandshake, CheckCircle2, Info,
   Sliders, Layers, Calculator, Award, RotateCcw, Save,
@@ -164,7 +166,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
   const sortAnc = () => setBaremeAnciennete(prev => [...prev].sort((a, b) => a.min - b.min));
 
   // -------- Sauvegarde --------
-  const handleSaveConfig = () => {
+  const handleSaveConfig = async () => {
     // validation légère
     if (baremeIrsa.some(t => t.max !== null && t.max <= t.min)) {
       alert('Barème IRSA invalide : une tranche a un max <= min.');
@@ -187,6 +189,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
       baremeIrsa: [...baremeIrsa].sort((a, b) => a.min - b.min),
       baremeAnciennete: [...baremeAnciennete].sort((a, b) => a.min - b.min),
     });
+    if (WAMP) { try { await remoteSaveSetting('config', cfg); } catch (e) { alert(e instanceof Error ? e.message : 'Sauvegarde serveur impossible.'); window.location.reload(); return; } }
     setTauxMaternite(cfg.tauxMaternite);
     setDureeMaternite(cfg.dureeMaterniteMois);
     setCnapsSalariale(cfg.cnapsSalariale);
@@ -204,9 +207,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
     window.location.reload();
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (!window.confirm("Réinitialiser tous les paramètres de calcul aux valeurs par défaut (Loi Madagascar) ?")) return;
     const def = resetConfig();
+    if (WAMP) { try { await remoteSaveSetting('config', def); } catch (e) { alert(e instanceof Error ? e.message : 'Sauvegarde serveur impossible.'); window.location.reload(); return; } }
     setTauxMaternite(def.tauxMaternite);
     setDureeMaternite(def.dureeMaterniteMois);
     setCnapsSalariale(def.cnapsSalariale);
