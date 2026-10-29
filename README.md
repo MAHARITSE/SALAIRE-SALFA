@@ -1,6 +1,6 @@
 # Clinique SALFA TANAMBAO — Logiciel de Paie Mensuelle
 
-> **Variante réseau WAMP / MySQL :** voir [wamp/GUIDE-WAMP.md](wamp/GUIDE-WAMP.md). Elle démarre avec une base vide et reste à valider sur Windows avant toute utilisation réelle. La description ci-dessous concerne la version locale dans le navigateur.
+> **Variante réseau WAMP / MySQL :** voir [wamp/GUIDE-WAMP.md](wamp/GUIDE-WAMP.md). Elle démarre avec une base vide, ou chargée des données Excel en important [wamp/sql/salfa_donnees_excel_2022-2026.sql](wamp/sql/salfa_donnees_excel_2022-2026.sql) dans MySQL (phpMyAdmin), et reste à valider sur Windows avant toute utilisation réelle. La description ci-dessous concerne la version locale dans le navigateur.
 
 Application **100 % locale** (client-side / React + Vite + TypeScript), déployable en tant que
 **site statique** sur **Cloudflare Pages**. Il n'y a **plus aucun serveur Node/Express ni base
@@ -84,6 +84,12 @@ npm run preview        # prévisualise le build
 |----------------|-------------|----------------|---------------------------------------------------------------------|
 | Administrateur | `admin`     | `admin123`     | **Accès complet** à toutes les fonctionnalités (Paie, États, Bulletins, Rapports, Administration & Congés) |
 | Comptable      | `comptable` | `comptable123` | **Permissions & Congés uniquement** (fiches d'absence, visas, suivi et état de contrôle des congés) |
+
+> 🔒 **Page de connexion :** ces identifiants ne sont **plus affichés sur la page
+> de connexion** (aucune liste de comptes, aucun pré-remplissage, aucun exemple
+> dans les champs), dans la version locale comme dans la version WAMP. En mode
+> WAMP, seuls les comptes créés sur le serveur (`setup.php` / `CREER-COMPTE.php`)
+> fonctionnent ; les comptes de démonstration ci-dessus n'y sont pas créés.
 
 ---
 

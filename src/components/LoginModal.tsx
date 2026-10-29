@@ -1,10 +1,10 @@
 // ==============================================================================
 // LOGIN MODAL - SALFA TANAMBAO - RESPONSIVE + DARKMODE
 // ==============================================================================
-import React, { useEffect, useRef, useState } from 'react';
-import { CompteConnexionPublic, UserSession } from '../types';
-import { apiLogin, fetchComptesConnexion } from '../api';
-import { Lock, UserCheck, Shield, AlertCircle, Moon, Sun } from 'lucide-react';
+import React, { useState } from 'react';
+import { UserSession } from '../types';
+import { apiLogin } from '../api';
+import { Lock, AlertCircle, Moon, Sun } from 'lucide-react';
 import { ThemeMode } from '../local/theme';
 import { WAMP } from '../runtime';
 
@@ -15,24 +15,13 @@ interface LoginModalProps {
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggleTheme }) => {
-  const [comptes, setComptes] = useState<CompteConnexionPublic[]>([]);
-  const [username, setUsername] = useState(WAMP ? '' : 'admin');
+  // Aucune indication d'identifiant ou de mot de passe n'est affichée sur la page
+  // de connexion : pas de liste de comptes, pas de pré-remplissage, pas d'exemple.
+  // Les champs démarrent toujours vides, dans les deux modes (local et WAMP).
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const pwdInputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (WAMP) return;
-    fetchComptesConnexion().then((list) => {
-      setComptes(list);
-      if (list.length > 0) {
-        const first = list.find((c) => c.username.toLowerCase() === 'admin') || list[0];
-        setUsername(first.username);
-        setPassword(first.motDePasseDemo || '');
-      }
-    });
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,15 +35,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggle
       setError(err?.message || 'Impossible de se connecter.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const selectAccount = (c: CompteConnexionPublic) => {
-    setUsername(c.username);
-    setPassword(c.motDePasseDemo || '');
-    setError('');
-    if (!c.motDePasseDemo) {
-      setTimeout(() => pwdInputRef.current?.focus(), 20);
     }
   };
 
@@ -91,43 +71,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggle
             </div>
           )}
 
-          {!WAMP && comptes.length > 0 && (
-            <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-lg p-3 mb-4 text-xs text-salfa-dark dark:text-slate-200">
-              <div className="font-semibold mb-2 flex items-center gap-1.5 text-salfa-teal dark:text-sky-300 text-[11px] sm:text-xs">
-                <UserCheck className="w-4 h-4" />
-                <span>Comptes actifs (cliquez pour sélectionner) :</span>
-              </div>
-              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 max-h-36 overflow-y-auto thin-scrollbar">
-                {comptes.map((c) => {
-                  const active = username.trim().toLowerCase() === c.username.toLowerCase();
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => selectAccount(c)}
-                      className={`rounded-lg px-2.5 py-1.5 text-left transition text-xs border ${
-                        active
-                          ? 'bg-salfa-dark text-white border-salfa-dark shadow-sm'
-                          : 'bg-white dark:bg-slate-700 hover:bg-sky-100 dark:hover:bg-slate-600 border-sky-300 dark:border-slate-600'
-                      }`}
-                    >
-                      <div className="font-bold truncate flex items-center gap-1">
-                        {c.role === 'Administrateur' && (
-                          <Shield className={`w-3 h-3 shrink-0 ${active ? 'text-emerald-300' : 'text-emerald-600'}`} />
-                        )}
-                        <span>{c.username}</span>
-                      </div>
-                      <div className={`text-[10px] truncate ${active ? 'text-sky-200' : 'text-slate-500 dark:text-slate-400'}`}>
-                        {c.role === 'Administrateur' ? 'Accès complet' : 'Congés uniquement'}
-                        {c.motDePasseDemo ? ` · (${c.motDePasseDemo})` : ''}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -146,7 +89,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggle
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
                 required
-                placeholder="ex: admin, comptable..."
+                placeholder="Nom d'utilisateur"
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-salfa-teal focus:outline-none dark:text-white"
               />
             </div>
@@ -156,14 +99,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggle
                 Mot de passe
               </label>
               <input
-                ref={pwdInputRef}
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-salfa-teal focus:outline-none dark:text-white"
                 required
                 autoComplete="current-password"
-                placeholder="Votre mot de passe"
+                placeholder="Mot de passe"
               />
             </div>
 

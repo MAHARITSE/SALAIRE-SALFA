@@ -1,13 +1,23 @@
 # Version WampServer / MySQL — installation sur réseau local
 
-Cette variante est distincte de la version navigateur : elle démarre avec une
-**base de paie vide**, sans les données du classeur. Les salariés et les paies
+Cette variante est distincte de la version navigateur. Les salariés et les paies
 sont enregistrés dans MySQL sur le serveur, pas dans le localStorage des postes.
 Les paramètres de calcul et l'entête des bulletins sont aussi communs et
-stockés dans MySQL. Les données préexistantes de la version navigateur ne sont
-ni effacées ni importées automatiquement. Pour importer le classeur plus tard,
-utilisez l'import Excel après sauvegarde. L'export JSON de l'onglet Rapports est
-un export de la vue courante, pas une sauvegarde complète de la base.
+stockés dans MySQL. Au choix, elle peut démarrer :
+
+- avec une **base de paie vide** (comportement historique, via `setup.php`) ;
+- ou **chargée avec les données des classeurs Excel** en important le fichier
+  SQL fourni `wamp/sql/salfa_donnees_excel_2022-2026.sql` (voir § 2 ci-dessous) :
+  70 salariés et 2 390 lignes de paie (années 2022 à 2026), 48 comparaisons
+  de net et 489 fiches d'absence/congés.
+
+Les données préexistantes de la version navigateur ne sont ni effacées ni
+importées automatiquement. L'export JSON de l'onglet Rapports est un export de
+la vue courante, pas une sauvegarde complète de la base.
+
+**Page de connexion :** elle n'affiche plus aucune indication d'utilisateur ou
+de mot de passe (ni liste de comptes, ni identifiant pré-rempli, ni exemple).
+Chaque utilisateur saisit les identifiants du compte créé sur le serveur.
 
 ## Sécurité et limites importantes
 
@@ -56,10 +66,12 @@ un export de la vue courante, pas une sauvegarde complète de la base.
    "C:\wamp64\bin\php\php8.x.x\php.exe" "C:\CHEMIN\DU\PROJET\wamp\setup.php" "C:\wamp64\salfa-config.php"
    ```
 
-   Le programme crée les tables et un premier compte administrateur. Choisir
+   Le programme crée les tables (sans écraser des données déjà importées par
+   le fichier SQL du § 2) et un premier compte administrateur. Choisir
    un identifiant et un mot de passe d'au moins 12 caractères. **La saisie du
    mot de passe est visible dans cette console**. Si des comptes existent déjà,
-   relancer le programme ne modifie ni les données ni les comptes.
+   relancer le programme ne modifie ni les données ni les comptes. À la fin,
+   il indique le nombre de salariés et de lignes de paie présents dans la base.
 6. Créer des comptes supplémentaires au besoin, depuis le serveur uniquement :
 
    ```bat
@@ -77,7 +89,44 @@ un export de la vue courante, pas une sauvegarde complète de la base.
    puis tester depuis un poste autorisé. L'API de diagnostic
    `/salfa/api/index.php?action=health` ne renvoie que l'identité du service.
 
-## 2. Sur chaque poste client Windows
+## 2. Importer les données Excel dans MySQL (fichier SQL)
+
+Le fichier **`wamp/sql/salfa_donnees_excel_2022-2026.sql`** contient les données
+des classeurs Excel `SALAIRE SALFA 2022.xlsx` à `SALAIRE SALFA 2026.xlsm`
+(états mensuels : années complètes 2022, 2023, 2024 ; janvier à mai 2025 —
+le classeur 2025 ne contient que ces feuilles ; janvier à octobre 2026), plus
+le contrôle des congés, au format réellement lu par l'API WAMP (ligne unique
+`salfa_state`, colonne `store_json`). Soit **2 390 lignes de paie** (2022 : 558,
+2023 : 576, 2024 : 556, 2025 : 230, 2026 : 470) et **70 salariés** : les
+50 salariés de 2026 plus 20 salariés uniquement présents dans les anciens
+classeurs, ajoutés en *Inactif* (archive, fiche de leur dernier mois connu).
+Un doublon du classeur 2023 (septembre, matricule 39, ligne recopiée) a été
+écarté. Il est régénérable après une nouvelle extraction des classeurs avec
+`python3 scripts/extract_historique.py && python3 scripts/generer_sql_wamp.py`.
+
+Import, au choix :
+
+- **phpMyAdmin :** démarrer WampServer → ouvrir phpMyAdmin → sélectionner la
+  base `salfa_paie` → onglet **Importer** → choisir
+  `wamp\sql\salfa_donnees_excel_2022-2026.sql` → **Exécuter**. Les deux dernières
+  requêtes du fichier vérifient le résultat : `json_valide = 1`, puis
+  `employes = 70`, `paies = 2390`, `conges = 489`.
+- **Ligne de commande (sur le serveur) :**
+  `mysql -u salfa_app -p salfa_paie < wamp\sql\salfa_donnees_excel_2022-2026.sql`
+  (le mot de passe MySQL est demandé, il n'est pas écrit dans la commande).
+
+Ordre avec `setup.php` : l'import peut se faire **avant ou après** `setup.php`.
+`setup.php` n'écrase jamais les données importées ; l'import SQL, lui,
+**remplace** les données de paie existantes, remet la révision à `0` (les
+postes connectés doivent recharger la page) et réinitialise les paramètres
+communs et l'en-tête des bulletins aux valeurs par défaut. **Sauvegardez la
+base avant tout import sur une base déjà utilisée.** Les comptes utilisateurs
+(`salfa_users`) ne sont ni créés ni modifiés par ce fichier, et **aucun mot de
+passe n'y figure** : créez les comptes avec `setup.php` puis
+`CREER-COMPTE.php` (§ 1, étapes 5 et 6). Ne copiez jamais ce fichier SQL dans
+`C:\wamp64\www` : il contient des données de paie confidentielles.
+
+## 3. Sur chaque poste client Windows
 
 Copier `LANCER.bat` **et** `chercher-serveur.ps1` dans un même dossier puis
 lancer `LANCER.bat`. Il vérifie l'adresse mémorisée et l'ordinateur local, puis
@@ -106,6 +155,10 @@ les accès des utilisateurs et vérifier la cible avant de la lancer.
 Les builds et les contrôles côté navigateur ont été exécutés dans un environnement
 Linux avec un serveur simulé ; la syntaxe PHP a été vérifiée. Le fonctionnement
 avec **WampServer, Apache, MySQL et les fichiers BAT sous Windows n'a pas encore
-été testé de bout en bout**. Procéder à une recette sur une base de test vide
-avant toute utilisation réelle : connexion, création de salarié, saisie, export,
-conflit entre deux postes, sauvegarde/restauration et indisponibilité du serveur.
+été testé de bout en bout**. Le fichier SQL a été vérifié par aller-retour
+(reconstruction du JSON et comparaison aux données extraites du classeur),
+mais son import n'a pas été exécuté sur un MySQL Windows. Procéder à une
+recette sur une base de test avant toute utilisation réelle : import du SQL,
+connexion (sans aucune indication d'identifiant sur la page), création de
+salarié, saisie, export, conflit entre deux postes, sauvegarde/restauration
+et indisponibilité du serveur.

@@ -146,5 +146,5 @@ export interface CompteConnexionPublic {
   username: string;
   nom_complet: string;
   role: 'Administrateur' | 'Comptable';
-  motDePasseDemo?: string;
+  // Aucun mot de passe, même de démonstration, ne doit figurer ici.
 }

@@ -10,7 +10,11 @@ $db->exec("CREATE TABLE IF NOT EXISTS salfa_users (id INT NOT NULL AUTO_INCREMEN
 $db->exec("CREATE TABLE IF NOT EXISTS salfa_state (id TINYINT NOT NULL PRIMARY KEY, revision BIGINT NOT NULL, store_json LONGTEXT NOT NULL, config_json LONGTEXT NULL, header_json LONGTEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $empty = ['meta' => ['source_version' => 'classeur-2026-10'], 'bareme_anciennete' => new stdClass(), 'employes' => [], 'paies' => [], 'comparaison_net' => [], 'utilisateurs' => []];
 $q = $db->prepare('INSERT IGNORE INTO salfa_state (id, revision, store_json) VALUES (1, 0, ?)'); $q->execute([json_encode($empty)]);
-if ((int)$db->query('SELECT COUNT(*) FROM salfa_users')->fetchColumn() > 0) { echo "Base deja initialisee. Aucune donnee ni compte modifie.\n"; exit(0); }
+// Données déjà présentes (par ex. importées via wamp/sql/salfa_donnees_excel_2022-2026.sql) : ne jamais les écraser.
+$etat = json_decode((string)$db->query('SELECT store_json FROM salfa_state WHERE id = 1')->fetchColumn(), true);
+$nbEmployes = is_array($etat) && is_array($etat['employes'] ?? null) ? count($etat['employes']) : 0;
+$nbPaies = is_array($etat) && is_array($etat['paies'] ?? null) ? count($etat['paies']) : 0;
+if ((int)$db->query('SELECT COUNT(*) FROM salfa_users')->fetchColumn() > 0) { echo "Base deja initialisee. Aucune donnee ni compte modifie. ($nbEmployes salaries, $nbPaies lignes de paie presentes)\n"; exit(0); }
 echo "Initialisation du compte administrateur (saisie visible a l'ecran).\nIdentifiant : "; $user = trim((string)fgets(STDIN));
 echo "Mot de passe (12 caracteres minimum) : "; $password = rtrim((string)fgets(STDIN), "\r\n");
 if (!preg_match('/^[A-Za-z0-9_.-]{3,80}$/', $user) || strlen($password) < 12) { fwrite(STDERR, "Identifiant invalide ou mot de passe trop court. Relancez l'installation.\n"); exit(1); }
