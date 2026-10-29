@@ -19,8 +19,24 @@ async function request(action: string, payload?: unknown): Promise<any> {
   });
   let result: any;
   try { result = await response.json(); } catch { throw new Error('Réponse invalide du serveur.'); }
-  if (!response.ok) throw new Error(result.error || `Erreur serveur (${response.status}).`);
+  if (!response.ok) {
+    const err: any = new Error(result.error || `Erreur serveur (${response.status}).`);
+    if (result.code) err.code = result.code;
+    if (result.canConfigure !== undefined) err.canConfigure = Boolean(result.canConfigure);
+    throw err;
+  }
   return result;
+}
+
+export async function remoteSetupDb(cfg: {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+}): Promise<{ success: boolean; message?: string }> {
+  const res = await request('setup_db', cfg);
+  return { success: Boolean(res?.success), message: res?.message };
 }
 function enqueue<T>(operation: () => Promise<T>): Promise<T> {
   const next = chain.then(operation, operation); chain = next.catch(() => {}); return next;

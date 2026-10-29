@@ -20,6 +20,19 @@ xcopy /E /I /Y "wamp\api\*" "%DEST%\api\" >nul
 if errorlevel 1 (echo Copie de l'API impossible. & pause & exit /b 1)
 if not exist "%DEST%\index.html" (echo Echec : %DEST%\index.html introuvable. & pause & exit /b 1)
 if not exist "%DEST%\api\index.php" (echo Echec : %DEST%\api\index.php introuvable. & pause & exit /b 1)
+if not exist "C:\wamp64\salfa-config.php" (
+  echo Creation automatique de C:\wamp64\salfa-config.php ^(MySQL WampServer par defaut^)...
+  (
+    echo ^<?php
+    echo return [
+    echo     'host' =^> '127.0.0.1',
+    echo     'port' =^> 3306,
+    echo     'database' =^> 'salfa_paie',
+    echo     'user' =^> 'root',
+    echo     'password' =^> '',
+    echo ];
+  ) > "C:\wamp64\salfa-config.php"
+)
 echo.
 echo Application installee dans %DEST% (index.html, assets, api).
 echo Ouvrir : http://127.0.0.1/Salaire_salfa/

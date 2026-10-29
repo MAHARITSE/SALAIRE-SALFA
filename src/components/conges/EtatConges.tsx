@@ -1,10 +1,10 @@
 // ==============================================================================
 // ÉTAT « CONTRÔLE DES CONGÉS ET PERMISSIONS » — SALFA
 // Reproduction, à l'écran et sur papier, du classeur de suivi de la société :
-// le nom, la fonction, une colonne de solde par année, puis le bloc CONGÉ
-// (jours demandés / date), le bloc PERMISSION (droit dans l'année / jours
-// demandés / date / droit restant) et les motifs. Deux colonnes d'aide ont été
-// ajoutées : le matricule (lien avec la paie) et la situation de la demande.
+// le nom, la fonction, une colonne de solde par année (2024, 2025, 2026… toutes
+// directement modifiables), puis le bloc CONGÉ (jours demandés / date / restant),
+// le bloc PERMISSION (droit dans l'année / jours demandés / date / droit restant)
+// et les motifs.
 // ==============================================================================
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
@@ -12,29 +12,33 @@ import { EtatConges, ParcoursConges, LigneEtatConges, fmtJours } from '../../loc
 import { dateFr, periodeAbsenceFr } from './FicheAbsence';
 
 const LARGEURS = {
-  mat: 46, nom: 200, fonction: 120, annee: 58, jours: 70, date: 132, retour: 96, droit: 74, restant: 70, motifs: 196, suivi: 82,
+  mat: 46, nom: 210, fonction: 120, annee: 64, jours: 72, date: 132, retour: 96, droit: 74, restant: 70, motifs: 196, suivi: 82,
 };
 
 /**
  * Retourne la première année ouverte dans la liste affichée pour ce salarié
- * (ex. 2024 en 2026 [2024, 2025, 2026], 2025 en 2027 [2025, 2026, 2027], ou l'année
- * d'embauche si le salarié est entré plus tard dans la fenêtre).
+ * (conservée pour compatibilité).
  */
 export function premiereAnneeEditable(p: ParcoursConges, annees: number[]): number | null {
   if (!annees.length) return null;
   const trouv = annees.find((a) => !p.annee_embauche || a >= p.annee_embauche);
-  return trouv ?? null;
+  return trouv ?? annees[0];
 }
 
-const CellulePremiereAnneeEditable: React.FC<{
+/** Retourne toutes les colonnes d'années modifiables dans le tableau (ex. [2024, 2025, 2026]). */
+export function anneesEditables(_p: ParcoursConges, annees: number[]): number[] {
+  return annees.slice();
+}
+
+const CelluleSoldeAnneeEditable: React.FC<{
   employeId: number;
   nomPrenoms: string;
   annee: number;
   valeur: number;
-  maxJours: number;
+  mode: 'OUVERTURE' | 'SOLDE_FINAL';
   estSaisieManuelle: boolean;
-  onSaisir: (employeId: number, annee: number, valeur: number | null) => Promise<boolean>;
-}> = ({ employeId, nomPrenoms, annee, valeur, maxJours, estSaisieManuelle, onSaisir }) => {
+  onSaisir: (employeId: number, annee: number, valeur: number | null, mode?: 'OUVERTURE' | 'SOLDE_FINAL') => Promise<boolean>;
+}> = ({ employeId, nomPrenoms, annee, valeur, mode, estSaisieManuelle, onSaisir }) => {
   const [texte, setTexte] = useState(() => String(valeur));
   const [edition, setEdition] = useState(false);
   const [enCours, setEnCours] = useState(false);
@@ -50,7 +54,7 @@ const CellulePremiereAnneeEditable: React.FC<{
       if (estSaisieManuelle) {
         setEnCours(true);
         try {
-          const ok = await onSaisir(employeId, annee, null);
+          const ok = await onSaisir(employeId, annee, null, mode);
           if (!ok) setTexte(String(valeur));
         } finally {
           setEnCours(false);
@@ -71,25 +75,25 @@ const CellulePremiereAnneeEditable: React.FC<{
     }
     setEnCours(true);
     try {
-      const ok = await onSaisir(employeId, annee, num);
+      const ok = await onSaisir(employeId, annee, num, mode);
       if (!ok) setTexte(String(valeur));
     } finally {
       setEnCours(false);
     }
   };
 
+  const libelleType = mode === 'SOLDE_FINAL' ? `Solde final ${annee}` : `Solde d’ouverture ${annee}`;
+
   return (
     <input
       type="number"
-      min={0}
-      max={maxJours}
       step="0.5"
       disabled={enCours}
-      aria-label={`Solde initial ${annee} — ${nomPrenoms}`}
+      aria-label={`${libelleType} — ${nomPrenoms}`}
       title={
         estSaisieManuelle
-          ? `Solde initial ${annee} saisi manuellement (${fmtJours(valeur)} j / max ${fmtJours(maxJours)} j). Vider puis valider pour revenir au calcul automatique.`
-          : `Saisir le solde initial ${annee} (0 à ${fmtJours(maxJours)} j — pas de cumul des congés antérieurs non pris).`
+          ? `${libelleType} saisi manuellement (${fmtJours(valeur)} j). Vider puis valider (Entrée) pour rétablir le calcul automatique.`
+          : `Saisir directement le ${libelleType.toLowerCase()} de ${nomPrenoms}.`
       }
       value={texte}
       onFocus={(e) => {
@@ -109,13 +113,80 @@ const CellulePremiereAnneeEditable: React.FC<{
           (e.currentTarget as HTMLInputElement).blur();
         }
       }}
-      className={`w-full min-w-[44px] text-right font-mono text-[10px] sm:text-[11px] font-bold px-1 py-0.5 rounded border transition-colors focus:outline-none focus:ring-2 focus:ring-salfa-teal ${
+      className={`w-full min-w-[48px] text-right font-mono text-[10px] sm:text-[11px] font-bold px-1 py-0.5 rounded border transition-colors focus:outline-none focus:ring-2 focus:ring-salfa-teal ${
         estSaisieManuelle
           ? 'bg-amber-50 dark:bg-amber-900/30 border-amber-400 dark:border-amber-600 text-amber-900 dark:text-amber-200'
           : valeur < 0
             ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-700 dark:text-red-300'
-            : 'bg-sky-50/70 dark:bg-sky-900/20 border-sky-300 dark:border-sky-700 text-salfa-dark dark:text-sky-100 hover:border-salfa-teal'
+            : mode === 'SOLDE_FINAL'
+              ? 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-500 text-salfa-dark dark:text-white hover:border-salfa-teal'
+              : 'bg-sky-50/70 dark:bg-sky-900/20 border-sky-300 dark:border-sky-700 text-salfa-dark dark:text-sky-100 hover:border-salfa-teal'
       } ${enCours ? 'opacity-60' : ''}`}
+    />
+  );
+};
+
+const CelluleJoursDemandeEditable: React.FC<{
+  congeId: number;
+  nomPrenoms: string;
+  annee: number;
+  libelle: string;
+  valeur: number;
+  onModifierJours: (congeId: number, jours: number) => Promise<boolean>;
+}> = ({ congeId, nomPrenoms, annee, libelle, valeur, onModifierJours }) => {
+  const [texte, setTexte] = useState(() => String(valeur));
+  const [edition, setEdition] = useState(false);
+  const [enCours, setEnCours] = useState(false);
+
+  useEffect(() => {
+    if (!edition) setTexte(String(valeur));
+  }, [valeur, edition]);
+
+  const valider = async () => {
+    setEdition(false);
+    const num = Number(texte.trim().replace(',', '.'));
+    if (!Number.isFinite(num) || num <= 0 || Math.abs(num - valeur) < 0.001) {
+      setTexte(String(valeur));
+      return;
+    }
+    setEnCours(true);
+    try {
+      const ok = await onModifierJours(congeId, num);
+      if (!ok) setTexte(String(valeur));
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  return (
+    <input
+      type="number"
+      min={0.5}
+      step="0.5"
+      disabled={enCours}
+      aria-label={`${libelle} ${annee} — ${nomPrenoms}`}
+      title={`Modifier directement le nombre de jours (${libelle.toLowerCase()} ${annee})`}
+      value={texte}
+      onFocus={(e) => {
+        setEdition(true);
+        e.currentTarget.select();
+      }}
+      onChange={(e) => setTexte(e.target.value)}
+      onBlur={valider}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          (e.currentTarget as HTMLInputElement).blur();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setEdition(false);
+          setTexte(String(valeur));
+          (e.currentTarget as HTMLInputElement).blur();
+        }
+      }}
+      className={`w-full min-w-[46px] text-right font-mono text-[10px] sm:text-[11px] font-bold px-1 py-0.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:border-salfa-teal focus:outline-none focus:ring-2 focus:ring-salfa-teal ${
+        enCours ? 'opacity-60' : ''
+      }`}
     />
   );
 };
@@ -171,8 +242,11 @@ export function valeurCellule(
   if (cle === 'fonction') return p.fonction;
   if (cle.startsWith('an')) {
     const a = Number(cle.slice(2));
-    // Avant l'embauche, le classeur ne porte aucune valeur : on laisse la case vide.
-    if (p.annee_embauche && a < p.annee_embauche) return '';
+    const bilanA = p.bilans[a];
+    const aActivite = Boolean(
+      bilanA && (bilanA.ouvertureSaisie || bilanA.pris > 0 || bilanA.nbDemandes > 0 || bilanA.ouverture !== 0 || bilanA.fin !== 0)
+    );
+    if (p.annee_embauche && a < p.annee_embauche && !aActivite) return '';
     const v = ligne.solde_par_annee[a];
     if (v === undefined) return brut ? '' : '·';
     return brut ? v : fmtJours(v);
@@ -219,18 +293,21 @@ export function valeurCellule(
 }
 
 // ------------------------------------------------------------------------------
-// Tableau à l'écran
+// Tableau à l'écran : contrôle total de saisie sur toutes les années (2024, 2025, 2026…)
 // ------------------------------------------------------------------------------
 export const EtatCongesEcran: React.FC<{
   etat: EtatConges;
   onOuvrir: (congeId: number) => void;
-  onSaisirOuverture?: (employeId: number, annee: number, valeur: number | null) => Promise<boolean>;
-}> = ({ etat, onOuvrir, onSaisirOuverture }) => {
+  onSaisirOuverture?: (employeId: number, annee: number, valeur: number | null, mode?: 'OUVERTURE' | 'SOLDE_FINAL') => Promise<boolean>;
+  onModifierJours?: (congeId: number, jours: number) => Promise<boolean>;
+  onCreerDansAnnee?: (employeId: number, annee: number) => void;
+}> = ({ etat, onOuvrir, onSaisirOuverture, onModifierJours, onCreerDansAnnee }) => {
   const { groupes, colonnes } = colonnesEtat(etat.annees);
   const largeur = colonnes.reduce((s, c) => s + c.width, 0);
-  const premiereColAnnee = etat.annees[0];
+  const setAnnees = new Set(etat.annees.map((a) => `an${a}`));
+
   return (
-    <div className="table-responsive thin-scrollbar etat-scroll max-h-[62vh]">
+    <div className="table-responsive thin-scrollbar etat-scroll max-h-[65vh]">
       <table className="border-collapse w-full etat-conge-table" style={{ minWidth: largeur }}>
         <thead className="sticky top-0 z-20">
           <tr>
@@ -249,19 +326,35 @@ export const EtatCongesEcran: React.FC<{
           </tr>
           <tr className="bg-slate-100 dark:bg-slate-700">
             {colonnes.map((c) => {
-              const estPremiereAnnee = premiereColAnnee !== undefined && c.cle === `an${premiereColAnnee}` && Boolean(onSaisirOuverture);
+              const estColAnneeEditable = setAnnees.has(String(c.cle)) && Boolean(onSaisirOuverture);
+              const estColJoursEditable = (c.cle === 'jours_conge' || c.cle === 'perm_jours') && Boolean(onModifierJours);
               return (
                 <th
                   key={c.cle}
-                  title={estPremiereAnnee ? `Saisie directe autorisée (0 à ${fmtJours(etat.config.joursCongeParAn)} j — sans cumul antérieur)` : undefined}
+                  title={
+                    estColAnneeEditable
+                      ? `Saisie directe autorisée sur ${c.label} (ouverture et solde de fin d'année)`
+                      : estColJoursEditable
+                        ? 'Modification directe du nombre de jours demandés'
+                        : undefined
+                  }
                   className={`text-[9px] sm:text-[10px] font-extrabold uppercase py-1.5 px-1 border border-slate-300 dark:border-slate-600 text-center leading-tight whitespace-nowrap ${
-                    estPremiereAnnee
+                    estColAnneeEditable
                       ? 'bg-sky-100/80 dark:bg-sky-900/40 text-salfa-dark dark:text-sky-200'
                       : 'text-slate-700 dark:text-slate-200'
                   }`}
                 >
                   {c.label}
-                  {estPremiereAnnee && <span className="block text-[8px] font-semibold normal-case text-salfa-teal dark:text-sky-300">saisie ≤ {fmtJours(etat.config.joursCongeParAn)}j</span>}
+                  {estColAnneeEditable && (
+                    <span className="block text-[8px] font-semibold normal-case text-salfa-teal dark:text-sky-300">
+                      saisie libre
+                    </span>
+                  )}
+                  {estColJoursEditable && (
+                    <span className="block text-[8px] font-semibold normal-case text-sky-700 dark:text-sky-300">
+                      modifiable
+                    </span>
+                  )}
                 </th>
               );
             })}
@@ -274,7 +367,18 @@ export const EtatCongesEcran: React.FC<{
           {etat.parcours.map((p) => {
             const lignes = p.lignes.length ? p.lignes : [];
             if (!lignes.length) return null;
-            const anneeEditable = premiereAnneeEditable(p, etat.annees);
+
+            // Pour chaque année affichée (2024, 2025, 2026…), repérer la ligne portant le solde d'ouverture
+            const indexOuvertureParAnnee = new Map<number, number>();
+            for (const a of etat.annees) {
+              const idxPremiereDemande = lignes.findIndex((l) => l.type === 'DEMANDE' && l.annee === a);
+              if (idxPremiereDemande >= 0) {
+                indexOuvertureParAnnee.set(a, idxPremiereDemande);
+              } else if (lignes.length > 1) {
+                indexOuvertureParAnnee.set(a, 0);
+              }
+            }
+
             return lignes.map((ligne, index) => (
               <tr
                 key={`${p.employe_id}-${ligne.cle}`}
@@ -290,6 +394,21 @@ export const EtatCongesEcran: React.FC<{
                       <div className="text-[9px] text-slate-500 dark:text-slate-400 font-normal whitespace-normal">
                         Titre {p.titreActif} : {fmtJours(p.resteTitreActif)} j · cumul {fmtJours(p.soldeActuel)} j · perm. {fmtJours(p.permissionActuelle)} j{p.nbEnAttente ? ` · ${p.nbEnAttente} att.` : ''}
                       </div>
+                      {onCreerDansAnnee && etat.annees.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {etat.annees.map((a) => (
+                            <button
+                              key={a}
+                              type="button"
+                              onClick={() => onCreerDansAnnee(p.employe_id, a)}
+                              title={`Ajouter un congé ou une permission en ${a} pour ${p.nom_prenoms}`}
+                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-50 dark:bg-sky-900/40 text-salfa-teal dark:text-sky-200 border border-sky-200 dark:border-sky-700 hover:bg-salfa-teal hover:text-white transition"
+                            >
+                              + {a}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td rowSpan={lignes.length} className="border border-slate-200 dark:border-slate-700 px-1 py-1 text-[10px] align-top bg-white dark:bg-slate-800 whitespace-normal">
                       {p.fonction}
@@ -297,33 +416,90 @@ export const EtatCongesEcran: React.FC<{
                   </>
                 )}
                 {colonnes.filter((c) => c.cle !== 'mat' && c.cle !== 'nom' && c.cle !== 'fonction').map((c) => {
-                  const estPremiereCaseEditable =
-                    Boolean(onSaisirOuverture) &&
-                    index === 0 &&
-                    anneeEditable !== null &&
-                    c.cle === `an${anneeEditable}`;
-                  if (estPremiereCaseEditable && onSaisirOuverture && anneeEditable !== null) {
-                    const bilanPremiere = p.bilans[anneeEditable];
-                    const valOuverture = bilanPremiere ? bilanPremiere.ouverture : 0;
-                    return (
-                      <td
-                        key={c.cle}
-                        className="border border-slate-200 dark:border-slate-700 px-0.5 py-0.5 text-right font-mono align-middle"
-                      >
-                        <CellulePremiereAnneeEditable
-                          employeId={p.employe_id}
-                          nomPrenoms={p.nom_prenoms}
-                          annee={anneeEditable}
-                          valeur={valOuverture}
-                          maxJours={etat.config.joursCongeParAn}
-                          estSaisieManuelle={Boolean(bilanPremiere?.ouvertureSaisie)}
-                          onSaisir={onSaisirOuverture}
-                        />
-                      </td>
-                    );
+                  // 1) Saisie directe sur TOUTES les colonnes d'années (2024, 2025, 2026…) : ouverture ET solde final
+                  if (onSaisirOuverture && String(c.cle).startsWith('an')) {
+                    const anneeCol = Number(String(c.cle).slice(2));
+                    const bilanCol = p.bilans[anneeCol];
+                    if (ligne.type === 'SOLDE_FINAL') {
+                      const valFin = bilanCol ? bilanCol.fin : 0;
+                      return (
+                        <td
+                          key={c.cle}
+                          className="border border-slate-200 dark:border-slate-700 px-0.5 py-0.5 text-right font-mono align-middle"
+                        >
+                          <CelluleSoldeAnneeEditable
+                            employeId={p.employe_id}
+                            nomPrenoms={p.nom_prenoms}
+                            annee={anneeCol}
+                            valeur={valFin}
+                            mode="SOLDE_FINAL"
+                            estSaisieManuelle={Boolean(bilanCol?.ouvertureSaisie)}
+                            onSaisir={onSaisirOuverture}
+                          />
+                        </td>
+                      );
+                    }
+                    if (indexOuvertureParAnnee.get(anneeCol) === index) {
+                      const valOuv = bilanCol ? bilanCol.ouverture : 0;
+                      return (
+                        <td
+                          key={c.cle}
+                          className="border border-slate-200 dark:border-slate-700 px-0.5 py-0.5 text-right font-mono align-middle"
+                        >
+                          <CelluleSoldeAnneeEditable
+                            employeId={p.employe_id}
+                            nomPrenoms={p.nom_prenoms}
+                            annee={anneeCol}
+                            valeur={valOuv}
+                            mode="OUVERTURE"
+                            estSaisieManuelle={Boolean(bilanCol?.ouvertureSaisie)}
+                            onSaisir={onSaisirOuverture}
+                          />
+                        </td>
+                      );
+                    }
                   }
+
+                  // 2) Saisie directe des jours demandés (Congé ou Permission) sur toute ligne DEMANDE (2024, 2025, 2026…)
+                  if (onModifierJours && ligne.type === 'DEMANDE' && ligne.conge_id) {
+                    if (c.cle === 'jours_conge' && (ligne.categorie === 'CONGE' || ligne.jours_conge > 0)) {
+                      return (
+                        <td key={c.cle} className="border border-slate-200 dark:border-slate-700 px-0.5 py-0.5 text-right font-mono align-middle">
+                          <CelluleJoursDemandeEditable
+                            congeId={ligne.conge_id}
+                            nomPrenoms={p.nom_prenoms}
+                            annee={ligne.annee}
+                            libelle="Congé"
+                            valeur={ligne.jours_conge || ligne.jours}
+                            onModifierJours={onModifierJours}
+                          />
+                        </td>
+                      );
+                    }
+                    if (c.cle === 'perm_jours' && (ligne.categorie === 'PERMISSION' || ligne.perm_jours > 0)) {
+                      return (
+                        <td key={c.cle} className="border border-slate-200 dark:border-slate-700 px-0.5 py-0.5 text-right font-mono align-middle">
+                          <CelluleJoursDemandeEditable
+                            congeId={ligne.conge_id}
+                            nomPrenoms={p.nom_prenoms}
+                            annee={ligne.annee}
+                            libelle="Permission"
+                            valeur={ligne.perm_jours || ligne.jours}
+                            onModifierJours={onModifierJours}
+                          />
+                        </td>
+                      );
+                    }
+                  }
+
                   const v = valeurCellule(ligne, c.cle, p, etat.annees);
                   const estVide = v === '' || v === '·';
+                  const estCliquableDemande =
+                    ligne.type === 'DEMANDE' &&
+                    Boolean(ligne.conge_id) &&
+                    !estVide &&
+                    (c.cle === 'motif' || c.cle === 'date_conge' || c.cle === 'perm_date' || c.cle === 'date_retour' || c.cle === 'situation');
+
                   return (
                     <td
                       key={c.cle}
@@ -334,8 +510,13 @@ export const EtatCongesEcran: React.FC<{
                         (c.cle === 'jours_conge' || c.cle === 'perm_jours') && ligne.type === 'DEMANDE' ? 'font-bold' : ''
                       }`}
                     >
-                      {ligne.type === 'DEMANDE' && c.cle === 'motif' ? (
-                        <button type="button" onClick={() => ligne.conge_id && onOuvrir(ligne.conge_id)} className="text-left hover:underline decoration-dotted" title="Ouvrir la fiche d’absence">
+                      {estCliquableDemande ? (
+                        <button
+                          type="button"
+                          onClick={() => ligne.conge_id && onOuvrir(ligne.conge_id)}
+                          className={`${c.align === 'center' ? 'text-center' : 'text-left'} hover:underline decoration-dotted hover:text-salfa-teal`}
+                          title="Cliquer pour modifier les dates, le motif ou le statut de cette fiche"
+                        >
                           {v}
                         </button>
                       ) : (

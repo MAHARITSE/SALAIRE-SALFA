@@ -255,5 +255,8 @@ reprend fidèlement :
 - le **`CONTRÔLE DES CONGÉS ET PERMISSIONS`** (`CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb`) :
   consommation chronologique par **Titre / Année**, état multi-années consultable à l'écran,
   imprimable en A4 paysage, téléchargeable en **PDF** et exportable en **Excel (`.xlsx`)**,
-  ainsi que l'import direct d'un contrôle **`.xlsb` / `.xlsx`**.
+  import direct d'un contrôle **`.xlsb` / `.xlsx`** dans l'interface, ainsi qu'un script SQL
+  dédié pour MySQL / WampServer (**`wamp/sql/salfa_conges_excel.sql`**, régénérable via
+  `npm run sql:conges`) permettant d'importer les 610 fiches de congés et permissions dans
+  `salfa_paie` sans écraser les bulletins de paie existants.
 

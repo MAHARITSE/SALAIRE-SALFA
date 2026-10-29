@@ -15,11 +15,25 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-wamp-test-'));
   let store = { meta: { source_version: 'classeur-2026-10' }, bareme_anciennete: {}, employes: [], paies: [], comparaison_net: [], utilisateurs: [] };
   const alerts = [];
   let failLogout = false;
+  let needsDbConfig = false;
   global.window = { alert: message => alerts.push(message) };
   global.fetch = async (url, options) => {
     const action = new URL(url, 'http://test/').searchParams.get('action');
     let status = 200, data = {};
-    if (action === 'login') data = { csrf: 'token', user: { id: 1, username: 'test', nom_complet: 'Test', role: 'Administrateur', actif: 1 } };
+    if (action === 'login') {
+      if (needsDbConfig) {
+        status = 503;
+        data = { error: 'Connexion MySQL WAMP requise.', code: 'NEEDS_DB_CONFIG', canConfigure: true };
+      } else {
+        data = { csrf: 'token', user: { id: 1, username: 'test', nom_complet: 'Test', role: 'Administrateur', actif: 1 } };
+      }
+    }
+    else if (action === 'setup_db') {
+      const body = JSON.parse(options.body);
+      assert.equal(body.db, 'salfa_paie');
+      needsDbConfig = false;
+      data = { success: true, message: 'Serveur WAMP configuré.' };
+    }
     else if (action === 'logout') { assert.equal(options.headers['X-Salfa-CSRF'], 'token'); if (failLogout) { status = 503; data = {error: 'Serveur indisponible'}; } else data = {success: true}; }
     else if (action === 'snapshot') data = { revision, store: copy(store), config: null, header: null };
     else if (action === 'save') {
@@ -47,5 +61,24 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-wamp-test-'));
   assert.throws(() => client.getStore(), /Session serveur absente/);
   await client.remoteLogin('test', 'motdepasse');
   assert.equal(client.getStore().employes.length, 1, 'les données restent sur le serveur après déconnexion');
-  console.log('Mode WAMP : stockage vide, transaction simulée, conflit et déconnexion : OK');
+  // Test auto-diagnostic / configuration MySQL WAMP depuis la fenêtre de connexion
+  needsDbConfig = true;
+  await client.remoteLogout();
+  let capturedErr = null;
+  try { await client.remoteLogin('admin', 'admin123'); } catch (e) { capturedErr = e; }
+  assert.ok(capturedErr && capturedErr.code === 'NEEDS_DB_CONFIG' && capturedErr.canConfigure === true, 'code NEEDS_DB_CONFIG propagé au formulaire de connexion');
+  const setupRes = await client.remoteSetupDb({ host: '127.0.0.1', port: 3306, db: 'salfa_paie', user: 'root', pass: '' });
+  assert.equal(setupRes.success, true);
+  await client.remoteLogin('test', 'motdepasse');
+  assert.equal(client.getStore().employes.length, 1);
+
+  // Vérification structurelle de wamp/api/index.php
+  const php = fs.readFileSync(path.join(process.cwd(), 'wamp/api/index.php'), 'utf8');
+  assert.ok(php.includes('function openPdoWithAutoCreateDb'), 'auto-création DB présente dans index.php');
+  assert.ok(php.includes('function ensureSalfaInitialized'), 'auto-initialisation tables/admin présente dans index.php');
+  assert.ok(php.includes("$action === 'setup_db'"), 'endpoint setup_db présent dans index.php');
+  assert.ok(php.includes("'saisirSoldeAnnee'"), 'action saisirSoldeAnnee autorisée pour Comptable dans index.php');
+  assert.ok(!php.includes('Serveur non configuré. Consultez le guide WAMP.'), 'ancien message bloquant supprimé');
+
+  console.log('Mode WAMP : stockage vide, auto-config MySQL, transaction simulée, conflit et déconnexion : OK');
 })().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => fs.rmSync(temp, { recursive: true, force: true }));

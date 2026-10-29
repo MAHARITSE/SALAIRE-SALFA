@@ -284,7 +284,7 @@ export interface CongeAbsence {
   visa_gestionnaire_par: string;
   visa_gestionnaire_le: string;
   motif_refus: string;
-  /** Pour AJUSTEMENT : 'DROIT' modifie le droit de l'année, 'REPORT' le solde reporté, 'OUVERTURE' fixe le solde initial de la 1re année affichée (0..30). */
+  /** Pour AJUSTEMENT : 'DROIT' modifie le droit de l'année, 'REPORT' le solde reporté, 'OUVERTURE' fixe le solde d'ouverture d'une année affichée (2024, 2025, 2026…). */
   ajustement_type: 'DROIT' | 'REPORT' | 'OUVERTURE' | '';
   saisie_par: string;
   date_saisie: string;
@@ -924,8 +924,10 @@ export function construireEtat(
       }
 
       let ouverture: number;
-      if (derniereOuverture && droitOuvert) {
-        const cibleSaisie = Math.max(0, Math.min(droitBase, joursAffiches(derniereOuverture)));
+      if (derniereOuverture) {
+        // Contrôle total de saisie dans le tableau (2024, 2025, 2026…) : la valeur saisie
+        // s'applique directement à l'année ciblée sans plafond ni blocage d'embauche.
+        const cibleSaisie = Math.max(-3650, Math.min(3650, Math.round(joursAffiches(derniereOuverture) * 100) / 100));
         ouverture = cibleSaisie + ajustReport + ajustDroit;
       } else {
         ouverture = droitBase + report + ajustReport;
@@ -937,11 +939,11 @@ export function construireEtat(
           ouverture = plafondCumul;
         }
         ouverture += ajustDroit;
-      }
-      if (estPremiereOuAnterieure && nbAnnees > 1 && ouverture > droitBase) {
-        ouverture = droitBase;
-      } else if (plafondCumul > 0 && ouverture > plafondCumul) {
-        ouverture = plafondCumul;
+        if (estPremiereOuAnterieure && nbAnnees > 1 && ouverture > droitBase) {
+          ouverture = droitBase;
+        } else if (plafondCumul > 0 && ouverture > plafondCumul) {
+          ouverture = plafondCumul;
+        }
       }
       const ajust = Number((ouverture - (droitBase + report)).toFixed(2));
 
@@ -949,8 +951,8 @@ export function construireEtat(
       const bilan: BilanAnnee = {
         annee, report: Number(report.toFixed(2)), prescrits, droit: droitBase, ajustements: ajust,
         ouverture: Number(ouverture.toFixed(2)), pris: 0, attente: 0, fin: 0,
-        ouvertureSaisie: Boolean(derniereOuverture && droitOuvert),
-        permDroit: droitOuvert ? cfg.joursPermissionParAn : 0,
+        ouvertureSaisie: Boolean(derniereOuverture),
+        permDroit: (droitOuvert || Boolean(derniereOuverture)) ? cfg.joursPermissionParAn : 0,
         permPris: 0, permAttente: 0, permFin: 0,
         examenPris: 0, examenAttente: 0, nbDemandes: 0, nbEnAttente: 0,
       };
@@ -1322,10 +1324,37 @@ function clePhonetique(t: string): string {
     .replace(/^RANDRIA/, 'RADRIA')
     .replace(/EAU/g, 'O')
     .replace(/AU/g, 'O')
+    .replace(/GEU/g, 'GUE')
     .replace(/NN/g, 'N')
     .replace(/LL/g, 'L')
+    .replace(/TT/g, 'T')
     .replace(/PH/g, 'F')
     .replace(/H$/g, 'T');
+}
+
+/** Distance d'édition bornée à 1 pour tolérer une lettre omise/modifiée sur un nom long. */
+function distanceMax1(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let diffs = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+    } else {
+      if (++diffs > 1) return false;
+      if (a.length > b.length) i++;
+      else if (b.length > a.length) j++;
+      else {
+        i++;
+        j++;
+      }
+    }
+  }
+  if (i < a.length || j < b.length) diffs++;
+  return diffs <= 1;
 }
 
 function enrichirTokens(tokens: string[]): Set<string> {
@@ -1368,9 +1397,12 @@ export function retrouverEmploye(nom: string, employes: any[]): any | null {
       continue;
     }
     const cibles = enrichirTokens(tokens);
+    const ciblesLongues = Array.from(cibles).filter((c) => c.length >= 7);
     let score = 0;
     for (const t of chercheEnrichi) {
-      if (cibles.has(t)) score++;
+      if (cibles.has(t) || (t.length >= 7 && ciblesLongues.some((c) => distanceMax1(t, c)))) {
+        score++;
+      }
     }
     if (score >= 2 && (!meilleur || score > meilleur.score)) {
       meilleur = { emp: e, score };
@@ -1384,7 +1416,7 @@ export function devinerMotifPermission(texte: string): MotifAbsence | null {
   const n = normaliserNom(texte);
   if (!n) return null;
   if (/TERA\s*BADY|ACCOUCH/.test(n)) return trouverMotif('Tera-bady');
-  if (/DIDIM\s*POITRA|CIRCONC/.test(n)) return trouverMotif('Didim-poitra zanaka');
+  if (/DIDI\s*M?\s*POITRA|CIRCONC/.test(n)) return trouverMotif('Didim-poitra zanaka');
   if (/HOPITAL|HOSPITAL|MARARY/.test(n)) {
     if (/ZANAKA|ENFANT/.test(n)) return trouverMotif('Hopitaly zanaka');
     if (/RAFOZANA|BEAU/.test(n)) return trouverMotif('Hopitaly rafozana');
@@ -1399,7 +1431,7 @@ export function devinerMotifPermission(texte: string): MotifAbsence | null {
     if (/TAMPO|ZOKY|ZANDRY|FRERE|SOEUR|FAMILLE/.test(n)) return trouverMotif('Fahafatesana iray tampo');
     return trouverMotif('Fahafatesana vady');
   }
-  if (/FANAMBADIANA|MARIAGE/.test(n)) {
+  if (/FANAMBADIANA|MARI+AGE/.test(n)) {
     if (/ZANAKA|ENFANT/.test(n)) return trouverMotif('Fanambadiana zanaka');
     if (/ZOKY|ZANDRY|TAMPO|FAMILLE|FRERE|SOEUR/.test(n)) return trouverMotif('Fanambadiana iray tampo');
     return trouverMotif('Fanambadiana mpiasa');

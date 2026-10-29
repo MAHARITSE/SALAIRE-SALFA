@@ -502,7 +502,7 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
                   <select className={champ} value={b.ajustement_type || 'DROIT'} onChange={(e) => set('ajustement_type', e.target.value as any)}>
                     <option value="DROIT">Droit de l’année (prorata, entrée…)</option>
                     <option value="REPORT">Report / régularisation</option>
-                    <option value="OUVERTURE">Solde initial 1re année (0 à 30 j)</option>
+                    <option value="OUVERTURE">Solde d’ouverture de l’année (saisie libre)</option>
                   </select>
                 </div>
                 <div>

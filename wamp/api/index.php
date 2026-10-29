@@ -3,21 +3,151 @@ declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
-function answer(int $status, array $value): void { http_response_code($status); echo json_encode($value, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit; }
+
+function answer(int $status, array $value): void {
+    http_response_code($status);
+    echo json_encode($value, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
+function normalizeOrigin(string $url): string {
+    if ($url === '') return '';
+    $p = parse_url($url);
+    if (!is_array($p) || empty($p['scheme']) || empty($p['host'])) return '';
+    $scheme = strtolower((string)$p['scheme']);
+    $host = strtolower((string)$p['host']);
+    $port = isset($p['port']) ? (int)$p['port'] : 0;
+    $isDefault = $port === 0 || ($scheme === 'http' && $port === 80) || ($scheme === 'https' && $port === 443);
+    return $scheme . '://' . $host . ($isDefault ? '' : ':' . $port);
+}
+
+function isLocalClient(): bool {
+    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+    return $ip === '127.0.0.1' || $ip === '::1' || $ip === 'localhost';
+}
+
+/** Retourne le chemin privilégié hors www pour salfa-config.php ainsi que les emplacements candidats. */
+function resolveConfigPaths(): array {
+    $candidates = [];
+    $envPath = getenv('SALFA_CONFIG');
+    if (is_string($envPath) && trim($envPath) !== '') {
+        $candidates[] = trim($envPath);
+    }
+    $preferredTarget = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'salfa-config.php';
+    $cur = __DIR__;
+    for ($i = 0; $i < 6; $i++) {
+        $parent = dirname($cur);
+        if ($parent === $cur) break;
+        $base = strtolower(basename($cur));
+        if ($base === 'www' || $base === 'htdocs' || $base === 'public_html') {
+            $outsideWebRoot = $parent . DIRECTORY_SEPARATOR . 'salfa-config.php';
+            $preferredTarget = $outsideWebRoot;
+            $candidates[] = $outsideWebRoot;
+            break;
+        }
+        $cur = $parent;
+    }
+    $candidates[] = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'salfa-config.php';
+    $candidates[] = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'salfa-config.php';
+    return ['target' => $preferredTarget, 'candidates' => array_values(array_unique($candidates))];
+}
+
+function writeConfigFile(string $targetPath, array $cfg): bool {
+    $export = "<?php\n// Généré automatiquement pour WampServer (hors www).\nreturn " . var_export([
+        'host' => (string)$cfg['host'],
+        'port' => (int)$cfg['port'],
+        'database' => (string)$cfg['database'],
+        'user' => (string)$cfg['user'],
+        'password' => (string)$cfg['password'],
+    ], true) . ";\n";
+    return @file_put_contents($targetPath, $export) !== false;
+}
+
+/** Ouvre une connexion PDO à MySQL/MariaDB et crée automatiquement la base salfa_paie si elle n'existe pas encore. */
+function openPdoWithAutoCreateDb(array $cfg): PDO {
+    $host = trim((string)($cfg['host'] ?? '127.0.0.1')) ?: '127.0.0.1';
+    $port = (int)($cfg['port'] ?? 3306);
+    if ($port <= 0 || $port > 65535) $port = 3306;
+    $dbName = trim((string)($cfg['database'] ?? 'salfa_paie')) ?: 'salfa_paie';
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $dbName)) {
+        throw new RuntimeException('Nom de base de données invalide.');
+    }
+    $user = (string)($cfg['user'] ?? 'root');
+    $pass = (string)($cfg['password'] ?? '');
+    $opts = [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::ATTR_TIMEOUT => 3,
+    ];
+    try {
+        return new PDO("mysql:host=$host;port=$port;dbname=$dbName;charset=utf8mb4", $user, $pass, $opts);
+    } catch (PDOException $e) {
+        $msg = $e->getMessage();
+        // Code 1049 = Unknown database : créer automatiquement la base puis se reconnecter
+        if (strpos($msg, '1049') !== false || stripos($msg, 'Unknown database') !== false) {
+            $serverPdo = new PDO("mysql:host=$host;port=$port;charset=utf8mb4", $user, $pass, $opts);
+            $serverPdo->exec("CREATE DATABASE IF NOT EXISTS `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+            $serverPdo = null;
+            return new PDO("mysql:host=$host;port=$port;dbname=$dbName;charset=utf8mb4", $user, $pass, $opts);
+        }
+        throw $e;
+    }
+}
+
+/** Crée les tables si absentes et initialise les comptes par défaut uniquement si aucun utilisateur n'existe encore. */
+function ensureSalfaInitialized(PDO $db): void {
+    $db->exec("CREATE TABLE IF NOT EXISTS salfa_users (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, username VARCHAR(80) NOT NULL UNIQUE, nom_complet VARCHAR(160) NOT NULL, role VARCHAR(32) NOT NULL, actif TINYINT NOT NULL DEFAULT 1, password_hash VARCHAR(255) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("CREATE TABLE IF NOT EXISTS salfa_state (id TINYINT NOT NULL PRIMARY KEY, revision BIGINT NOT NULL, store_json LONGTEXT NOT NULL, config_json LONGTEXT NULL, header_json LONGTEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $empty = [
+        'meta' => ['source_version' => 'classeur-2026-10', 'conges_version' => 'controle-2026-10', 'conges_loi_3ans' => 3],
+        'bareme_anciennete' => new stdClass(),
+        'employes' => [],
+        'paies' => [],
+        'comparaison_net' => [],
+        'conges' => [],
+        'utilisateurs' => [],
+    ];
+    $qState = $db->prepare('INSERT IGNORE INTO salfa_state (id, revision, store_json) VALUES (1, 0, ?)');
+    $qState->execute([json_encode($empty, JSON_UNESCAPED_UNICODE)]);
+
+    $nbUsers = (int)$db->query('SELECT COUNT(*) FROM salfa_users')->fetchColumn();
+    if ($nbUsers === 0) {
+        $ins = $db->prepare('INSERT IGNORE INTO salfa_users (username, nom_complet, role, actif, password_hash) VALUES (?, ?, ?, 1, ?)');
+        $ins->execute(['admin', 'Administrateur Principal SALFA', 'Administrateur', password_hash('admin123', PASSWORD_DEFAULT)]);
+        $ins->execute(['comptable', 'Comptable Clinique SALFA', 'Comptable', password_hash('comptable123', PASSWORD_DEFAULT)]);
+    }
+}
+
 $action = $_GET['action'] ?? '';
 if ($action === 'health' && $_SERVER['REQUEST_METHOD'] === 'GET') answer(200, ['service' => 'salfa-wamp-v1']);
+
 session_name('SALFASESSID');
-session_set_cookie_params(['httponly' => true, 'samesite' => 'Strict', 'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off', 'path' => '/']);
+session_set_cookie_params([
+    'httponly' => true,
+    'samesite' => 'Strict',
+    'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+    'path' => '/',
+]);
 session_start();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    if ($origin !== $scheme.'://'.($_SERVER['HTTP_HOST'] ?? '')) answer(403, ['error' => 'Origine non autorisée.']);
+    $expectedOrigin = normalizeOrigin($scheme . '://' . ($_SERVER['HTTP_HOST'] ?? ''));
+    $sentOrigin = normalizeOrigin((string)($_SERVER['HTTP_ORIGIN'] ?? ''));
+    if ($sentOrigin === '') {
+        $sentOrigin = normalizeOrigin((string)($_SERVER['HTTP_REFERER'] ?? ''));
+    }
+    if ($expectedOrigin !== '' && $sentOrigin !== $expectedOrigin) {
+        answer(403, ['error' => 'Origine non autorisée.']);
+    }
     if (stripos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== 0) answer(415, ['error' => 'Format de requête invalide.']);
     if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 12000000) answer(413, ['error' => 'Données trop volumineuses.']);
-    $input = json_decode(file_get_contents('php://input'), true);
+    $input = json_decode((string)file_get_contents('php://input'), true);
     if (!is_array($input)) answer(400, ['error' => 'Requête invalide.']);
-} else $input = [];
+} else {
+    $input = [];
+}
+
 if ($action === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($_SESSION['user']) && !hash_equals($_SESSION['csrf'] ?? '', $_SERVER['HTTP_X_SALFA_CSRF'] ?? '')) answer(403, ['error' => 'Session invalide.']);
     $_SESSION = [];
@@ -28,25 +158,135 @@ if ($action === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     session_destroy();
     answer(200, ['success' => true]);
 }
-$configFile = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'salfa-config.php';
-if (!is_file($configFile)) answer(503, ['error' => 'Serveur non configuré. Consultez le guide WAMP.']);
-$config = require $configFile;
+
+$paths = resolveConfigPaths();
+$loadedConfig = null;
+foreach ($paths['candidates'] as $candidate) {
+    if (is_file($candidate)) {
+        $cfg = require $candidate;
+        if (is_array($cfg) && ($cfg['password'] ?? '') !== 'A_MODIFIER') {
+            $loadedConfig = $cfg;
+            break;
+        }
+    }
+}
+
+// Configuration interactive MySQL depuis le poste serveur local (127.0.0.1 / localhost) si nécessaire
+if ($action === 'setup_db' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $isAdminSession = (($_SESSION['user']['role'] ?? '') === 'Administrateur');
+    if (!isLocalClient() && !$isAdminSession) {
+        answer(403, ['error' => 'Configuration MySQL autorisée uniquement depuis le poste serveur WampServer (localhost).']);
+    }
+    $newCfg = [
+        'host' => trim((string)($input['host'] ?? '127.0.0.1')) ?: '127.0.0.1',
+        'port' => (int)($input['port'] ?? 3306) ?: 3306,
+        'database' => trim((string)($input['database'] ?? 'salfa_paie')) ?: 'salfa_paie',
+        'user' => trim((string)($input['user'] ?? 'root')) ?: 'root',
+        'password' => (string)($input['password'] ?? ''),
+    ];
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $newCfg['database'])) {
+        answer(400, ['error' => 'Nom de base MySQL invalide (lettres, chiffres et _ uniquement).']);
+    }
+    try {
+        $testDb = openPdoWithAutoCreateDb($newCfg);
+        ensureSalfaInitialized($testDb);
+        if (!writeConfigFile($paths['target'], $newCfg)) {
+            // Repli dans le dossier parent de l'application si le dossier racine WAMP est en lecture seule
+            writeConfigFile(dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'salfa-config.php', $newCfg);
+        }
+        answer(200, ['success' => true, 'message' => 'Serveur WAMP et base MySQL configurés avec succès.']);
+    } catch (Throwable $e) {
+        error_log('SALFA setup_db: ' . $e->getMessage());
+        answer(503, [
+            'error' => 'Connexion MySQL refusée (' . $newCfg['user'] . '@' . $newCfg['host'] . ':' . $newCfg['port'] . '). Vérifiez que WampServer est vert et vérifiez le mot de passe MySQL.',
+            'code' => 'NEEDS_DB_CONFIG',
+            'canConfigure' => isLocalClient(),
+        ]);
+    }
+}
+
+$db = null;
+if (is_array($loadedConfig)) {
+    try {
+        $db = openPdoWithAutoCreateDb($loadedConfig);
+    } catch (Throwable $e) {
+        error_log('SALFA: MySQL config error: ' . $e->getMessage());
+    }
+}
+
+// Auto-détection transparente pour WampServer / XAMPP par défaut (root sans mot de passe sur 3306 / 3307 / 3308)
+if ($db === null) {
+    foreach ([3306, 3307, 3308] as $tryPort) {
+        $autoCfg = [
+            'host' => '127.0.0.1',
+            'port' => $tryPort,
+            'database' => 'salfa_paie',
+            'user' => 'root',
+            'password' => '',
+        ];
+        try {
+            $db = openPdoWithAutoCreateDb($autoCfg);
+            writeConfigFile($paths['target'], $autoCfg);
+            break;
+        } catch (Throwable $e) {
+            // Essayer le port suivant
+        }
+    }
+}
+
+if ($db === null) {
+    $local = isLocalClient();
+    answer(503, [
+        'error' => $local
+            ? 'Connexion MySQL requise : vérifiez que l’icône WampServer est verte ou renseignez vos identifiants MySQL ci-dessous.'
+            : 'Serveur MySQL non configuré ou indisponible. Ouvrez l’application sur le poste serveur WampServer (http://127.0.0.1/Salaire_salfa/) pour l’initialiser.',
+        'code' => 'NEEDS_DB_CONFIG',
+        'canConfigure' => $local,
+    ]);
+}
+
 try {
-    $db = new PDO('mysql:host='.$config['host'].';port='.$config['port'].';dbname='.$config['database'].';charset=utf8mb4', $config['user'], $config['password'], [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_EMULATE_PREPARES => false]);
-} catch (Throwable $e) { error_log('SALFA: MySQL inaccessible: '.$e->getMessage()); answer(503, ['error' => 'Base de données indisponible. Contactez l’administrateur.']); }
+    ensureSalfaInitialized($db);
+} catch (Throwable $e) {
+    error_log('SALFA init error: ' . $e->getMessage());
+    answer(503, ['error' => 'Initialisation des tables MySQL impossible. Vérifiez les droits de l’utilisateur MySQL.']);
+}
+
 if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim((string)($input['username'] ?? '')); $password = (string)($input['password'] ?? '');
-    $q = $db->prepare('SELECT id, username, nom_complet, role, password_hash FROM salfa_users WHERE username = ? AND actif = 1'); $q->execute([$username]); $user = $q->fetch(PDO::FETCH_ASSOC);
-    if (!$user || !password_verify($password, $user['password_hash'])) { usleep(300000); answer(401, ['error' => 'Identifiants incorrects.']); }
-    session_regenerate_id(true); $_SESSION['user'] = ['id' => (int)$user['id'], 'username' => $user['username'], 'nom_complet' => $user['nom_complet'], 'role' => $user['role'], 'actif' => 1];
-    $_SESSION['csrf'] = bin2hex(random_bytes(32)); $_SESSION['last'] = time();
+    $username = trim((string)($input['username'] ?? ''));
+    $password = (string)($input['password'] ?? '');
+    $q = $db->prepare('SELECT id, username, nom_complet, role, password_hash FROM salfa_users WHERE username = ? AND actif = 1');
+    $q->execute([$username]);
+    $user = $q->fetch(PDO::FETCH_ASSOC);
+    if (!$user || !password_verify($password, $user['password_hash'])) {
+        usleep(300000);
+        answer(401, ['error' => 'Identifiants incorrects.']);
+    }
+    session_regenerate_id(true);
+    $_SESSION['user'] = [
+        'id' => (int)$user['id'],
+        'username' => $user['username'],
+        'nom_complet' => $user['nom_complet'],
+        'role' => $user['role'],
+        'actif' => 1,
+    ];
+    $_SESSION['csrf'] = bin2hex(random_bytes(32));
+    $_SESSION['last'] = time();
     answer(200, ['user' => $_SESSION['user'], 'csrf' => $_SESSION['csrf']]);
 }
-if (empty($_SESSION['user']) || time() - ($_SESSION['last'] ?? 0) > 3600) { session_destroy(); answer(401, ['error' => 'Session expirée. Reconnectez-vous.']); }
+
+if (empty($_SESSION['user']) || time() - ($_SESSION['last'] ?? 0) > 3600) {
+    session_destroy();
+    answer(401, ['error' => 'Session expirée. Reconnectez-vous.']);
+}
 $_SESSION['last'] = time();
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !hash_equals($_SESSION['csrf'] ?? '', $_SERVER['HTTP_X_SALFA_CSRF'] ?? '')) answer(403, ['error' => 'Session invalide. Reconnectez-vous.']);
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !hash_equals($_SESSION['csrf'] ?? '', $_SERVER['HTTP_X_SALFA_CSRF'] ?? '')) {
+    answer(403, ['error' => 'Session invalide. Reconnectez-vous.']);
+}
+
 if ($action === 'snapshot' && $_SERVER['REQUEST_METHOD'] === 'GET') {
-    $q = $db->query('SELECT revision, store_json, config_json, header_json FROM salfa_state WHERE id = 1'); $row = $q->fetch(PDO::FETCH_ASSOC);
+    $q = $db->query('SELECT revision, store_json, config_json, header_json FROM salfa_state WHERE id = 1');
+    $row = $q->fetch(PDO::FETCH_ASSOC);
     if (!$row) answer(503, ['error' => 'Base non initialisée.']);
     $store = json_decode($row['store_json'], true);
     if (($_SESSION['user']['role'] ?? '') !== 'Administrateur' && is_array($store)) {
@@ -67,8 +307,14 @@ if ($action === 'snapshot' && $_SERVER['REQUEST_METHOD'] === 'GET') {
             unset($emp);
         }
     }
-    answer(200, ['revision' => (int)$row['revision'], 'store' => $store, 'config' => $row['config_json'] ? json_decode($row['config_json'], true) : null, 'header' => $row['header_json'] ? json_decode($row['header_json'], true) : null]);
+    answer(200, [
+        'revision' => (int)$row['revision'],
+        'store' => $store,
+        'config' => $row['config_json'] ? json_decode($row['config_json'], true) : null,
+        'header' => $row['header_json'] ? json_decode($row['header_json'], true) : null,
+    ]);
 }
+
 require_once __DIR__ . '/validation.php';
 if (($action === 'save' || $action === 'settings') && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $revision = $input['revision'] ?? null;
@@ -76,39 +322,56 @@ if (($action === 'save' || $action === 'settings') && $_SERVER['REQUEST_METHOD']
     try {
         $db->beginTransaction();
         $row = $db->query('SELECT revision, store_json FROM salfa_state WHERE id=1 FOR UPDATE')->fetch(PDO::FETCH_ASSOC);
-        if (!$row || (int)$row['revision'] !== $revision) { $db->rollBack(); answer(409, ['error' => 'Les données ont changé sur un autre poste. Rechargez la période.']); }
+        if (!$row || (int)$row['revision'] !== $revision) {
+            $db->rollBack();
+            answer(409, ['error' => 'Les données ont changé sur un autre poste. Rechargez la période.']);
+        }
         if ($action === 'save') {
             $operation = (string)($input['action'] ?? '');
             $role = (string)($_SESSION['user']['role'] ?? '');
-            $congeActions = ['creerConge','modifierConge','deciderConge','supprimerConge','saisirOuverturePremiereAnnee','importerConges'];
-            $adminActions = ['createEmploye','updateEmploye','toggleActifEmploye','initPaieEmploye','initMoisPaie','savePaieSaisie','savePaieReglement','cloturerMois','deverrouillerMois','importerClasseur','enregistrerSaisieLot'];
+            $congeActions = ['creerConge', 'modifierConge', 'deciderConge', 'supprimerConge', 'saisirOuverturePremiereAnnee', 'saisirSoldeAnnee', 'importerConges'];
+            $adminActions = ['createEmploye', 'updateEmploye', 'toggleActifEmploye', 'initPaieEmploye', 'initMoisPaie', 'savePaieSaisie', 'savePaieReglement', 'cloturerMois', 'deverrouillerMois', 'importerClasseur', 'enregistrerSaisieLot'];
             $allowed = array_merge($adminActions, $congeActions);
             if (!in_array($operation, $allowed, true)) { $db->rollBack(); answer(403, ['error' => 'Action non autorisée.']); }
             if ($role !== 'Administrateur' && !in_array($operation, $congeActions, true)) { $db->rollBack(); answer(403, ['error' => 'Action réservée à l’administrateur.']); }
-            $new = $input['store'] ?? null; $old = json_decode($row['store_json'], true);
+            $new = $input['store'] ?? null;
+            $old = json_decode($row['store_json'], true);
             if (!is_array($new) || !is_array($old)) { $db->rollBack(); answer(400, ['error' => 'Données invalides.']); }
             // Un non-administrateur (Comptable) ne peut modifier que le registre des congés & permissions
             $storeToSave = ($role === 'Administrateur') ? $new : array_merge($old, ['conges' => is_array($new['conges'] ?? null) ? $new['conges'] : []]);
-            if (!validStore($storeToSave) || !lockedSafe($old, $storeToSave, $operation, $role)) { $db->rollBack(); answer(400, ['error' => 'Données invalides ou période clôturée.']); }
+            if (!validStore($storeToSave) || !lockedSafe($old, $storeToSave, $operation, $role)) {
+                $db->rollBack();
+                answer(400, ['error' => 'Données invalides ou période clôturée.']);
+            }
             $storeToSave['utilisateurs'] = []; // Les comptes ne font jamais partie des données envoyées par les clients.
             $value = json_encode($storeToSave, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-            $q = $db->prepare('UPDATE salfa_state SET store_json=?, revision=revision+1 WHERE id=1 AND revision=?'); $q->execute([$value, $revision]);
+            $q = $db->prepare('UPDATE salfa_state SET store_json=?, revision=revision+1 WHERE id=1 AND revision=?');
+            $q->execute([$value, $revision]);
         } else {
             if ($_SESSION['user']['role'] !== 'Administrateur') { $db->rollBack(); answer(403, ['error' => 'Réservé à l’administrateur.']); }
-            $kind = $input['kind'] ?? ''; $value = $input['value'] ?? null;
-            if (!in_array($kind, ['header','config'], true) || !is_array($value)) { $db->rollBack(); answer(400, ['error' => 'Paramètres invalides.']); }
+            $kind = $input['kind'] ?? '';
+            $value = $input['value'] ?? null;
+            if (!in_array($kind, ['header', 'config'], true) || !is_array($value)) { $db->rollBack(); answer(400, ['error' => 'Paramètres invalides.']); }
             $column = $kind === 'header' ? 'header_json' : 'config_json';
-            $q = $db->prepare("UPDATE salfa_state SET $column=?, revision=revision+1 WHERE id=1 AND revision=?"); $q->execute([json_encode($value, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), $revision]);
+            $q = $db->prepare("UPDATE salfa_state SET $column=?, revision=revision+1 WHERE id=1 AND revision=?");
+            $q->execute([json_encode($value, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), $revision]);
         }
-        $db->commit(); answer(200, ['revision' => $revision + 1]);
-    } catch (Throwable $e) { if ($db->inTransaction()) $db->rollBack(); error_log('SALFA: '.$e->getMessage()); answer(500, ['error' => 'Écriture impossible dans MySQL.']); }
+        $db->commit();
+        answer(200, ['revision' => $revision + 1]);
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        error_log('SALFA: ' . $e->getMessage());
+        answer(500, ['error' => 'Écriture impossible dans MySQL.']);
+    }
 }
+
 if ($action === 'users_list' && $_SERVER['REQUEST_METHOD'] === 'GET') {
     if (($_SESSION['user']['role'] ?? '') !== 'Administrateur') answer(403, ['error' => 'Action réservée à l’administrateur.']);
     $rows = $db->query('SELECT id, username, nom_complet, role, actif FROM salfa_users ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
     $users = array_map(fn($r) => ['id' => (int)$r['id'], 'username' => $r['username'], 'nom_complet' => $r['nom_complet'], 'role' => $r['role'] === 'Administrateur' ? 'Administrateur' : 'Comptable', 'actif' => (int)$r['actif']], $rows);
     answer(200, ['users' => $users]);
 }
+
 if (in_array($action, ['users_create', 'users_update', 'users_password', 'users_toggle', 'users_delete'], true) && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (($_SESSION['user']['role'] ?? '') !== 'Administrateur') answer(403, ['error' => 'Action réservée à l’administrateur.']);
     $selfId = (int)($_SESSION['user']['id'] ?? 0);
@@ -124,7 +387,9 @@ if (in_array($action, ['users_create', 'users_update', 'users_password', 'users_
             $q->execute([$username, $nom, $role, password_hash($password, PASSWORD_DEFAULT)]);
             $id = (int)$db->lastInsertId();
             answer(200, ['success' => true, 'user' => ['id' => $id, 'username' => $username, 'nom_complet' => $nom, 'role' => $role, 'actif' => 1]]);
-        } catch (Throwable $e) { answer(409, ['error' => "L'identifiant « $username » est déjà utilisé."]); }
+        } catch (Throwable $e) {
+            answer(409, ['error' => "L'identifiant « $username » est déjà utilisé."]);
+        }
     }
     $targetId = (int)($input['id'] ?? 0);
     $st = $db->prepare('SELECT id, username, nom_complet, role, actif FROM salfa_users WHERE id = ?');
@@ -144,9 +409,15 @@ if (in_array($action, ['users_create', 'users_update', 'users_password', 'users_
         try {
             $q = $db->prepare('UPDATE salfa_users SET username=?, nom_complet=?, role=? WHERE id=?');
             $q->execute([$username, $nom, $role, $targetId]);
-            if ($targetId === $selfId) { $_SESSION['user']['username'] = $username; $_SESSION['user']['nom_complet'] = $nom; $_SESSION['user']['role'] = $role; }
+            if ($targetId === $selfId) {
+                $_SESSION['user']['username'] = $username;
+                $_SESSION['user']['nom_complet'] = $nom;
+                $_SESSION['user']['role'] = $role;
+            }
             answer(200, ['success' => true, 'user' => ['id' => $targetId, 'username' => $username, 'nom_complet' => $nom, 'role' => $role, 'actif' => (int)$target['actif']]]);
-        } catch (Throwable $e) { answer(409, ['error' => "L'identifiant « $username » est déjà utilisé."]); }
+        } catch (Throwable $e) {
+            answer(409, ['error' => "L'identifiant « $username » est déjà utilisé."]);
+        }
     }
     if ($action === 'users_password') {
         $password = (string)($input['password'] ?? '');

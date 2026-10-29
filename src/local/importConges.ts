@@ -108,7 +108,7 @@ function formaterTelephone(brut: any): string {
 function dateTolerante(v: any): string {
   if (v === null || v === undefined || v === '') return '';
   if (typeof v === 'string') {
-    let s = v.trim().replace(/\/+/g, '/').replace(/\.+/g, '/');
+    let s = v.trim().replace(/§+/g, '/').replace(/\/+/g, '/').replace(/\.+/g, '/');
     // ex. 15/11/22025 -> 15/11/2025
     s = s.replace(/\/2(20\d{2})\b/, '/$1');
     // ex. 096/01/2026 -> 09/01/2026
@@ -363,10 +363,29 @@ export function analyserControleConges(
       }
 
       const dateConge = dateTolerante(valeurLigne(row, colonnes.congeDate));
-      const datePerm = dateTolerante(valeurLigne(row, colonnes.permDate));
-      const motifTxt = String(valeurLigne(row, colonnes.motifs) ?? '').trim();
+      let datePerm = dateTolerante(valeurLigne(row, colonnes.permDate));
+      const motifBrut = valeurLigne(row, colonnes.motifs);
+      let motifTxt = '';
+      if (motifBrut instanceof Date) {
+        const isoMotif = dateTolerante(motifBrut);
+        motifTxt = isoMotif ? `${isoMotif.slice(8, 10)}/${isoMotif.slice(5, 7)}/${isoMotif.slice(0, 4)}` : '';
+      } else {
+        motifTxt = String(motifBrut ?? '').trim();
+      }
       const joursConge = toNumber(valeurLigne(row, colonnes.congeJours));
       const joursPerm = toNumber(valeurLigne(row, colonnes.permJours));
+
+      // Cas où la date de permission a été saisie dans la colonne MOTIFS (ex. « TERA-BADY05/07/2026 »).
+      if (joursPerm > 0 && !datePerm && motifTxt) {
+        const mDate = motifTxt.match(/(\d{1,2}[/.§]\d{1,2}[/.§]20\d{2})/);
+        if (mDate) {
+          const dExtraite = dateTolerante(mDate[1]);
+          if (dExtraite) {
+            datePerm = dExtraite;
+            motifTxt = motifTxt.replace(mDate[0], ' ').replace(/\s+/g, ' ').trim();
+          }
+        }
+      }
 
       const titreLigne = soldesLigne.length ? soldesLigne[soldesLigne.length - 1].annee : 0;
       if (soldesLigne.length) {

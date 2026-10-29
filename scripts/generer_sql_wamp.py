@@ -26,6 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "data" / "salfa_data.json"
 HISTORIQUE = ROOT / "src" / "data" / "salfa_historique.json"
+CONGES_HISTORIQUE = ROOT / "src" / "data" / "salfa_conges_historique.json"
 DEST = ROOT / "wamp" / "sql" / "salfa_donnees_excel_2022-2026.sql"
 TAILLE_MORCEAU = 100_000  # caractères JSON par instruction (limites d'import)
 
@@ -77,9 +78,25 @@ def charger_historique(data: dict) -> dict:
         paies_hist.append(ligne)
     data["employes"] = employes
     data["paies"] = list(data["paies"]) + paies_hist
+    if CONGES_HISTORIQUE.exists():
+        conges_hist_doc = json.loads(CONGES_HISTORIQUE.read_text(encoding="utf-8"))
+        conges_actuels = list(data.get("conges") or [])
+        prochain_conge = max((int(c["id"]) for c in conges_actuels), default=0)
+        for c in conges_hist_doc.get("conges", []):
+            mat = int(c.get("numero_matricule") or 0)
+            if mat not in par_matricule:
+                continue
+            prochain_conge += 1
+            fiche_conge = dict(c)
+            fiche_conge["id"] = prochain_conge
+            fiche_conge["employe_id"] = int(par_matricule[mat]["id"])
+            conges_actuels.append(fiche_conge)
+        data["conges"] = conges_actuels
     annees = sorted({int(p["annee"]) for p in data["paies"]})
     data.setdefault("meta", {})["annees_importees"] = annees
     data["meta"]["source_historique"] = hist.get("source", "SALAIRE SALFA 2022-2025")
+    data["meta"]["conges_version"] = "controle-2026-10"
+    data["meta"]["conges_loi_3ans"] = 3
     return data
 
 

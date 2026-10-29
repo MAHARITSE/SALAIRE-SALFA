@@ -8,7 +8,7 @@ try { $db = new PDO('mysql:host='.$c['host'].';port='.$c['port'].';dbname='.$c['
 catch (Throwable $e) { fwrite(STDERR, "Connexion MySQL impossible. Verifiez la configuration et les droits.\n"); exit(1); }
 $db->exec("CREATE TABLE IF NOT EXISTS salfa_users (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, username VARCHAR(80) NOT NULL UNIQUE, nom_complet VARCHAR(160) NOT NULL, role VARCHAR(32) NOT NULL, actif TINYINT NOT NULL DEFAULT 1, password_hash VARCHAR(255) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 $db->exec("CREATE TABLE IF NOT EXISTS salfa_state (id TINYINT NOT NULL PRIMARY KEY, revision BIGINT NOT NULL, store_json LONGTEXT NOT NULL, config_json LONGTEXT NULL, header_json LONGTEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-$empty = ['meta' => ['source_version' => 'classeur-2026-10'], 'bareme_anciennete' => new stdClass(), 'employes' => [], 'paies' => [], 'comparaison_net' => [], 'utilisateurs' => []];
+$empty = ['meta' => ['source_version' => 'classeur-2026-10', 'conges_version' => 'controle-2026-10', 'conges_loi_3ans' => 3], 'bareme_anciennete' => new stdClass(), 'employes' => [], 'paies' => [], 'comparaison_net' => [], 'conges' => [], 'utilisateurs' => []];
 $q = $db->prepare('INSERT IGNORE INTO salfa_state (id, revision, store_json) VALUES (1, 0, ?)'); $q->execute([json_encode($empty)]);
 // Données déjà présentes (par ex. importées via wamp/sql/salfa_donnees_excel_2022-2026.sql) : ne jamais les écraser.
 $etat = json_decode((string)$db->query('SELECT store_json FROM salfa_state WHERE id = 1')->fetchColumn(), true);
