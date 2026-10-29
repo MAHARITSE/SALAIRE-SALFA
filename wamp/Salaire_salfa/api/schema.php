@@ -175,16 +175,24 @@ function ensureSalfaInitialized(PDO $db): void {
         `duree_maternite_mois` INT NOT NULL DEFAULT 3,
         `jours_conge_par_an` DOUBLE NOT NULL DEFAULT 30,
         `nb_annees_cumul` INT NOT NULL DEFAULT 3,
-        `plafond_cumul_conge` DOUBLE NOT NULL DEFAULT 90,
+        `plafond_cumul_conge` DOUBLE NOT NULL DEFAULT 30,
         `jours_permission_par_an` DOUBLE NOT NULL DEFAULT 10,
-        `report_autorise` TINYINT NOT NULL DEFAULT 1,
+        `report_autorise` TINYINT NOT NULL DEFAULT 0,
         `exclure_dimanche` TINYINT NOT NULL DEFAULT 0,
         `exclure_samedi` TINYINT NOT NULL DEFAULT 0,
         `jours_feries` TEXT NOT NULL,
         `examen_sur_permission` TINYINT NOT NULL DEFAULT 0,
-        `bloquer_depassement` TINYINT NOT NULL DEFAULT 0,
-        `version_calendrier` INT NOT NULL DEFAULT 2
+        `bloquer_depassement` TINYINT NOT NULL DEFAULT 1,
+        `version_calendrier` INT NOT NULL DEFAULT 3,
+        `icone_app` LONGTEXT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // Migration transparente d'une table salfa_config existante (ajout icone_app + plafond annuel 30 j indépendant)
+    $hasIconeCol = $db->query("SHOW COLUMNS FROM `salfa_config` LIKE 'icone_app'")->fetch(PDO::FETCH_ASSOC);
+    if (!$hasIconeCol) {
+        $db->exec("ALTER TABLE `salfa_config` ADD COLUMN `icone_app` LONGTEXT NULL");
+    }
+    $db->exec("UPDATE `salfa_config` SET `report_autorise` = 0, `plafond_cumul_conge` = 30, `jours_conge_par_an` = LEAST(30, `jours_conge_par_an`), `bloquer_depassement` = 1, `version_calendrier` = 3 WHERE `version_calendrier` < 3");
 
     $db->exec("CREATE TABLE IF NOT EXISTS `salfa_bareme_anciennete` (
         `ordre` INT NOT NULL PRIMARY KEY,
@@ -510,18 +518,19 @@ function loadRelationalConfig(PDO $db): ?array {
         'baremeAnciennete' => $baremeAnc,
         'baremeIrsa' => $baremeIrsa,
         'congies' => [
-            'joursCongeParAn' => (float)$cfg['jours_conge_par_an'],
+            'joursCongeParAn' => min(30.0, (float)$cfg['jours_conge_par_an']),
             'nbAnneesCumul' => (int)$cfg['nb_annees_cumul'],
-            'plafondCumulConge' => (float)$cfg['plafond_cumul_conge'],
+            'plafondCumulConge' => min(30.0, (float)$cfg['plafond_cumul_conge']),
             'joursPermissionParAn' => (float)$cfg['jours_permission_par_an'],
-            'reportAutorise' => (bool)(int)$cfg['report_autorise'],
+            'reportAutorise' => false,
             'exclureDimanche' => (bool)(int)$cfg['exclure_dimanche'],
             'exclureSamedi' => (bool)(int)$cfg['exclure_samedi'],
             'joursFeries' => (string)$cfg['jours_feries'],
             'examenSurPermission' => (bool)(int)$cfg['examen_sur_permission'],
             'bloquerDepassement' => (bool)(int)$cfg['bloquer_depassement'],
-            'versionCalendrier' => (int)$cfg['version_calendrier'],
+            'versionCalendrier' => 3,
         ],
+        'iconeApp' => (string)($cfg['icone_app'] ?? ''),
     ];
 }
 
@@ -819,6 +828,8 @@ function updateRevisionMeta(PDO $db, array $meta, int $newRevision): void {
 
 function writeConfigTables(PDO $db, array $cfg): void {
     $congies = is_array($cfg['congies'] ?? null) ? $cfg['congies'] : [];
+    $joursAn = min(30.0, max(0.0, (float)($congies['joursCongeParAn'] ?? 30)));
+    $iconeApp = isset($cfg['iconeApp']) && trim((string)$cfg['iconeApp']) !== '' ? (string)$cfg['iconeApp'] : null;
     $st = $db->prepare("UPDATE `salfa_config` SET
         `configuree` = 1,
         `cnaps_salariale` = ?,
@@ -834,13 +845,14 @@ function writeConfigTables(PDO $db, array $cfg): void {
         `nb_annees_cumul` = ?,
         `plafond_cumul_conge` = ?,
         `jours_permission_par_an` = ?,
-        `report_autorise` = ?,
+        `report_autorise` = 0,
         `exclure_dimanche` = ?,
         `exclure_samedi` = ?,
         `jours_feries` = ?,
         `examen_sur_permission` = ?,
         `bloquer_depassement` = ?,
-        `version_calendrier` = ?
+        `version_calendrier` = 3,
+        `icone_app` = ?
         WHERE `id` = 1");
     $st->execute([
         (float)($cfg['cnapsSalariale'] ?? 1.0),
@@ -852,17 +864,16 @@ function writeConfigTables(PDO $db, array $cfg): void {
         (float)($cfg['plafondEspeces'] ?? 5000),
         (float)($cfg['tauxMaternite'] ?? 50),
         (int)($cfg['dureeMaterniteMois'] ?? 3),
-        (float)($congies['joursCongeParAn'] ?? 30),
+        $joursAn,
         (int)($congies['nbAnneesCumul'] ?? 3),
-        (float)($congies['plafondCumulConge'] ?? 90),
+        min($joursAn, (float)($congies['plafondCumulConge'] ?? $joursAn)),
         (float)($congies['joursPermissionParAn'] ?? 10),
-        !empty($congies['reportAutorise']) ? 1 : 0,
         !empty($congies['exclureDimanche']) ? 1 : 0,
         !empty($congies['exclureSamedi']) ? 1 : 0,
         (string)($congies['joursFeries'] ?? ''),
         !empty($congies['examenSurPermission']) ? 1 : 0,
-        !empty($congies['bloquerDepassement']) ? 1 : 0,
-        (int)($congies['versionCalendrier'] ?? 2),
+        array_key_exists('bloquerDepassement', $congies) ? (!empty($congies['bloquerDepassement']) ? 1 : 0) : 1,
+        $iconeApp,
     ]);
 
     if (is_array($cfg['baremeAnciennete'] ?? null) && !empty($cfg['baremeAnciennete'])) {
@@ -924,3 +935,212 @@ function writeHeaderTable(PDO $db, array $hdr): void {
         isset($hdr['logoRight']) ? (string)$hdr['logoRight'] : null,
     ]);
 }
+
+// ==============================================================================
+// EXPORT & ARCHIVAGE DE SAUVEGARDES SQL RELATIONNELLES (AUCUN JSON)
+// ==============================================================================
+
+function resolveSqlBackupsDir(): string {
+    $cur = __DIR__;
+    for ($i = 0; $i < 6; $i++) {
+        $parent = dirname($cur);
+        if ($parent === $cur) break;
+        $base = strtolower(basename($cur));
+        if ($base === 'www' || $base === 'htdocs' || $base === 'public_html') {
+            $outside = $parent . DIRECTORY_SEPARATOR . 'salfa-backups';
+            if (!is_dir($outside)) @mkdir($outside, 0750, true);
+            if (is_dir($outside) && is_writable($outside)) return $outside;
+            break;
+        }
+        $cur = $parent;
+    }
+    $localDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'backups';
+    if (!is_dir($localDir)) @mkdir($localDir, 0750, true);
+    if (is_dir($localDir)) {
+        $ht = $localDir . DIRECTORY_SEPARATOR . '.htaccess';
+        if (!is_file($ht)) {
+            @file_put_contents($ht, "Require all denied\n");
+        }
+        $idx = $localDir . DIRECTORY_SEPARATOR . 'index.php';
+        if (!is_file($idx)) {
+            @file_put_contents($idx, "<?php http_response_code(403); exit;\n");
+        }
+    }
+    return $localDir;
+}
+
+function sqlDumpVal(PDO $db, $v): string {
+    if ($v === null) return 'NULL';
+    if (is_bool($v)) return $v ? '1' : '0';
+    if (is_int($v) || is_float($v)) return (string)$v;
+    return $db->quote((string)$v);
+}
+
+function dumpTableRowsSql(PDO $db, string $tableName, array $columns, string $orderBy, bool $insertIgnore = false): string {
+    $colList = implode(', ', array_map(fn($c) => "`$c`", $columns));
+    $rows = $db->query("SELECT $colList FROM `$tableName` ORDER BY $orderBy")->fetchAll(PDO::FETCH_ASSOC);
+    $out = [];
+    if (!$insertIgnore) {
+        $out[] = "DELETE FROM `$tableName`;";
+    }
+    if (empty($rows)) return implode("\n", $out);
+    $verb = $insertIgnore ? 'INSERT IGNORE INTO' : 'INSERT INTO';
+    foreach (array_chunk($rows, 150) as $batch) {
+        $tuples = [];
+        foreach ($batch as $r) {
+            $vals = [];
+            foreach ($columns as $c) {
+                $vals[] = sqlDumpVal($db, $r[$c] ?? null);
+            }
+            $tuples[] = '  (' . implode(', ', $vals) . ')';
+        }
+        $out[] = "$verb `$tableName` ($colList) VALUES\n" . implode(",\n", $tuples) . ';';
+    }
+    return implode("\n", $out);
+}
+
+function generateRelationalSqlDump(PDO $db, string $motif = 'Sauvegarde SQL manuelle', bool $congesOnly = false): array {
+    $now = date('Y-m-d H:i:s');
+    $nbEmp = (int)$db->query("SELECT COUNT(*) FROM `salfa_employes`")->fetchColumn();
+    $nbPaies = (int)$db->query("SELECT COUNT(*) FROM `salfa_paies`")->fetchColumn();
+    $nbConges = (int)$db->query("SELECT COUNT(*) FROM `salfa_conges`")->fetchColumn();
+
+    $lines = [];
+    $lines[] = '-- ==============================================================================';
+    $lines[] = '-- SAUVEGARDE SQL RELATIONNELLE — SALFA TANAMBAO (PAIE & CONGÉS)';
+    $lines[] = "-- Générée le : $now";
+    $lines[] = '-- Motif      : ' . str_replace(["\r", "\n"], ' ', $motif);
+    $lines[] = "-- Contenu    : $nbEmp salarié(s), " . ($congesOnly ? '(paies préservées)' : "$nbPaies bulletin(s)") . ", $nbConges fiche(s) congés/permissions";
+    $lines[] = '-- Format     : 100 % relationnel (colonnes et lignes MySQL, aucun JSON)';
+    $lines[] = '-- ==============================================================================';
+    $lines[] = '';
+    $lines[] = 'SET NAMES utf8mb4;';
+    $lines[] = 'SET FOREIGN_KEY_CHECKS = 0;';
+    $lines[] = 'CREATE DATABASE IF NOT EXISTS `salfa_paie` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;';
+    $lines[] = 'USE `salfa_paie`;';
+    $lines[] = '';
+    $lines[] = 'START TRANSACTION;';
+    $lines[] = 'DROP TABLE IF EXISTS `salfa_state`;';
+    $lines[] = '';
+
+    foreach (['salfa_users', 'salfa_revision', 'salfa_employes', 'salfa_paies', 'salfa_conges', 'salfa_comparaison_net', 'salfa_config', 'salfa_bareme_anciennete', 'salfa_bareme_irsa', 'salfa_entete'] as $tbl) {
+        $createRow = $db->query("SHOW CREATE TABLE `$tbl`")->fetch(PDO::FETCH_NUM);
+        if ($createRow && isset($createRow[1])) {
+            $ddl = preg_replace('/^CREATE TABLE /i', 'CREATE TABLE IF NOT EXISTS ', (string)$createRow[1]);
+            $lines[] = $ddl . ';';
+            $lines[] = '';
+        }
+    }
+
+    // Comptes par défaut garantis + synchronisation des utilisateurs existants
+    $lines[] = '-- Comptes utilisateurs par défaut + comptes actifs/personnalisés';
+    $lines[] = "INSERT IGNORE INTO `salfa_users` (`id`, `username`, `nom_complet`, `role`, `actif`, `password_hash`) VALUES";
+    $lines[] = "  (1, 'admin', 'Administrateur Principal SALFA', 'Administrateur', 1, " . $db->quote(SALFA_DEFAULT_ADMIN_HASH) . "),";
+    $lines[] = "  (2, 'comptable', 'Comptable Clinique SALFA', 'Comptable', 1, " . $db->quote(SALFA_DEFAULT_COMPTABLE_HASH) . ");";
+    if (!$congesOnly) {
+        $lines[] = dumpTableRowsSql($db, 'salfa_users', ['id', 'username', 'nom_complet', 'role', 'actif', 'password_hash'], '`id` ASC', false);
+    }
+    $lines[] = '';
+
+    $empCols = ['id', 'numero_matricule', 'nom_prenoms', 'numero_cnaps', 'categorie', 'jobs', 'date_embauche', 'nombre_annees', 'enfant_a_charge', 'base_aj', 'logement_transport', 'rendement', 'responsabilite_representation', 'rib', 'mode_paiement', 'actif', 'date_inactif', 'conge_maternite', 'date_debut_maternite', 'date_creation'];
+    if ($congesOnly) {
+        $lines[] = dumpTableRowsSql($db, 'salfa_employes', $empCols, '`id` ASC', true);
+    } else {
+        $lines[] = dumpTableRowsSql($db, 'salfa_revision', ['id', 'revision', 'source_file', 'entreprise', 'titre', 'annee', 'source_version', 'source_historique', 'conges_version', 'conges_loi_3ans', 'date_modification'], '`id` ASC');
+        $lines[] = dumpTableRowsSql($db, 'salfa_config', ['id', 'configuree', 'cnaps_salariale', 'cnaps_patronale', 'deduction_enfant', 'min_irsa', 'arrondi_irsa_base', 'arrondi_net', 'plafond_especes', 'taux_maternite', 'duree_maternite_mois', 'jours_conge_par_an', 'nb_annees_cumul', 'plafond_cumul_conge', 'jours_permission_par_an', 'report_autorise', 'exclure_dimanche', 'exclure_samedi', 'jours_feries', 'examen_sur_permission', 'bloquer_depassement', 'version_calendrier', 'icone_app'], '`id` ASC');
+        $lines[] = dumpTableRowsSql($db, 'salfa_bareme_anciennete', ['ordre', 'annees_min', 'annees_max', 'indice', 'description'], '`ordre` ASC');
+        $lines[] = dumpTableRowsSql($db, 'salfa_bareme_irsa', ['ordre', 'seuil_min', 'seuil_max', 'taux'], '`ordre` ASC');
+        $lines[] = dumpTableRowsSql($db, 'salfa_entete', ['id', 'configuree', 'mode', 'ligne_1', 'ligne_2', 'ligne_3', 'ligne_4', 'ligne_5', 'ligne_6', 'ligne_7', 'image_finale', 'image_complete', 'logo_gauche', 'logo_droite'], '`id` ASC');
+        $lines[] = dumpTableRowsSql($db, 'salfa_employes', $empCols, '`id` ASC');
+        $lines[] = dumpTableRowsSql($db, 'salfa_paies', ['id', 'employe_id', 'numero_matricule', 'annee', 'mois', 'nom_prenoms', 'numero_cnaps', 'categorie', 'jobs', 'date_embauche', 'nombre_annees', 'enfant_a_charge', 'base_aj', 'logt_trsp', 'rendement', 'resp_repres', 'salaire_brut', 'cnaps', 'patronal', 'salaire_imposable', 'irsa', 'salaire_net', 'augmentation_divers', 'prime_de_garde', 'anciennete2', 'risque', 'repr_rec', 'accessoir', 'brut', 'avance', 'med', 'net', 'virement', 'especes', 'rap', 'rib', 'verrouille', 'conge_maternite', 'date_debut_maternite', 'date_modification'], '`annee` ASC, `id` ASC');
+        $lines[] = dumpTableRowsSql($db, 'salfa_comparaison_net', ['id', 'numero_matricule', 'nom_prenoms', 'categorie', 'jobs', 'net_actuel', 'net_avant', 'ecart'], '`id` ASC');
+    }
+
+    $lines[] = dumpTableRowsSql($db, 'salfa_conges', ['id', 'employe_id', 'numero_matricule', 'nom_prenoms', 'fonction', 'service', 'contact', 'categorie', 'motif_code', 'motif_libelle', 'imputation', 'annee', 'date_demande', 'date_debut', 'heure_debut', 'date_fin', 'date_retour', 'heure_fin', 'jours_demandes', 'jours_valides', 'remplacant', 'titre_periode', 'justificatif', 'observations', 'statut', 'visa_chef_par', 'visa_chef_le', 'visa_medecin_par', 'visa_medecin_le', 'visa_gestionnaire_par', 'visa_gestionnaire_le', 'motif_refus', 'ajustement_type', 'saisie_par', 'date_saisie', 'date_modification'], '`id` ASC');
+    $lines[] = '';
+    $lines[] = 'COMMIT;';
+    $lines[] = 'SET FOREIGN_KEY_CHECKS = 1;';
+    $lines[] = '';
+
+    $sql = implode("\n", $lines);
+    return [
+        'sql' => $sql,
+        'size' => strlen($sql),
+        'created_at' => $now,
+        'motif' => $motif,
+        'nb_employes' => $nbEmp,
+        'nb_paies' => $congesOnly ? 0 : $nbPaies,
+        'nb_conges' => $nbConges,
+    ];
+}
+
+function saveSqlBackupOnDisk(PDO $db, string $type = 'MANUELLE', string $periode = '', string $motif = 'Sauvegarde SQL'): array {
+    $congesOnly = ($type === 'CONGES');
+    $dump = generateRelationalSqlDump($db, $motif, $congesOnly);
+    $stamp = date('Y-m-d_H-i-s');
+    $slug = trim((string)preg_replace('/[^A-Z0-9]+/', '_', strtoupper($periode)), '_');
+    if ($type === 'CLOTURE') {
+        $filename = 'SALFA_CLOTURE_' . ($slug !== '' ? $slug . '_' : '') . $stamp . '.sql';
+    } elseif ($congesOnly) {
+        $filename = 'SALFA_CONGES_' . $stamp . '.sql';
+    } else {
+        $filename = 'SALFA_SAUVEGARDE_SQL_' . $stamp . '.sql';
+    }
+    $dir = resolveSqlBackupsDir();
+    $saved = false;
+    if (is_dir($dir) && is_writable($dir)) {
+        $saved = (@file_put_contents($dir . DIRECTORY_SEPARATOR . $filename, $dump['sql']) !== false);
+        // Conserver les 30 dernières sauvegardes disque pour éviter la saturation
+        $files = glob($dir . DIRECTORY_SEPARATOR . 'SALFA_*.sql') ?: [];
+        if (count($files) > 30) {
+            usort($files, fn($a, $b) => (int)@filemtime($b) <=> (int)@filemtime($a));
+            foreach (array_slice($files, 30) as $old) {
+                @unlink($old);
+            }
+        }
+    }
+    $dump['filename'] = $filename;
+    $dump['server_saved'] = $saved;
+    return $dump;
+}
+
+function listSqlBackupsOnDisk(): array {
+    $dir = resolveSqlBackupsDir();
+    if (!is_dir($dir)) return [];
+    $files = glob($dir . DIRECTORY_SEPARATOR . 'SALFA_*.sql') ?: [];
+    usort($files, fn($a, $b) => (int)@filemtime($b) <=> (int)@filemtime($a));
+    $out = [];
+    foreach (array_slice($files, 0, 30) as $path) {
+        $fname = basename($path);
+        $motif = 'Sauvegarde serveur WAMP';
+        $fh = @fopen($path, 'rb');
+        if ($fh) {
+            for ($i = 0; $i < 8; $i++) {
+                $line = fgets($fh, 512);
+                if ($line === false) break;
+                if (preg_match('/^--\s*Motif\s*:\s*(.+)$/u', trim($line), $m)) {
+                    $motif = trim($m[1]);
+                    break;
+                }
+            }
+            fclose($fh);
+        }
+        $out[] = [
+            'filename' => $fname,
+            'size' => (int)@filesize($path),
+            'created_at' => date('Y-m-d H:i:s', (int)@filemtime($path)),
+            'motif' => $motif,
+        ];
+    }
+    return $out;
+}
+
+function readSqlBackupFromDisk(string $filename): ?string {
+    $clean = basename($filename);
+    if (!preg_match('/^SALFA_[A-Za-z0-9_-]+\.sql$/', $clean)) return null;
+    $path = resolveSqlBackupsDir() . DIRECTORY_SEPARATOR . $clean;
+    if (!is_file($path)) return null;
+    $content = @file_get_contents($path);
+    return is_string($content) ? $content : null;
+}
+

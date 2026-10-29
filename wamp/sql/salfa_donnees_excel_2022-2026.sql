@@ -175,15 +175,16 @@ CREATE TABLE IF NOT EXISTS `salfa_config` (
   `duree_maternite_mois` INT NOT NULL DEFAULT 3,
   `jours_conge_par_an` DOUBLE NOT NULL DEFAULT 30,
   `nb_annees_cumul` INT NOT NULL DEFAULT 3,
-  `plafond_cumul_conge` DOUBLE NOT NULL DEFAULT 90,
+  `plafond_cumul_conge` DOUBLE NOT NULL DEFAULT 30,
   `jours_permission_par_an` DOUBLE NOT NULL DEFAULT 10,
-  `report_autorise` TINYINT NOT NULL DEFAULT 1,
+  `report_autorise` TINYINT NOT NULL DEFAULT 0,
   `exclure_dimanche` TINYINT NOT NULL DEFAULT 0,
   `exclure_samedi` TINYINT NOT NULL DEFAULT 0,
   `jours_feries` TEXT NOT NULL,
   `examen_sur_permission` TINYINT NOT NULL DEFAULT 0,
-  `bloquer_depassement` TINYINT NOT NULL DEFAULT 0,
-  `version_calendrier` INT NOT NULL DEFAULT 2
+  `bloquer_depassement` TINYINT NOT NULL DEFAULT 1,
+  `version_calendrier` INT NOT NULL DEFAULT 3,
+  `icone_app` LONGTEXT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `salfa_bareme_anciennete` (

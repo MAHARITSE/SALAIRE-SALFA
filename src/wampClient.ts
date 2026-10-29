@@ -1,8 +1,20 @@
 import type { JsonStore } from './local/store';
 import { setRemoteStore, clearRemoteStore, getStore } from './local/store';
-import { setRemoteConfig } from './local/config';
+import { setRemoteConfig, loadConfig } from './local/config';
 import { setRemoteHeader } from './bulletin/header';
 import { UserSession, CompteUtilisateur } from './types';
+import {
+  buildRelationalSqlBackup,
+  buildSqlBackupFilename,
+  triggerSqlDownload,
+  lireHistoriqueSauvegardesSql,
+  enregistrerEntreeHistoriqueSql,
+  setDerniereSauvegardeSql,
+  readStoredHeaderSnapshot,
+  EntreeHistoriqueSql,
+  ResultatSauvegardeSql,
+  formatSqlStamp,
+} from './local/sqlBackup';
 
 interface Snapshot { revision: number; store: JsonStore; config: any; header: any }
 let revision: number | null = null;
@@ -78,6 +90,33 @@ export function remoteWrite<T>(action: string, fn: () => Promise<T>, fallback: T
       const nextRev = Number(saved.revision);
       revision = nextRev;
       current = { ...current, revision: nextRev, store };
+      if (saved.backup && typeof saved.backup.sql === 'string' && saved.backup.filename) {
+        const downloaded = triggerSqlDownload(saved.backup.filename, saved.backup.sql);
+        const entree: EntreeHistoriqueSql = {
+          id: `${Date.now()}_srv`,
+          filename: String(saved.backup.filename),
+          created_at: String(saved.backup.created_at || formatSqlStamp().iso),
+          motif: String(saved.backup.motif || 'Clôture validée (WAMP MySQL)'),
+          type: 'CLOTURE',
+          size: Number(saved.backup.size) || saved.backup.sql.length,
+          nb_employes: Array.isArray(store.employes) ? store.employes.length : 0,
+          nb_paies: Array.isArray(store.paies) ? store.paies.length : 0,
+          nb_conges: Array.isArray(store.conges) ? store.conges.length : 0,
+          server_saved: true,
+        };
+        enregistrerEntreeHistoriqueSql(entree);
+        setDerniereSauvegardeSql({
+          success: true,
+          filename: entree.filename,
+          sql: saved.backup.sql,
+          size: entree.size,
+          created_at: entree.created_at,
+          motif: entree.motif,
+          type: 'CLOTURE',
+          downloaded,
+          server_saved: true,
+        });
+      }
       return result;
     } catch (e) {
       stale = true;
@@ -167,3 +206,151 @@ export async function remoteUsersDelete(
     return { success: false, message: e?.message || 'Suppression impossible.' };
   }
 }
+
+export async function remoteExportSqlBackup(options: {
+  type?: 'CLOTURE' | 'MANUELLE' | 'CONGES';
+  periode?: string;
+  motif?: string;
+  telecharger?: boolean;
+} = {}): Promise<ResultatSauvegardeSql> {
+  const type = options.type || 'MANUELLE';
+  const motif =
+    options.motif ||
+    (type === 'CLOTURE'
+      ? `Clôture validée${options.periode ? ` — ${options.periode}` : ''}`
+      : type === 'CONGES'
+        ? 'Sauvegarde SQL Congés & Permissions'
+        : 'Sauvegarde SQL manuelle (Administration)');
+  try {
+    const res = await request('sql_backup_export', {
+      type,
+      periode: options.periode || '',
+      motif,
+      congesOnly: type === 'CONGES',
+    });
+    if (res && typeof res.sql === 'string' && res.filename) {
+      const downloaded = options.telecharger === false ? false : triggerSqlDownload(res.filename, res.sql);
+      const store = current?.store || ({ employes: [], paies: [], conges: [] } as any);
+      const entree: EntreeHistoriqueSql = {
+        id: `${Date.now()}_wamp`,
+        filename: String(res.filename),
+        created_at: String(res.created_at || formatSqlStamp().iso),
+        motif: String(res.motif || motif),
+        type,
+        size: Number(res.size) || res.sql.length,
+        nb_employes: Number(res.nb_employes ?? (Array.isArray(store.employes) ? store.employes.length : 0)),
+        nb_paies: Number(res.nb_paies ?? (type === 'CONGES' ? 0 : Array.isArray(store.paies) ? store.paies.length : 0)),
+        nb_conges: Number(res.nb_conges ?? (Array.isArray(store.conges) ? store.conges.length : 0)),
+        server_saved: Boolean(res.server_saved),
+      };
+      enregistrerEntreeHistoriqueSql(entree);
+      const out: ResultatSauvegardeSql = {
+        success: true,
+        filename: entree.filename,
+        sql: res.sql,
+        size: entree.size,
+        created_at: entree.created_at,
+        motif: entree.motif,
+        type,
+        downloaded,
+        server_saved: Boolean(res.server_saved),
+      };
+      setDerniereSauvegardeSql(out);
+      return out;
+    }
+  } catch {
+    // Repli local depuis le snapshot courant si le serveur ne répond pas à sql_backup_export
+  }
+  const store = getStore();
+  const cfg = loadConfig();
+  const hdr = current?.header || readStoredHeaderSnapshot();
+  const dateNow = new Date();
+  const { iso } = formatSqlStamp(dateNow);
+  const filename = buildSqlBackupFilename({ type, periode: options.periode, date: dateNow });
+  const sql = buildRelationalSqlBackup({
+    store,
+    config: cfg,
+    header: hdr,
+    motif,
+    congesOnly: type === 'CONGES',
+    date: dateNow,
+  });
+  const size = sql.length;
+  const downloaded = options.telecharger === false ? false : triggerSqlDownload(filename, sql);
+  const entree: EntreeHistoriqueSql = {
+    id: `${Date.now()}_fallback`,
+    filename,
+    created_at: iso,
+    motif,
+    type,
+    size,
+    nb_employes: Array.isArray(store.employes) ? store.employes.length : 0,
+    nb_paies: type === 'CONGES' ? 0 : (Array.isArray(store.paies) ? store.paies.length : 0),
+    nb_conges: Array.isArray(store.conges) ? store.conges.length : 0,
+    server_saved: false,
+  };
+  enregistrerEntreeHistoriqueSql(entree);
+  const out: ResultatSauvegardeSql = {
+    success: true,
+    filename,
+    sql,
+    size,
+    created_at: iso,
+    motif,
+    type,
+    downloaded,
+    server_saved: false,
+  };
+  setDerniereSauvegardeSql(out);
+  return out;
+}
+
+export async function remoteListSqlBackups(): Promise<EntreeHistoriqueSql[]> {
+  const localHist = lireHistoriqueSauvegardesSql();
+  try {
+    const res = await request('sql_backups_list');
+    if (Array.isArray(res?.backups)) {
+      const byFile = new Map<string, EntreeHistoriqueSql>();
+      for (const b of res.backups) {
+        if (!b || !b.filename) continue;
+        byFile.set(String(b.filename), {
+          id: String(b.filename),
+          filename: String(b.filename),
+          created_at: String(b.created_at || ''),
+          motif: String(b.motif || 'Sauvegarde serveur WAMP'),
+          type: String(b.filename).includes('CLOTURE')
+            ? 'CLOTURE'
+            : String(b.filename).includes('CONGES')
+              ? 'CONGES'
+              : 'MANUELLE',
+          size: Number(b.size) || 0,
+          nb_employes: Number(b.nb_employes || 0),
+          nb_paies: Number(b.nb_paies || 0),
+          nb_conges: Number(b.nb_conges || 0),
+          server_saved: true,
+        });
+      }
+      for (const l of localHist) {
+        if (!byFile.has(l.filename)) byFile.set(l.filename, l);
+      }
+      return Array.from(byFile.values()).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    }
+  } catch {
+    /* ignore */
+  }
+  return localHist;
+}
+
+export async function remoteDownloadSqlBackupFile(filename: string): Promise<{ success: boolean; message?: string }> {
+  try {
+    const res = await request(`sql_backup_download&file=${encodeURIComponent(filename)}`);
+    if (res && typeof res.sql === 'string') {
+      triggerSqlDownload(res.filename || filename, res.sql);
+      return { success: true };
+    }
+    return { success: false, message: 'Fichier SQL introuvable sur le serveur.' };
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Téléchargement impossible.' };
+  }
+}
+

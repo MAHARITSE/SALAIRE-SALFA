@@ -8,19 +8,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserSession } from './types';
 import { LoginModal } from './components/LoginModal';
-import { AdminModal } from './components/AdminModal';
+import { AdminModal, AdminTabKey } from './components/AdminModal';
 import { ImportExcelModal } from './components/ImportExcelModal';
 import { UsersSettingsModal } from './components/UsersSettingsModal';
 import { InactifsModal } from './components/InactifsModal';
+import { SauvegardeSqlModal } from './components/SauvegardeSqlModal';
 import { SalariesSaisieTab } from './components/tabs/SalariesSaisieTab';
 import { BulletinsTab } from './components/tabs/BulletinsTab';
 import { RapportsTab } from './components/tabs/RapportsTab';
 import { CongesTab } from './components/tabs/CongesTab';
 import { initTheme, applyThemeClass, storeTheme, ThemeMode } from './local/theme';
+import { loadConfig } from './local/config';
+import { applyAppFavicon } from './local/favicon';
 import { apiLogout } from './api';
 import {
   Users, FileText, BarChart3, CheckCircle2, LogOut,
-  CalendarCheck2, ShieldCheck, Moon, Sun, Upload, ChevronDown, Settings, Sliders, User, UserX,
+  CalendarCheck2, ShieldCheck, Moon, Sun, Upload, ChevronDown, Settings, Sliders, User, UserX, Database, Image as ImageIcon,
 } from 'lucide-react';
 import { AppTab, estRoleAdmin } from './local/roles';
 
@@ -30,9 +33,11 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>('salaries');
   const [showLogin, setShowLogin] = useState(true);
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminInitialTab, setAdminInitialTab] = useState<AdminTabKey>('formules');
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showInactifsModal, setShowInactifsModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showSqlBackupModal, setShowSqlBackupModal] = useState(false);
   const [showAdminMenu, setShowAdminMenu] = useState(false);
   const [importedMois, setImportedMois] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -45,7 +50,16 @@ export const App: React.FC = () => {
   useEffect(() => {
     const t = initTheme();
     setTheme(t);
+    applyAppFavicon();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      const cfg = loadConfig();
+      if (cfg.iconeApp) applyAppFavicon(cfg.iconeApp);
+      else applyAppFavicon();
+    }
+  }, [user, refreshKey]);
 
   useEffect(() => {
     applyThemeClass(theme);
@@ -78,8 +92,9 @@ export const App: React.FC = () => {
       if (showAdminModal) setShowAdminModal(false);
       if (showUsersModal) setShowUsersModal(false);
       if (showImportModal) setShowImportModal(false);
+      if (showSqlBackupModal) setShowSqlBackupModal(false);
     }
-  }, [user, activeTab, showAdminModal, showUsersModal, showImportModal]);
+  }, [user, activeTab, showAdminModal, showUsersModal, showImportModal, showSqlBackupModal]);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
@@ -126,11 +141,16 @@ export const App: React.FC = () => {
 
       {showAdminModal && estAdmin && (
         <AdminModal
+          initialTab={adminInitialTab}
           onClose={() => {
             setShowAdminModal(false);
             setRefreshKey((k) => k + 1);
           }}
         />
+      )}
+
+      {showSqlBackupModal && estAdmin && (
+        <SauvegardeSqlModal onClose={() => setShowSqlBackupModal(false)} />
       )}
 
       {showUsersModal && estAdmin && user && (
@@ -317,6 +337,7 @@ export const App: React.FC = () => {
                             role="menuitem"
                             onClick={() => {
                               setShowAdminMenu(false);
+                              setAdminInitialTab('formules');
                               setShowAdminModal(true);
                             }}
                             className="w-full px-3.5 py-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:text-amber-700 dark:hover:text-amber-300 flex items-center gap-2.5 transition"
@@ -325,6 +346,39 @@ export const App: React.FC = () => {
                             <div>
                               <div>Formules, IRSA &amp; Colonnes</div>
                               <div className="text-[10px] font-normal text-slate-400">CNaPS, IRSA, ancienneté &amp; droits congés</div>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setShowAdminMenu(false);
+                              setAdminInitialTab('icone');
+                              setShowAdminModal(true);
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-2.5 transition"
+                          >
+                            <ImageIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                            <div>
+                              <div>Icône de l'application</div>
+                              <div className="text-[10px] font-normal text-slate-400">Remplacer l'icône de l'onglet navigateur</div>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setShowAdminMenu(false);
+                              setShowSqlBackupModal(true);
+                            }}
+                            className="w-full px-3.5 py-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-teal-50 dark:hover:bg-teal-900/20 hover:text-teal-700 dark:hover:text-teal-300 flex items-center gap-2.5 transition"
+                          >
+                            <Database className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                            <div>
+                              <div>Sauvegarde SQL</div>
+                              <div className="text-[10px] font-normal text-slate-400">Exporter .sql relationnel &amp; sauvegardes clôture</div>
                             </div>
                           </button>
 

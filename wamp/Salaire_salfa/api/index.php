@@ -343,7 +343,15 @@ if (($action === 'save' || $action === 'settings') && $_SERVER['REQUEST_METHOD']
             $stRev->execute([$revision + 1, date('Y-m-d H:i:s')]);
         }
         $db->commit();
-        answer(200, ['revision' => $revision + 1]);
+        $resp = ['revision' => $revision + 1];
+        if ($action === 'save' && ($input['action'] ?? '') === 'cloturerMois') {
+            try {
+                $resp['backup'] = saveSqlBackupOnDisk($db, 'CLOTURE', '', 'Clôture de caisse / paie validée');
+            } catch (Throwable $be) {
+                error_log('SALFA auto SQL backup error: ' . $be->getMessage());
+            }
+        }
+        answer(200, $resp);
     } catch (Throwable $e) {
         if ($db->inTransaction()) $db->rollBack();
         error_log('SALFA: ' . $e->getMessage());
@@ -430,4 +438,34 @@ if (in_array($action, ['users_create', 'users_update', 'users_password', 'users_
         answer(200, ['success' => true]);
     }
 }
+
+// Sauvegardes SQL relationnelles (Administration & Clôture)
+if ($action === 'sql_backups_list' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    if (($_SESSION['user']['role'] ?? '') !== 'Administrateur') answer(403, ['error' => 'Action réservée à l’administrateur.']);
+    answer(200, ['backups' => listSqlBackupsOnDisk()]);
+}
+
+if ($action === 'sql_backup_export' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (($_SESSION['user']['role'] ?? '') !== 'Administrateur') answer(403, ['error' => 'Action réservée à l’administrateur.']);
+    $type = in_array(($input['type'] ?? ''), ['CLOTURE', 'MANUELLE', 'CONGES'], true) ? (string)$input['type'] : 'MANUELLE';
+    $periode = substr(trim((string)($input['periode'] ?? '')), 0, 40);
+    $motif = substr(trim((string)($input['motif'] ?? 'Sauvegarde SQL manuelle')), 0, 160);
+    try {
+        $backup = saveSqlBackupOnDisk($db, $type, $periode, $motif);
+        $backup['success'] = true;
+        answer(200, $backup);
+    } catch (Throwable $e) {
+        error_log('SALFA sql_backup_export: ' . $e->getMessage());
+        answer(500, ['error' => 'Génération de la sauvegarde SQL impossible.']);
+    }
+}
+
+if ($action === 'sql_backup_download' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    if (($_SESSION['user']['role'] ?? '') !== 'Administrateur') answer(403, ['error' => 'Action réservée à l’administrateur.']);
+    $file = (string)($_GET['file'] ?? '');
+    $sql = readSqlBackupFromDisk($file);
+    if ($sql === null) answer(404, ['error' => 'Fichier de sauvegarde SQL introuvable.']);
+    answer(200, ['success' => true, 'filename' => basename($file), 'sql' => $sql]);
+}
+
 answer(404, ['error' => 'Action inconnue.']);

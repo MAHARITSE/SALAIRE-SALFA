@@ -41,6 +41,8 @@ export interface PaieConfig {
   baremeAnciennete: BaremeAncienneteConfig[];
   // Congés, permissions et examens médicaux (module Congés & Permissions)
   congies: CongesConfig;
+  // Icône personnalisée de l'application (favicon de l'onglet navigateur, Data URL PNG/ICO/SVG)
+  iconeApp?: string;
 }
 
 export const DEFAULT_BAREME_ANCIENNETE: BaremeAncienneteConfig[] = [
@@ -78,6 +80,7 @@ export const DEFAULT_CONFIG: PaieConfig = {
   baremeAnciennete: DEFAULT_BAREME_ANCIENNETE,
   baremeIrsa: DEFAULT_BAREME_IRSA,
   congies: { ...DEFAULT_CONGES_CONFIG },
+  iconeApp: '',
 };
 
 const CONFIG_KEY = 'salfa_paie_config_v1';
@@ -92,6 +95,7 @@ export function setRemoteConfig(config: Partial<PaieConfig> | null): void {
     baremeAnciennete: config?.baremeAnciennete || [...DEFAULT_CONFIG.baremeAnciennete],
     baremeIrsa: config?.baremeIrsa || [...DEFAULT_CONFIG.baremeIrsa],
     congies: sanitizeCongesConfig(config?.congies),
+    iconeApp: typeof config?.iconeApp === 'string' ? config.iconeApp : '',
   };
 }
 
@@ -138,8 +142,16 @@ export function loadConfig(): PaieConfig {
   } catch (e) {
     console.warn('[CONFIG] Lecture config impossible.', e);
   }
-  const rawCongies = loaded.congies && (loaded.congies as any).versionCalendrier !== 2
-    ? { ...loaded.congies, exclureDimanche: false, versionCalendrier: 2 }
+  const rawCongies = loaded.congies && (loaded.congies as any).versionCalendrier !== 3
+    ? {
+        ...loaded.congies,
+        exclureDimanche: false,
+        reportAutorise: false,
+        plafondCumulConge: 30,
+        joursCongeParAn: Math.min(30, Number((loaded.congies as any).joursCongeParAn) > 0 ? Number((loaded.congies as any).joursCongeParAn) : 30),
+        bloquerDepassement: true,
+        versionCalendrier: 3,
+      }
     : loaded.congies;
   const merged: PaieConfig = {
     ...DEFAULT_CONFIG,
@@ -147,6 +159,7 @@ export function loadConfig(): PaieConfig {
     baremeAnciennete: loaded.baremeAnciennete ? sanitizeBaremeAnciennete(loaded.baremeAnciennete) : [...DEFAULT_CONFIG.baremeAnciennete],
     baremeIrsa: loaded.baremeIrsa ? sanitizeBaremeIrsa(loaded.baremeIrsa) : [...DEFAULT_CONFIG.baremeIrsa],
     congies: sanitizeCongesConfig(rawCongies),
+    iconeApp: typeof loaded.iconeApp === 'string' ? loaded.iconeApp : '',
   };
   // sécuriser les nombres
   merged.cnapsSalariale = Number(merged.cnapsSalariale) || DEFAULT_CONFIG.cnapsSalariale;
@@ -171,7 +184,8 @@ export function saveConfig(cfg: Partial<PaieConfig>): PaieConfig {
   };
   if (cfg.baremeAnciennete) nextRaw.baremeAnciennete = sanitizeBaremeAnciennete(cfg.baremeAnciennete);
   if (cfg.baremeIrsa) nextRaw.baremeIrsa = sanitizeBaremeIrsa(cfg.baremeIrsa);
-  if (cfg.congies) nextRaw.congies = sanitizeCongesConfig({ ...cfg.congies, versionCalendrier: 2 });
+  if (cfg.congies) nextRaw.congies = sanitizeCongesConfig({ ...cfg.congies, versionCalendrier: 3 });
+  if (cfg.iconeApp !== undefined) nextRaw.iconeApp = typeof cfg.iconeApp === 'string' ? cfg.iconeApp : '';
 
   // re-sanitize nombres
   nextRaw.cnapsSalariale = Number(nextRaw.cnapsSalariale) || 0;
@@ -194,11 +208,13 @@ export function saveConfig(cfg: Partial<PaieConfig>): PaieConfig {
 }
 
 export function resetConfig(): PaieConfig {
+  const previousIcon = configCache?.iconeApp || '';
   configCache = {
     ...DEFAULT_CONFIG,
     baremeAnciennete: [...DEFAULT_CONFIG.baremeAnciennete],
     baremeIrsa: [...DEFAULT_CONFIG.baremeIrsa.map(t => ({ ...t }))],
     congies: { ...DEFAULT_CONGES_CONFIG },
+    iconeApp: previousIcon,
   };
   try {
     if (!remoteConfig) localStorage.setItem(CONFIG_KEY, JSON.stringify(configCache));

@@ -11,7 +11,10 @@ import {
   cloturerMois,
   deverrouillerMois,
   fetchPeriodes,
+  getDerniereSauvegardeSql,
+  ResultatSauvegardeSql,
 } from '../../api';
+import { triggerSqlDownload } from '../../local/sqlBackup';
 import {
   Plus,
   Search,
@@ -329,6 +332,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   const [employes, setEmployes] = useState<Employe[]>([]);
   const [paies, setPaies] = useState<PaieMensuelle[]>([]);
   const [verrouille, setVerrouille] = useState<boolean>(false);
+  const [clotureBackupBanner, setClotureBackupBanner] = useState<ResultatSauvegardeSql | null>(null);
   const [periodes, setPeriodes] = useState<{ annee: number; mois: string; nb: number }[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
@@ -406,11 +410,23 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   };
 
   const handleCloturer = async () => {
-    if (!window.confirm(`Clôturer et verrouiller définitivement la paie de ${mois} ${annee} ?`)) return;
+    if (
+      !window.confirm(
+        `Clôturer et verrouiller définitivement la paie / caisse de ${mois} ${annee} ?\n\nUne sauvegarde SQL relationnelle complète (.sql) sera forcée et téléchargée automatiquement.`
+      )
+    )
+      return;
     setActionLoading(true);
-    const ok = await cloturerMois(annee, mois);
-    if (ok) await loadAll();
-    setActionLoading(false);
+    try {
+      const ok = await cloturerMois(annee, mois);
+      if (ok) {
+        const bkp = getDerniereSauvegardeSql();
+        if (bkp) setClotureBackupBanner(bkp);
+        await loadAll();
+      }
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleDeverrouiller = async () => {
@@ -670,6 +686,39 @@ export const SalariesSaisieTab: React.FC<Props> = ({
           )}
         </div>
       </div>
+
+      {clotureBackupBanner && (
+        <div
+          role="status"
+          className="no-print bg-emerald-50 dark:bg-emerald-900/25 border border-emerald-300 dark:border-emerald-700 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-2.5 text-xs sm:text-sm text-emerald-900 dark:text-emerald-200"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="font-semibold">
+              Clôture validée ({mois} {annee}) — Sauvegarde SQL forcée générée :{' '}
+              <code className="font-mono font-bold">{clotureBackupBanner.filename}</code>
+              {clotureBackupBanner.server_saved ? ' (archivée aussi sur le serveur WAMP)' : ''}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => triggerSqlDownload(clotureBackupBanner.filename, clotureBackupBanner.sql)}
+              className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition"
+            >
+              Re-télécharger .sql
+            </button>
+            <button
+              type="button"
+              onClick={() => setClotureBackupBanner(null)}
+              aria-label="Fermer la notification"
+              className="p-1 rounded hover:bg-emerald-200/50 dark:hover:bg-emerald-800/40"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* BARRE DE RECHERCHE + NOUVEAU SALARIÉ */}
       <div className="no-print bg-white dark:bg-slate-800 rounded-xl p-3 sm:p-4 shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3">
