@@ -49,8 +49,19 @@ Chaque utilisateur saisit les identifiants du compte créé sur le serveur.
 2. Installer Node.js LTS et npm sur le serveur, puis copier le projet complet
    sur cet ordinateur, hors de `www`. Double-cliquer sur
    `wamp\INSTALLER-SERVEUR.bat` : il installe les dépendances, compile le site
-   spécifique WAMP et copie le site et l'API dans `C:\wamp64\www\salfa`.
-   Le script ne crée pas la base et ne démarre pas WampServer.
+   spécifique WAMP et copie le site et l'API dans **`C:\wamp64\www\Salaire_salfa`**.
+   Le dossier `Salaire_salfa` doit alors contenir `index.html`, `assets` et
+   `api`. Le script ne crée pas la base et ne démarre pas WampServer.
+   **Ne copiez jamais le contenu du dossier `wamp\` dans `www`** : ce sont les
+   fichiers sources d'installation (`.bat`, `.php`, guide…), pas l'application.
+   Si le navigateur affiche « Index of /… » avec la liste de ces fichiers,
+   c'est que cette erreur a été faite : voir le dépannage plus bas.
+   **Sans Node.js sur le serveur** (ou si le `.bat` échoue, par exemple lancé
+   depuis un partage réseau `\\tsclient\…` que CMD ne peut pas utiliser) :
+   copiez directement le dossier prêt à l'emploi **`wamp\Salaire_salfa`**
+   (application déjà compilée + `api`) dans `C:\wamp64\www\`, ou décompressez
+   `wamp\Salaire_salfa.zip` dans `C:\wamp64\www\` — voir
+   `wamp/COPIER-DANS-WWW.md` — puis passez à l'étape 3.
 3. Dans phpMyAdmin, créer une base vide `salfa_paie` en `utf8mb4` et un compte
    MySQL dédié, limité à cette base, avec les droits nécessaires (`CREATE`,
    `SELECT`, `INSERT`, `UPDATE`). Utiliser un mot de passe fort. Ne pas ouvrir
@@ -85,9 +96,9 @@ Chaque utilisateur saisit les identifiants du compte créé sur le serveur.
    uniquement pour ce réseau. Les configurations WampServer courantes utilisent
    `Require local` par défaut ; elles doivent être adaptées explicitement par
    l'administrateur. Configurer HTTPS avant d'utiliser de vraies données.
-8. Depuis le serveur, ouvrir `http://127.0.0.1/salfa/` pour vérifier l'accès,
-   puis tester depuis un poste autorisé. L'API de diagnostic
-   `/salfa/api/index.php?action=health` ne renvoie que l'identité du service.
+8. Depuis le serveur, ouvrir `http://127.0.0.1/Salaire_salfa/` pour vérifier
+   l'accès, puis tester depuis un poste autorisé. L'API de diagnostic
+   `/Salaire_salfa/api/index.php?action=health` ne renvoie que l'identité du service.
 
 ## 2. Importer les données Excel dans MySQL (fichier SQL)
 
@@ -134,10 +145,40 @@ sonde le port HTTP 80 du sous-réseau IPv4 `/24` de chaque carte privée. Si
 plusieurs serveurs répondent, choisissez-en un ; sinon entrez l'adresse complète
 à la demande. La détection ne couvre pas les autres sous-réseaux, les ports
 personnalisés ou HTTPS : dans ces cas saisir manuellement une adresse comme
-`https://serveur.exemple:443/salfa/`. Le poste et le serveur doivent pouvoir se
+`https://serveur.exemple:443/Salaire_salfa/`. Le poste et le serveur doivent pouvoir se
 joindre ; WampServer ne démarre pas sur un poste client. L'adresse retenue est
 stockée dans `serveur.local.txt` à côté du BAT. Supprimer ce fichier pour
 rechercher à nouveau. Le certificat HTTPS doit déjà être approuvé par Windows.
+
+## Dépannage : « Index of /Salaire_salfa/ » au lieu de l'application
+
+Si le navigateur affiche une liste de fichiers (`CREER-COMPTE.php`,
+`GUIDE-WAMP.md`, `INSTALLER-SERVEUR.bat`, `setup.php`…) au lieu de la page de
+connexion, Apache ne trouve pas de `index.html` : le contenu du dossier
+`wamp\` du projet a été copié dans `www`, au lieu de l'application compilée.
+Pour corriger, sur le serveur :
+
+1. Supprimer le dossier copié par erreur dans `C:\wamp64\www` (l'ancien
+   `C:\wamp64\www\salfa` et/ou `C:\wamp64\www\Salaire_salfa` s'il contient ces
+   fichiers sources). La configuration `C:\wamp64\salfa-config.php` et la base
+   MySQL sont ailleurs et ne sont pas touchées.
+2. Mettre l'application compilée en place, au choix :
+   - copier le dossier prêt à l'emploi `wamp\Salaire_salfa` du projet dans
+     `C:\wamp64\www\` (ou décompresser `wamp\Salaire_salfa.zip` dans
+     `C:\wamp64\www\`) — aucun Node.js requis ;
+   - ou, depuis le dossier du projet **sur un disque local** (pas un partage
+     `\\tsclient\…`), double-cliquer sur `wamp\INSTALLER-SERVEUR.bat` et le
+     laisser terminer : il compile l'application et la copie dans
+     `C:\wamp64\www\Salaire_salfa`, puis affiche l'adresse à ouvrir.
+3. Vérifier que `C:\wamp64\www\Salaire_salfa` contient `index.html`, `assets`
+   et `api` (et rien d'autre).
+4. Ouvrir `http://127.0.0.1/Salaire_salfa/`. Si la page de connexion s'affiche
+   mais annonce un serveur non configuré ou une base indisponible, reprendre
+   les étapes 3 à 5 du § 1 (fichier `salfa-config.php`, `setup.php`, import
+   éventuel du SQL).
+5. Sur les postes clients, supprimer l'ancien `serveur.local.txt` à côté de
+   `LANCER.bat` (il peut encore pointer sur `/salfa/`), puis relancer
+   `LANCER.bat`.
 
 ## Sauvegarde et restauration
 
