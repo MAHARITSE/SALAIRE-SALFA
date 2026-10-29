@@ -643,6 +643,10 @@ export interface BilanAnnee {
   pris: number;
   attente: number;
   fin: number;
+  /** Jours de dépassement d'une année précédente absorbés sur le crédit de 30 j de cette colonne. */
+  debordementEntrant?: number;
+  /** Jours de dépassement de cette année absorbés par l'alignement du 30 de la colonne suivante. */
+  debordementSortant?: number;
   /** Indique si le solde d'ouverture de cette année a été saisi manuellement dans l'état de contrôle. */
   ouvertureSaisie?: boolean;
   permDroit: number;
@@ -870,10 +874,18 @@ export function construireEtat(
 
     const plafondAnnee = Math.min(30, cfg.joursCongeParAn);
     let derniereAnnee = Math.max(debut, Math.min(fin, finColonnes));
-    // Gestion indépendante année par année : chaque exercice (2024, 2025, 2026…)
-    // dispose de son propre solde plafonné à 30 jours maximum par an, sans report
-    // positif ni report de dépassement d'une année sur l'autre.
+    // Gestion année par année plafonnée à 30 jours maximum par an (sans cumul positif
+    // des reliquats non pris d'une année sur l'autre).
+    // Lorsqu'une demande de congé d'une année affichée dépasse le solde restant de sa
+    // colonne (ex. il reste 1 j en 2024 et 2 j sont demandés), le 30 de la colonne
+    // suivante (2025) s'aligne sur la même ligne que le solde restant (1) afin d'absorber
+    // le complément sans afficher de solde négatif (-1) en bas de la colonne épuisée.
     // Les personnes inactives n'ont plus aucun droit aux congés (droit = 0, solde = 0).
+    const bilansTemp: Record<number, BilanAnnee> = {};
+    const soldeCourant: Record<number, number> = {};
+    const permCourant: Record<number, number> = {};
+    const colonneDejaOuverte: Record<number, boolean> = {};
+
     for (let annee = debut; annee <= fin; annee++) {
       const eventsAnnee = evenements.filter((c) => Number(c.annee) === annee);
       const ajustements = eventsAnnee.filter((c) => c.categorie === 'AJUSTEMENT');
@@ -902,19 +914,52 @@ export function construireEtat(
         ouverture = Math.max(0, Math.min(plafondAnnee, droitBase + ajustDroit));
       }
       const ajust = inactif ? 0 : Number((ouverture - droitBase).toFixed(2));
+      const permDroit = !inactif && (droitOuvert || Boolean(derniereOuverture)) ? cfg.joursPermissionParAn : 0;
 
-      const dansFenetre = fenetre.has(annee);
-      const bilan: BilanAnnee = {
-        annee, report: Number(report.toFixed(2)), prescrits, droit: droitBase, ajustements: ajust,
-        ouverture: Number(ouverture.toFixed(2)), pris: 0, attente: 0, fin: 0,
+      bilansTemp[annee] = {
+        annee,
+        report: Number(report.toFixed(2)),
+        prescrits,
+        droit: droitBase,
+        ajustements: ajust,
+        ouverture: Number(ouverture.toFixed(2)),
+        pris: 0,
+        attente: 0,
+        fin: 0,
+        debordementEntrant: 0,
+        debordementSortant: 0,
         ouvertureSaisie: !inactif && Boolean(derniereOuverture),
-        permDroit: !inactif && (droitOuvert || Boolean(derniereOuverture)) ? cfg.joursPermissionParAn : 0,
-        permPris: 0, permAttente: 0, permFin: 0,
-        examenPris: 0, examenAttente: 0, nbDemandes: 0, nbEnAttente: 0,
+        permDroit,
+        permPris: 0,
+        permAttente: 0,
+        permFin: 0,
+        examenPris: 0,
+        examenAttente: 0,
+        nbDemandes: 0,
+        nbEnAttente: 0,
       };
+      soldeCourant[annee] = ouverture;
+      permCourant[annee] = permDroit;
+      colonneDejaOuverte[annee] = false;
+    }
 
-      let soldeAnnee = ouverture;
-      let permAnnee = bilan.permDroit;
+    const trouverColonneActiveFenetre = (idxAnnee: number): number => {
+      if (idxAnnee < 0) return anneeCourante;
+      const colOrigine = anneesColonnes[idxAnnee];
+      if (soldeCourant[colOrigine] > 0) return colOrigine;
+      const colonnesSuivantesOuvertes = anneesColonnes
+        .slice(idxAnnee + 1)
+        .filter((col) => colonneDejaOuverte[col]);
+      if (!colonnesSuivantesOuvertes.length) return colOrigine;
+      const avecReste = colonnesSuivantesOuvertes.find((col) => soldeCourant[col] > 0);
+      return avecReste ?? colonnesSuivantesOuvertes[colonnesSuivantesOuvertes.length - 1];
+    };
+
+    for (let annee = debut; annee <= fin; annee++) {
+      const eventsAnnee = evenements.filter((c) => Number(c.annee) === annee);
+      const dansFenetre = fenetre.has(annee);
+      const idxFenetre = dansFenetre ? anneesColonnes.indexOf(annee) : -1;
+      const bilan = bilansTemp[annee];
       const lignesAnnee: LigneEtatConges[] = [];
 
       for (const c of eventsAnnee) {
@@ -950,36 +995,125 @@ export function construireEtat(
           jours: total,
           restant_apres: 0,
         };
+
+        let soldeApres = soldeCourant[annee];
         if (c.imputation === 'CONGE') {
           ligne.jours_conge = jours;
           ligne.date_conge = c.date_debut || dateEvenement(c);
-          ligne.solde_par_annee[annee] = inactif ? 0 : Number(soldeAnnee.toFixed(2));
-          if (estValide(c)) {
-            if (!inactif) soldeAnnee -= jours;
-            bilan.pris += jours;
-          } else {
+          if (inactif) {
+            ligne.solde_par_annee[annee] = 0;
+            soldeApres = 0;
+            if (estValide(c)) bilan.pris += jours;
+            else bilan.attente += jours;
+          } else if (!dansFenetre || idxFenetre < 0) {
+            ligne.solde_par_annee[annee] = Number(soldeCourant[annee].toFixed(2));
+            colonneDejaOuverte[annee] = true;
+            if (estValide(c)) {
+              soldeCourant[annee] -= jours;
+              bilan.pris += jours;
+            } else {
+              bilan.attente += jours;
+            }
+            soldeApres = soldeCourant[annee];
+          } else if (!estValide(c)) {
+            const colActive = trouverColonneActiveFenetre(idxFenetre);
+            ligne.solde_par_annee[colActive] = Number(soldeCourant[colActive].toFixed(2));
+            colonneDejaOuverte[colActive] = true;
             bilan.attente += jours;
+            soldeApres = soldeCourant[colActive];
+          } else {
+            bilan.pris += jours;
+            const dejaDebordeSurSuivante =
+              soldeCourant[annee] <= 0 &&
+              anneesColonnes.slice(idxFenetre + 1).some((col) => colonneDejaOuverte[col]);
+            let kStart = idxFenetre;
+            if (dejaDebordeSurSuivante) {
+              const idxSuivDispo = anneesColonnes.findIndex(
+                (col, idx) => idx > idxFenetre && (soldeCourant[col] > 0 || !colonneDejaOuverte[col])
+              );
+              kStart = idxSuivDispo >= 0 ? idxSuivDispo : anneesColonnes.length - 1;
+            }
+
+            let restantADeduire = jours;
+            let derniereColImputee = anneesColonnes[kStart];
+            if (restantADeduire <= 0) {
+              ligne.solde_par_annee[derniereColImputee] = Number(soldeCourant[derniereColImputee].toFixed(2));
+              colonneDejaOuverte[derniereColImputee] = true;
+              soldeApres = soldeCourant[derniereColImputee];
+            } else {
+              for (let k = kStart; k < anneesColonnes.length && restantADeduire > 1e-9; k++) {
+                const col = anneesColonnes[k];
+                const estDerniereCol = k === anneesColonnes.length - 1;
+                const dispo = soldeCourant[col];
+                ligne.solde_par_annee[col] = Number(dispo.toFixed(2));
+                colonneDejaOuverte[col] = true;
+                derniereColImputee = col;
+
+                let absorbe = 0;
+                if (estDerniereCol) {
+                  absorbe = restantADeduire;
+                } else if (dispo > 0) {
+                  absorbe = Math.min(restantADeduire, dispo);
+                }
+
+                if (absorbe > 0 || estDerniereCol) {
+                  soldeCourant[col] = Number((soldeCourant[col] - absorbe).toFixed(4));
+                  restantADeduire = Number((restantADeduire - absorbe).toFixed(4));
+                  if (col !== annee && absorbe > 0) {
+                    bilan.debordementSortant = Number(((bilan.debordementSortant || 0) + absorbe).toFixed(4));
+                    bilansTemp[col].debordementEntrant = Number(
+                      ((bilansTemp[col].debordementEntrant || 0) + absorbe).toFixed(4)
+                    );
+                  }
+                }
+              }
+              soldeApres = soldeCourant[derniereColImputee];
+            }
           }
         } else if (c.imputation === 'PERMISSION') {
           ligne.perm_jours = jours;
           ligne.perm_date = c.date_debut || dateEvenement(c);
           ligne.perm_droit = bilan.permDroit;
           if (estValide(c)) {
-            if (!inactif) permAnnee -= jours;
+            if (!inactif) permCourant[annee] -= jours;
             bilan.permPris += jours;
           } else {
             bilan.permAttente += jours;
           }
-          ligne.perm_restant = inactif ? 0 : Number(permAnnee.toFixed(2));
-          ligne.solde_par_annee[annee] = inactif ? 0 : Number(soldeAnnee.toFixed(2));
+          ligne.perm_restant = inactif ? 0 : Number(permCourant[annee].toFixed(2));
+          if (inactif) {
+            ligne.solde_par_annee[annee] = 0;
+            soldeApres = 0;
+          } else if (dansFenetre && idxFenetre >= 0) {
+            const colActive = trouverColonneActiveFenetre(idxFenetre);
+            ligne.solde_par_annee[colActive] = Number(soldeCourant[colActive].toFixed(2));
+            colonneDejaOuverte[colActive] = true;
+            soldeApres = soldeCourant[colActive];
+          } else {
+            ligne.solde_par_annee[annee] = Number(soldeCourant[annee].toFixed(2));
+            colonneDejaOuverte[annee] = true;
+            soldeApres = soldeCourant[annee];
+          }
         } else {
           ligne.examen_jours = total;
           ligne.date_conge = c.date_debut || dateEvenement(c);
-          ligne.solde_par_annee[annee] = inactif ? 0 : Number(soldeAnnee.toFixed(2));
+          if (inactif) {
+            ligne.solde_par_annee[annee] = 0;
+            soldeApres = 0;
+          } else if (dansFenetre && idxFenetre >= 0) {
+            const colActive = trouverColonneActiveFenetre(idxFenetre);
+            ligne.solde_par_annee[colActive] = Number(soldeCourant[colActive].toFixed(2));
+            colonneDejaOuverte[colActive] = true;
+            soldeApres = soldeCourant[colActive];
+          } else {
+            ligne.solde_par_annee[annee] = Number(soldeCourant[annee].toFixed(2));
+            colonneDejaOuverte[annee] = true;
+            soldeApres = soldeCourant[annee];
+          }
           if (estValide(c)) bilan.examenPris += total;
           else bilan.examenAttente += total;
         }
-        ligne.restant_apres = inactif ? 0 : Number((c.imputation === 'PERMISSION' ? permAnnee : soldeAnnee).toFixed(2));
+        ligne.restant_apres = inactif ? 0 : Number((c.imputation === 'PERMISSION' ? permCourant[annee] : soldeApres).toFixed(2));
         if (dansFenetre) lignesAnnee.push(ligne);
         bilan.nbDemandes++;
         if (c.statut !== 'VALIDE') {
@@ -988,11 +1122,17 @@ export function construireEtat(
         }
       }
 
-      bilan.fin = inactif ? 0 : Number(soldeAnnee.toFixed(2));
-      bilan.permFin = inactif ? 0 : Number(permAnnee.toFixed(2));
-      p.bilans[annee] = bilan;
       if (dansFenetre) p.lignes.push(...lignesAnnee);
       derniereAnnee = Math.max(derniereAnnee, annee);
+    }
+
+    for (let annee = debut; annee <= fin; annee++) {
+      const b = bilansTemp[annee];
+      b.debordementEntrant = Number((b.debordementEntrant || 0).toFixed(2));
+      b.debordementSortant = Number((b.debordementSortant || 0).toFixed(2));
+      b.fin = inactif ? 0 : Number(soldeCourant[annee].toFixed(2));
+      b.permFin = inactif ? 0 : Number(permCourant[annee].toFixed(2));
+      p.bilans[annee] = b;
     }
 
     // Une seule ligne de solde par salarié, qui reprend le solde de fin de chaque
@@ -1096,6 +1236,8 @@ export interface SoldeSaisie {
   pris: number;
   attente: number;
   restant: number;
+  debordementEntrant?: number;
+  debordementSortant?: number;
   /** Détail des jours restants indépendants sur chaque année affichée (ex. { 2024: 10, 2025: 9, 2026: 5 }). */
   droitsParTitre: Record<number, number>;
   /** Titre/Année actif en cours (géré indépendamment année par année). */
@@ -1165,6 +1307,8 @@ export function calculerSoldes(
       pris: Number((b.pris).toFixed(2)),
       attente: Number((b.attente).toFixed(2)),
       restant,
+      debordementEntrant: Number((b.debordementEntrant || 0).toFixed(2)),
+      debordementSortant: Number((b.debordementSortant || 0).toFixed(2)),
       droitsParTitre: { ...p.droitsParTitre },
       titreActif: annee,
       resteTitreActif: restant,
@@ -1562,7 +1706,14 @@ export function calculerSyntheseCongesPeriode(
     }
 
     const inactif = estEmployeInactif(emp);
-    const congeRestant = inactif ? 0 : Number((ouverture - congeJusquaMois).toFixed(2));
+    const debordEntrant = s ? (s.debordementEntrant || 0) : 0;
+    const debordSortant = s ? (s.debordementSortant || 0) : 0;
+    const ouvertureEffective = ouverture - debordEntrant;
+    const congeImputeSurColonne =
+      debordSortant > 0
+        ? Math.min(congeJusquaMois, Math.max(0, ouvertureEffective))
+        : congeJusquaMois;
+    const congeRestant = inactif ? 0 : Number((ouvertureEffective - congeImputeSurColonne).toFixed(2));
     const permRestante = inactif ? 0 : Number((permDroit - permJusquaMois).toFixed(2));
 
     resultat.set(empId, {

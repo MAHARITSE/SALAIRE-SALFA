@@ -372,9 +372,16 @@ export const EtatCongesEcran: React.FC<{
             if (!lignes.length) return null;
 
             // Pour chaque année affichée (2024, 2025, 2026…), repérer la ligne portant le solde d'ouverture
+            // (y compris lorsqu'une colonne suivante aligne son [30] sur la ligne de dépassement de l'année précédente)
             const indexOuvertureParAnnee = new Map<number, number>();
             for (const a of etat.annees) {
-              const idxPremiereDemande = lignes.findIndex((l) => l.type === 'DEMANDE' && l.annee === a);
+              const idxPremiereApparition = lignes.findIndex(
+                (l) => l.type === 'DEMANDE' && l.solde_par_annee && l.solde_par_annee[a] !== undefined
+              );
+              const idxPremiereDemande =
+                idxPremiereApparition >= 0
+                  ? idxPremiereApparition
+                  : lignes.findIndex((l) => l.type === 'DEMANDE' && l.annee === a);
               if (idxPremiereDemande >= 0) {
                 indexOuvertureParAnnee.set(a, idxPremiereDemande);
               } else if (lignes.length > 1) {
@@ -451,7 +458,12 @@ export const EtatCongesEcran: React.FC<{
                       );
                     }
                     if (indexOuvertureParAnnee.get(anneeCol) === index) {
-                      const valOuv = bilanCol ? bilanCol.ouverture : 0;
+                      const valOuv =
+                        ligne.solde_par_annee && ligne.solde_par_annee[anneeCol] !== undefined
+                          ? ligne.solde_par_annee[anneeCol]
+                          : bilanCol
+                            ? bilanCol.ouverture
+                            : 0;
                       return (
                         <td
                           key={c.cle}

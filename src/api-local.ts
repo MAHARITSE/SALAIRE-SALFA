@@ -1842,20 +1842,37 @@ export async function saisirOuverturePremiereAnnee(
 
   let cibleOuverture = Math.round(num * 100) / 100;
   if (mode === 'SOLDE_FINAL') {
-    const eventsAnnee = store.conges
+    const nbCols = Math.max(1, Math.round(cfg.nbAnneesCumul || 3));
+    const anneeRefDefaut = new Date().getFullYear();
+    const anneeEtat =
+      anneeCible >= anneeRefDefaut - nbCols + 1 && anneeCible <= anneeRefDefaut
+        ? anneeRefDefaut
+        : anneeCible < anneeRefDefaut
+          ? anneeCible + nbCols - 1
+          : anneeCible;
+    const tousCongesEmp = store.conges
       .map((raw: any) => normaliserConge(raw, cfg))
-      .filter((c: CongeAbsence) => Number(c.employe_id) === Number(emp.id) && Number(c.annee) === anneeCible);
+      .filter((c: CongeAbsence) => Number(c.employe_id) === Number(emp.id));
+    const etatActuel = construireEtat([emp], tousCongesEmp, cfg, {
+      annee: anneeEtat,
+      nbAnnees: nbCols,
+    });
+    const bilanActuel = etatActuel.parcours[0]?.bilans?.[anneeCible];
+    const eventsAnnee = tousCongesEmp.filter((c: CongeAbsence) => Number(c.annee) === anneeCible);
     const prisAnnee = eventsAnnee
       .filter((c: CongeAbsence) => c.categorie !== 'AJUSTEMENT' && c.statut === 'VALIDE' && c.imputation === 'CONGE')
       .reduce((s: number, c: CongeAbsence) => s + Number(c.jours_valides ?? c.jours_demandes ?? 0), 0);
+    const consommeSurColonne = bilanActuel
+      ? (bilanActuel.debordementEntrant || 0) + (bilanActuel.pris - (bilanActuel.debordementSortant || 0))
+      : prisAnnee;
     const autresAjusts = eventsAnnee
       .filter((c: CongeAbsence) => c.categorie === 'AJUSTEMENT' && c.ajustement_type !== 'OUVERTURE' && c.statut === 'VALIDE')
       .reduce((s: number, c: CongeAbsence) => s + Number(c.jours_valides ?? c.jours_demandes ?? 0), 0);
-    cibleOuverture = Math.round((cibleOuverture + prisAnnee - autresAjusts) * 100) / 100;
+    cibleOuverture = Math.round((cibleOuverture + consommeSurColonne - autresAjusts) * 100) / 100;
     if (cibleOuverture < 0 || cibleOuverture > plafondAnnee) {
       return {
         success: false,
-        message: `Le congé annuel de ${anneeCible} est plafonné à ${plafondAnnee} jours par an (pris : ${prisAnnee} j, ouverture résultante : ${cibleOuverture} j).`,
+        message: `Le congé annuel de ${anneeCible} est plafonné à ${plafondAnnee} jours par an (imputé : ${consommeSurColonne} j, ouverture résultante : ${cibleOuverture} j).`,
       };
     }
   }
