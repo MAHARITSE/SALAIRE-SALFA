@@ -200,7 +200,8 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   const verifReels2026 = [
     [1, 5],    // 25 j pris en 2026 -> 30 - 25 = 5 j
     [3, 9],    // 21 j pris en 2026 -> 30 - 21 = 9 j
-    [6, -6],   // archive 36 j pris en 2026 -> 30 - 36 = -6 j (sans report de 2025)
+    [6, -7],   // 2025 (31 j) aligne le 30 de 2026 pour absorber 1 j (2025 = 0) -> 29 - 36 = -7 j sur 2026
+    [13, 13],  // RIVONILAINA VICTOR : 2024=0 (30 de 2025 aligné avec 1 sur ligne 6), 2025=17, 2026=13
     [34, 22],  // 8 j pris en 2026  -> 30 - 8  = 22 j
     [43, 15],  // 15 j pris en 2026 -> 30 - 15 = 15 j
     [47, 25],  // 5 j pris en 2026  -> 30 - 5  = 25 j
@@ -707,6 +708,40 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   await api.supprimerConge(demAvantInact.id, { utilisateur: 'admin', role: 'Administrateur' });
   await api.toggleActifEmploye(empTestInact.id, true);
   assert.equal((await api.fetchSituationConges(2026, false)).find((s) => s.employe_id === empTestInact.id).restant, 5, 'réactivation -> retrouve son solde 2026 de 5 j');
+
+  // ----------------------------------------------------------------------------
+  // 6ter. Alignement du 30 de l'année suivante avec le reste (ex. Mat 13 RIVONILAINA VICTOR)
+  //       pour absorber les jours demandés sans mettre de -1 en bas de colonne
+  // ----------------------------------------------------------------------------
+  const etatAlign = await api.fetchEtatConges(2026, { inclureInactifs: false });
+  const victor = etatAlign.parcours.find((p) => p.numero_matricule === 13);
+  assert.ok(victor, 'Mat 13 RIVONILAINA VICTOR présent');
+  assert.deepEqual(victor.lignes[5].solde_par_annee, { 2024: 1, 2025: 30 }, 'Ligne 6 de Victor : le 30 de 2025 est aligné sur la même ligne que le 1 de 2024');
+  assert.equal(victor.lignes[5].jours_conge, 2, 'Ligne 6 de Victor : 2 jours demandés');
+  assert.equal(victor.lignes[5].restant_apres, 29, 'Ligne 6 de Victor : 1 + 30 - 2 = 29 j restants sur 2025');
+  assert.deepEqual(victor.lignes[6].solde_par_annee, { 2025: 29 }, 'Ligne 7 de Victor : 2025 affiche 29');
+  assert.deepEqual(victor.lignes[7].solde_par_annee, { 2025: 29 }, 'Ligne 8 de Victor : 2025 affiche 29 avant déduction de 10 j');
+  assert.deepEqual(victor.lignes[8].solde_par_annee, { 2025: 19 }, 'Ligne 9 de Victor : 2025 affiche 19 avant déduction de 2 j');
+  assert.deepEqual(victor.lignes[9].solde_par_annee, { 2026: 30 }, 'Ligne 10 de Victor : 2026 repart à 30 sans cumul des 17 j de 2025');
+  const sfVictor = victor.lignes.find((l) => l.type === 'SOLDE_FINAL');
+  assert.deepEqual(sfVictor.solde_par_annee, { 2024: 0, 2025: 17, 2026: 13 }, 'SOLDE_FINAL de Victor : 2024=0 (pas de -1), 2025=17, 2026=13');
+
+  // Aucun salarié actif ne doit avoir de solde négatif en bas des colonnes 2024 ou 2025
+  for (const p of etatAlign.parcours) {
+    assert.ok((p.bilans[2024]?.fin ?? 0) >= 0, `Mat ${p.numero_matricule} : aucun solde négatif en 2024 (${p.bilans[2024]?.fin})`);
+    assert.ok((p.bilans[2025]?.fin ?? 0) >= 0, `Mat ${p.numero_matricule} : aucun solde négatif en 2025 (${p.bilans[2025]?.fin})`);
+  }
+
+  // Édition manuelle SOLDE_FINAL sur une colonne ayant absorbé un débordement (Victor 2025 -> 10 j, puis reset)
+  assert.equal((await api.saisirSoldeAnnee(victor.employe_id, 2025, 10, meta, 'SOLDE_FINAL')).success, true, 'saisie solde final 2025 sur colonne alignée acceptée');
+  const victorModif = (await api.fetchEtatConges(2026, { inclureInactifs: false })).parcours.find((p) => p.numero_matricule === 13);
+  assert.equal(victorModif.bilans[2025].ouverture, 23, 'ouverture 2025 ajustée à 23 j (1 j absorbé de 2024 + 12 j pris en 2025 + 10 j fin = 23)');
+  assert.deepEqual(victorModif.lignes[5].solde_par_annee, { 2024: 1, 2025: 23 }, 'Ligne 6 de Victor aligne désormais 23 avec 1');
+  assert.equal(victorModif.bilans[2025].fin, 10, 'SOLDE_FINAL 2025 = 10 j exactement');
+  assert.equal((await api.saisirSoldeAnnee(victor.employe_id, 2025, null, meta)).success, true, 'reset 2025 de Victor accepté');
+  const victorReset = (await api.fetchEtatConges(2026, { inclureInactifs: false })).parcours.find((p) => p.numero_matricule === 13);
+  assert.deepEqual(victorReset.lignes[5].solde_par_annee, { 2024: 1, 2025: 30 });
+  assert.equal(victorReset.bilans[2025].fin, 17);
 
   // ----------------------------------------------------------------------------
   // 7. Vérification du script SQL relationnel WAMP des congés (wamp/sql/salfa_conges_excel.sql)
