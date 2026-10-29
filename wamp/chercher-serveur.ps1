@@ -1,6 +1,6 @@
 # Recherche volontairement limitee au sous-reseau IPv4 /24 de chaque carte privee.
 $ErrorActionPreference = 'SilentlyContinue'
-$path = 'salfa/'
+$path = 'Salaire_salfa/'
 function Test-Salfa([string]$base) {
     try {
         $base = $base.Trim().TrimEnd('/') + '/'
@@ -11,8 +11,12 @@ function Test-Salfa([string]$base) {
 }
 $found = New-Object System.Collections.Generic.List[string]
 $cache = Join-Path $PSScriptRoot 'serveur.local.txt'
-$known = @('http://127.0.0.1/salfa/')
-if (Test-Path $cache) { $known += (Get-Content $cache -First 1) }
+$known = @('http://127.0.0.1/Salaire_salfa/')
+if (Test-Path $cache) {
+    $cached = Get-Content $cache -First 1
+    # Ignorer une ancienne adresse en /salfa/ : l'application est dans /Salaire_salfa/.
+    if ($cached -match '/Salaire_salfa/?$') { $known += $cached }
+}
 foreach ($address in $known) { if ($address -and (Test-Salfa $address) -and -not $found.Contains($address)) { $found.Add($address) } }
 if ($found.Count -eq 0) {
     Write-Host 'Recherche du serveur SALFA sur le reseau local...'
@@ -42,9 +46,9 @@ if ($found.Count -gt 1) {
     $target = $found[$number-1]
 } elseif ($found.Count -eq 1) { $target = $found[0] }
 else {
-    Write-Host 'Serveur non trouve automatiquement. Entrez son adresse complete (exemple : http://192.168.1.10/salfa/).'
+    Write-Host 'Serveur non trouve automatiquement. Entrez son adresse complete (exemple : http://192.168.1.10/Salaire_salfa/).'
     $target = Read-Host 'Adresse du serveur'
-    if ($target -notmatch '^https?://[^/\s]+/salfa/?$' -or -not (Test-Salfa $target)) { Write-Host 'Serveur SALFA inaccessible ou adresse invalide.'; exit 1 }
+    if ($target -notmatch '^https?://[^/\s]+/Salaire_salfa/?$' -or -not (Test-Salfa $target)) { Write-Host 'Serveur SALFA inaccessible ou adresse invalide.'; exit 1 }
 }
 $target = $target.TrimEnd('/') + '/'
 Set-Content -Path $cache -Value $target -Encoding ASCII
