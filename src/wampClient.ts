@@ -2,7 +2,7 @@ import type { JsonStore } from './local/store';
 import { setRemoteStore, clearRemoteStore, getStore } from './local/store';
 import { setRemoteConfig } from './local/config';
 import { setRemoteHeader } from './bulletin/header';
-import { UserSession } from './types';
+import { UserSession, CompteUtilisateur } from './types';
 
 interface Snapshot { revision: number; store: JsonStore; config: any; header: any }
 let revision: number | null = null;
@@ -59,8 +59,9 @@ export function remoteWrite<T>(action: string, fn: () => Promise<T>, fallback: T
       const store = getStore();
       if (JSON.stringify(store) === before) return result;
       const saved = await request('save', { revision, action, store });
-      revision = saved.revision;
-      current = { ...current, revision, store };
+      const nextRev = Number(saved.revision);
+      revision = nextRev;
+      current = { ...current, revision: nextRev, store };
       return result;
     } catch (e) {
       stale = true;
@@ -78,8 +79,75 @@ export function remoteSaveSetting(kind: 'config' | 'header', value: unknown): Pr
     if (stale) throw new Error('Les données ont changé sur un autre poste. Rechargez la page.');
     try {
       const saved = await request('settings', { revision, kind, value });
-      revision = saved.revision;
-      current = { ...current, revision, [kind]: value };
+      const nextRev = Number(saved.revision);
+      revision = nextRev;
+      current = { ...current, revision: nextRev, [kind]: value };
     } catch (e) { stale = true; throw e; }
   });
+}
+
+export async function remoteUsersList(): Promise<CompteUtilisateur[]> {
+  const res = await request('users_list');
+  return Array.isArray(res.users) ? res.users : [];
+}
+
+export async function remoteUsersCreate(data: {
+  username: string;
+  nom_complet: string;
+  role: 'Administrateur' | 'Comptable';
+  password: string;
+}): Promise<{ success: boolean; message?: string; user?: CompteUtilisateur }> {
+  try {
+    const res = await request('users_create', data);
+    return { success: true, user: res.user };
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Création impossible.' };
+  }
+}
+
+export async function remoteUsersUpdate(
+  id: number,
+  data: { username: string; nom_complet: string; role: 'Administrateur' | 'Comptable' }
+): Promise<{ success: boolean; message?: string; user?: CompteUtilisateur }> {
+  try {
+    const res = await request('users_update', { id, ...data });
+    return { success: true, user: res.user };
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Modification impossible.' };
+  }
+}
+
+export async function remoteUsersPassword(
+  id: number,
+  password: string
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    await request('users_password', { id, password });
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Changement de mot de passe impossible.' };
+  }
+}
+
+export async function remoteUsersToggle(
+  id: number,
+  actif: boolean
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    await request('users_toggle', { id, actif });
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Action impossible.' };
+  }
+}
+
+export async function remoteUsersDelete(
+  id: number
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    await request('users_delete', { id });
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, message: e?.message || 'Suppression impossible.' };
+  }
 }

@@ -2,7 +2,11 @@
 // CONFIGURATION LOCALE DES PARAMÈTRES DE PAIE (IRSA / CNaPS / MATERNITÉ / ANCIENNETE)
 // Les valeurs sont stockées dans le localStorage et modifiables depuis la
 // modale Administration. Le moteur de calcul (calcul.ts) lit ces valeurs.
+// Les droits de congé / permission (congies) viennent de la FICHE D'ABSENCE et
+// servent au module Congés & Permissions ; leur référentiel vit dans conges.ts.
 // ==============================================================================
+
+import { CongesConfig, DEFAULT_CONGES_CONFIG, sanitizeCongesConfig } from './conges';
 
 // Barème d'ancienneté : années min/max -> indice multiplicateur sur base
 export interface BaremeAncienneteConfig {
@@ -35,6 +39,8 @@ export interface PaieConfig {
   plafondEspeces: number;   // plafond espèces quand RIB présent et RAP actif (ex: 5000)
   // Ancienneté
   baremeAnciennete: BaremeAncienneteConfig[];
+  // Congés, permissions et examens médicaux (module Congés & Permissions)
+  congies: CongesConfig;
 }
 
 export const DEFAULT_BAREME_ANCIENNETE: BaremeAncienneteConfig[] = [
@@ -71,6 +77,7 @@ export const DEFAULT_CONFIG: PaieConfig = {
   dureeMaterniteMois: 3,
   baremeAnciennete: DEFAULT_BAREME_ANCIENNETE,
   baremeIrsa: DEFAULT_BAREME_IRSA,
+  congies: { ...DEFAULT_CONGES_CONFIG },
 };
 
 const CONFIG_KEY = 'salfa_paie_config_v1';
@@ -79,7 +86,13 @@ let configCache: PaieConfig | null = null;
 let remoteConfig = false;
 export function setRemoteConfig(config: Partial<PaieConfig> | null): void {
   remoteConfig = true;
-  configCache = { ...DEFAULT_CONFIG, ...(config || {}), baremeAnciennete: config?.baremeAnciennete || [...DEFAULT_CONFIG.baremeAnciennete], baremeIrsa: config?.baremeIrsa || [...DEFAULT_CONFIG.baremeIrsa] };
+  configCache = {
+    ...DEFAULT_CONFIG,
+    ...(config || {}),
+    baremeAnciennete: config?.baremeAnciennete || [...DEFAULT_CONFIG.baremeAnciennete],
+    baremeIrsa: config?.baremeIrsa || [...DEFAULT_CONFIG.baremeIrsa],
+    congies: sanitizeCongesConfig(config?.congies),
+  };
 }
 
 function sanitizeBaremeAnciennete(raw: any): BaremeAncienneteConfig[] {
@@ -125,11 +138,15 @@ export function loadConfig(): PaieConfig {
   } catch (e) {
     console.warn('[CONFIG] Lecture config impossible.', e);
   }
+  const rawCongies = loaded.congies && (loaded.congies as any).versionCalendrier !== 2
+    ? { ...loaded.congies, exclureDimanche: false, versionCalendrier: 2 }
+    : loaded.congies;
   const merged: PaieConfig = {
     ...DEFAULT_CONFIG,
     ...loaded,
     baremeAnciennete: loaded.baremeAnciennete ? sanitizeBaremeAnciennete(loaded.baremeAnciennete) : [...DEFAULT_CONFIG.baremeAnciennete],
     baremeIrsa: loaded.baremeIrsa ? sanitizeBaremeIrsa(loaded.baremeIrsa) : [...DEFAULT_CONFIG.baremeIrsa],
+    congies: sanitizeCongesConfig(rawCongies),
   };
   // sécuriser les nombres
   merged.cnapsSalariale = Number(merged.cnapsSalariale) || DEFAULT_CONFIG.cnapsSalariale;
@@ -154,6 +171,7 @@ export function saveConfig(cfg: Partial<PaieConfig>): PaieConfig {
   };
   if (cfg.baremeAnciennete) nextRaw.baremeAnciennete = sanitizeBaremeAnciennete(cfg.baremeAnciennete);
   if (cfg.baremeIrsa) nextRaw.baremeIrsa = sanitizeBaremeIrsa(cfg.baremeIrsa);
+  if (cfg.congies) nextRaw.congies = sanitizeCongesConfig({ ...cfg.congies, versionCalendrier: 2 });
 
   // re-sanitize nombres
   nextRaw.cnapsSalariale = Number(nextRaw.cnapsSalariale) || 0;
@@ -180,6 +198,7 @@ export function resetConfig(): PaieConfig {
     ...DEFAULT_CONFIG,
     baremeAnciennete: [...DEFAULT_CONFIG.baremeAnciennete],
     baremeIrsa: [...DEFAULT_CONFIG.baremeIrsa.map(t => ({ ...t }))],
+    congies: { ...DEFAULT_CONGES_CONFIG },
   };
   try {
     if (!remoteConfig) localStorage.setItem(CONFIG_KEY, JSON.stringify(configCache));
