@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "[ -d node_modules ] || npm install --quiet; vite",
     "build": "[ -d node_modules ] || npm install --quiet; vite build",
+    "build:wamp": "[ -d node_modules ] || npm install --quiet; vite build --mode wamp --base=./",
+    "sql:conges": "node scripts/generer_sql_conges_wamp.cjs",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
     "deploy:pages": "npm run build && wrangler pages deploy dist --project-name salfa-web-paie",

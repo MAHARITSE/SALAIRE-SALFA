@@ -1637,6 +1637,9 @@ export async function modifierConge(id: number, draft: Partial<CongeAbsence>, me
   if (draft.date_retour === undefined && (draft.date_debut !== undefined || draft.date_fin !== undefined || draft.jours_demandes !== undefined)) {
     fusion.date_retour = '';
   }
+  if (draft.jours_valides === undefined && (draft.jours_demandes !== undefined || draft.date_fin !== undefined)) {
+    fusion.jours_valides = null;
+  }
   const { erreur, avertissement, ligne } = await prepareConge(fusion, store, Number(id));
   if (erreur || !ligne) return { success: false, message: erreur || 'Fiche invalide.' };
   ligne.saisie_par = nettoyerTexte(store.conges[idx].saisie_par || meta?.utilisateur, 60);
@@ -1735,16 +1738,20 @@ export async function supprimerConge(id: number, meta: CongeMeta): Promise<Sanct
 }
 
 /**
- * Saisie directe du solde initial dans la première case de la liste des années
- * de l'État « Contrôle des congés et permissions » (0 à 30 j / joursCongeParAn).
- * Autorisée au Comptable comme à l'Administrateur ; `valeur = null` réinitialise
- * le calcul automatique (plafonné à 30 j, sans cumul des congés antérieurs non pris).
+ * Saisie directe du solde dans N'IMPORTE QUELLE colonne d'année (ex. 2024, 2025, 2026…)
+ * de l'État « Contrôle des congés et permissions ».
+ * - `mode = 'OUVERTURE'` (par défaut) : fixe le solde d'ouverture de l'année `annee`.
+ * - `mode = 'SOLDE_FINAL'` : ajuste automatiquement l'ouverture pour que le solde de fin
+ *   de l'année `annee` soit exactement égal à `valeur`.
+ * - `valeur = null` : supprime la saisie manuelle de cette année et rétablit le calcul automatique.
+ * Autorisée au Comptable comme à l'Administrateur, sans plafond restrictif.
  */
 export async function saisirOuverturePremiereAnnee(
   employeId: number,
   annee: number,
   valeur: number | null,
-  meta?: CongeMeta
+  meta?: CongeMeta,
+  mode: 'OUVERTURE' | 'SOLDE_FINAL' = 'OUVERTURE'
 ): Promise<SanctionConge & { ouverture?: number }> {
   const store = getStore();
   if (!storeEstSynchronise()) {
@@ -1757,14 +1764,8 @@ export async function saisirOuverturePremiereAnnee(
   if (anneeCible < 1990 || anneeCible > 2100) {
     return { success: false, message: 'Année invalide.' };
   }
-  const embM = /^(\d{4})/.exec(String(emp.date_embauche || '').trim());
-  const anneeEmbauche = embM ? Number(embM[1]) : 0;
-  if (anneeEmbauche > 0 && anneeCible < anneeEmbauche) {
-    return { success: false, message: "Aucun droit n'est ouvert avant l'année d'embauche." };
-  }
 
   const cfg = configConges();
-  const maxJours = cfg.joursCongeParAn;
   if (!Array.isArray(store.conges)) store.conges = [];
   const sauvegarde = store.conges.slice();
 
@@ -1788,17 +1789,24 @@ export async function saisirOuverturePremiereAnnee(
   if (!Number.isFinite(num)) {
     return { success: false, message: 'Veuillez saisir un nombre de jours valide.' };
   }
-  if (num < 0) {
-    return { success: false, message: `La première case ne peut pas être négative (0 à ${maxJours} jours).` };
-  }
-  if (num > maxJours) {
-    return {
-      success: false,
-      message: `La première case ne peut pas dépasser ${maxJours} jours (les congés antérieurs non pris ne sont pas cumulés).`,
-    };
+  if (num < -365 || num > 365) {
+    return { success: false, message: 'Le solde saisi doit être compris entre -365 et 365 jours.' };
   }
 
-  const val = Math.round(num * 100) / 100;
+  let cibleOuverture = Math.round(num * 100) / 100;
+  if (mode === 'SOLDE_FINAL') {
+    const eventsAnnee = store.conges
+      .map((raw: any) => normaliserConge(raw, cfg))
+      .filter((c: CongeAbsence) => Number(c.employe_id) === Number(emp.id) && Number(c.annee) === anneeCible);
+    const prisAnnee = eventsAnnee
+      .filter((c: CongeAbsence) => c.categorie !== 'AJUSTEMENT' && c.statut === 'VALIDE' && c.imputation === 'CONGE')
+      .reduce((s: number, c: CongeAbsence) => s + Number(c.jours_valides ?? c.jours_demandes ?? 0), 0);
+    const autresAjusts = eventsAnnee
+      .filter((c: CongeAbsence) => c.categorie === 'AJUSTEMENT' && c.ajustement_type !== 'OUVERTURE' && c.statut === 'VALIDE')
+      .reduce((s: number, c: CongeAbsence) => s + Number(c.jours_valides ?? c.jours_demandes ?? 0), 0);
+    cibleOuverture = Math.round((cibleOuverture + prisAnnee - autresAjusts) * 100) / 100;
+  }
+
   const existIdx = store.conges.findIndex(
     (c: any) =>
       Number(c.employe_id) === Number(emp.id) &&
@@ -1832,11 +1840,11 @@ export async function saisirOuverturePremiereAnnee(
     annee: anneeCible,
     date_demande: `${anneeCible}-01-01`,
     date_debut: `${anneeCible}-01-01`,
-    jours_demandes: val,
+    jours_demandes: cibleOuverture,
     jours_valides: null,
     statut: 'VALIDE',
-    motif_libelle: `Solde initial ${anneeCible} (${val} j)`,
-    observations: "Saisie directe dans la première case de l'état de contrôle.",
+    motif_libelle: `Solde ${anneeCible} (${cibleOuverture} j)`,
+    observations: `Saisie directe (${mode === 'SOLDE_FINAL' ? 'solde final' : 'ouverture'}) dans le tableau de contrôle ${anneeCible}.`,
     saisie_par: qui,
     date_saisie: dateSaisieConservee,
     date_modification: nowStamp(),
@@ -1847,8 +1855,10 @@ export async function saisirOuverturePremiereAnnee(
     store.conges = sauvegarde;
     return { success: false, message: "L'enregistrement a échoué." };
   }
-  return { success: true, id: ligne.id, ouverture: val };
+  return { success: true, id: ligne.id, ouverture: cibleOuverture };
 }
+
+export const saisirSoldeAnnee = saisirOuverturePremiereAnnee;
 
 /** Import des fiches d'absence lues dans un « CONTRÔLE DES CONGÉS ET PERMISSIONS ». */
 export async function importerConges(

@@ -108,21 +108,28 @@ export function loadStore(): JsonStore {
   }
 
   // Les fiches d'absence arrivent d'une version antérieure du store : garantir la liste
-  // et charger une seule fois l'historique du contrôle SALFA si aucune fiche n'était présente.
+  // et mettre à jour l'historique du contrôle SALFA oct. 2026 en préservant les saisies manuelles.
   if (!Array.isArray(loaded.conges)) loaded.conges = [];
-  if (loaded.meta?.conges_version !== 'controle-2026') {
-    if (loaded.conges.length === 0) {
+  if (loaded.meta?.conges_version !== 'controle-2026-10') {
+    if (loaded.conges.length === 0 || loaded.meta?.conges_version === 'controle-2026') {
+      loaded.conges = loaded.conges.filter((x: any) => x.saisie_par && x.saisie_par !== 'Import Excel');
       const seed = seedStore();
       const byMat = new Map(loaded.employes.map((e: any) => [Number(e.numero_matricule), e]));
-      let nextC = 0;
+      let nextC = loaded.conges.reduce((m: number, x: any) => Math.max(m, Number(x.id) || 0), 0);
+      const seen = new Set(
+        loaded.conges.map((x: any) => `${Number(x.employe_id)}|${x.date_debut}|${x.categorie}|${Number(x.jours_demandes)}`)
+      );
       for (const c of seed.conges || []) {
         const emp = byMat.get(Number(c.numero_matricule));
-        if (emp) {
+        if (!emp) continue;
+        const key = `${Number(emp.id)}|${c.date_debut}|${c.categorie}|${Number(c.jours_demandes)}`;
+        if (!seen.has(key)) {
           loaded.conges.push({ ...c, id: ++nextC, employe_id: Number(emp.id) });
+          seen.add(key);
         }
       }
     }
-    loaded.meta = { ...loaded.meta, conges_version: 'controle-2026' };
+    loaded.meta = { ...loaded.meta, conges_version: 'controle-2026-10' };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded)); }
     catch (e) { console.error('[LOCAL STORE] Migration congés non sauvegardée.', e); }
   }

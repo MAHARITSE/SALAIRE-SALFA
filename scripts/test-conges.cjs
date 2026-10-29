@@ -193,19 +193,20 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   const api = bundle('src/api-local.ts', 'api');
 
   const tousEmployes = await api.fetchEmployes(true);
-  // Vérifier la reprise embarquée du fichier réel « CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb »
+  // Vérifier la reprise embarquée du fichier réel « CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb » (oct. 2026)
   const sitInitiale = await api.fetchSituationConges(2026, false);
   const verifReels = [
-    [1, 2025, 9],
-    [3, 2025, 15],
-    [6, 2026, 20],
-    [34, 2024, 4],
+    [1, 2026, 24],
+    [3, 2026, 30],
+    [6, 2026, -3],
+    [34, 2025, 28],
     [43, 2026, 17],
     [47, 2024, 16],
-    [48, 2025, 21],
-    [60, 2025, 3],
-    [63, 2025, 23],
+    [48, 2025, 9],
+    [60, 2026, 23],
+    [63, 2026, 28],
     [64, 2025, 4],
+    [67, 2025, 20],
   ];
   for (const [mat, expTitre, expReste] of verifReels) {
     const s = sitInitiale.find((x) => x.numero_matricule === mat);
@@ -404,7 +405,16 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal(xlsbAnalyse.feuilles.find((f) => f.nom === '2026').reconnue, true);
   assert.equal(xlsbAnalyse.feuilles.find((f) => f.nom === '2025').archiveProbable, true);
   const matches2026 = new Set(xlsbAnalyse.lignes.filter((l) => l.feuille === '2026' && l.employe_id !== null).map((l) => l.employe_id));
-  assert.equal(matches2026.size, 44, 'les 44 salariés SALFA présents dans le contrôle .xlsb sont reconnus');
+  assert.equal(matches2026.size, 45, 'les 45 salariés SALFA 2026 présents dans le contrôle .xlsb (dont LUCILLE MARGUERITE) sont reconnus');
+  // Vérifier le nettoyage des saisies atypiques du classeur .xlsb
+  const lLydia = xlsbAnalyse.lignes.find((l) => l.feuille === '2026' && /VOAHANGIARISOA/i.test(l.nom) && l.date_debut === '2023-07-17');
+  assert.ok(lLydia, 'date saisie « 17/07§2023 » normalisée en 2023-07-17');
+  const lRalaivao = xlsbAnalyse.lignes.find((l) => l.feuille === '2026' && /RALAIVAO/i.test(l.nom) && l.categorie === 'PERMISSION' && l.date_debut === '2026-07-05');
+  assert.ok(lRalaivao && lRalaivao.motif_code === 'Tera-bady', '« TERA-BADY05/07/2026 » séparé en date 2026-07-05 + motif Tera-bady');
+  const lZafihaingo = xlsbAnalyse.lignes.find((l) => l.feuille === '2026' && /ZAFIHAINGO/i.test(l.nom) && l.categorie === 'PERMISSION');
+  assert.equal(lZafihaingo.motif, '15/09/2025', 'cellule Date dans MOTIFS formatée proprement en JJ/MM/AAAA');
+  const lDidim = xlsbAnalyse.lignes.find((l) => l.feuille === '2026' && /RANDRIANANTOANDRO/i.test(l.nom) && l.categorie === 'PERMISSION');
+  assert.equal(lDidim.motif_code, 'Didim-poitra zanaka', '« DIDI-MPOITRA » reconnu comme Didim-poitra zanaka');
 
   const { jsPDF } = require('jspdf');
   const pdfOut = path.join(tmp, 'congesPdf.cjs');
@@ -457,9 +467,9 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   const vazison = sit2026Verif.find((s) => s.numero_matricule === 20);
   const raharilalaintsoa = sit2026Verif.find((s) => s.numero_matricule === 32);
   assert.equal(vazison.ouverture, 61, 'Mat 20 : sans cumul avant 2024 (30-13=17, 47-16=31), ouverture 2026 = 61 j');
-  assert.equal(vazison.restant, 41, 'Mat 20 : 61 - 20 = 41 j restants sur [2024..2026]');
+  assert.equal(vazison.restant, 38, 'Mat 20 : 61 - 23 = 38 j restants sur [2024..2026]');
   assert.equal(raharilalaintsoa.ouverture, 65, 'Mat 32 : sans cumul avant 2024 (30-12=18, 48-13=35), ouverture 2026 = 65 j');
-  assert.equal(raharilalaintsoa.restant, 58, 'Mat 32 : 65 - 7 = 58 j restants sur [2024..2026]');
+  assert.equal(raharilalaintsoa.restant, 43, 'Mat 32 : 65 - 22 = 43 j restants sur [2024..2026]');
 
   // Toute tentative de demander un congé en 2026 sur un titre prescrit (< 2024) est refusée.
   const refusPrescrit = await api.creerConge({
@@ -501,9 +511,9 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   const mat1Oct = paiesOct.employes.find((p) => p.numero_matricule === 1);
   const mat47Oct = paiesOct.employes.find((p) => p.numero_matricule === 47);
   assert.equal(mat1Oct.conge_pris_mois, 0);
-  assert.equal(mat1Oct.conge_restant, 39);
-  assert.equal(mat1Oct.conge_titre_actif, 2025);
-  assert.equal(mat1Oct.conge_reste_titre, 9);
+  assert.equal(mat1Oct.conge_restant, 24);
+  assert.equal(mat1Oct.conge_titre_actif, 2026);
+  assert.equal(mat1Oct.conge_reste_titre, 24);
   assert.equal(mat47Oct.conge_restant, 76);
   assert.equal(mat47Oct.conge_titre_actif, 2024);
   assert.equal(mat47Oct.conge_reste_titre, 16);
@@ -516,9 +526,9 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.ok(colsEtat.some((c) => c.cle === 'conge_restant'), 'Colonne Congé Restant présente dans l’État des Congés');
   const parcMat1 = etat2026.parcours.find((p) => p.numero_matricule === 1);
   const sfMat1 = parcMat1.lignes.find((l) => l.type === 'SOLDE_FINAL');
-  assert.equal(EC.valeurCellule(sfMat1, 'jours_conge', parcMat1, etat2026.annees), '10', 'SOLDE_FINAL Mat 1 : 10 j pris en 2026');
-  assert.equal(EC.valeurCellule(sfMat1, 'conge_restant', parcMat1, etat2026.annees), '39', 'SOLDE_FINAL Mat 1 : 39 j restants');
-  assert.match(String(EC.valeurCellule(sfMat1, 'date_conge', parcMat1, etat2026.annees)), /Titre 2025 \(9 j\)/);
+  assert.equal(EC.valeurCellule(sfMat1, 'jours_conge', parcMat1, etat2026.annees), '25', 'SOLDE_FINAL Mat 1 : 25 j pris en 2026');
+  assert.equal(EC.valeurCellule(sfMat1, 'conge_restant', parcMat1, etat2026.annees), '24', 'SOLDE_FINAL Mat 1 : 24 j restants');
+  assert.match(String(EC.valeurCellule(sfMat1, 'date_conge', parcMat1, etat2026.annees)), /Titre 2026 \(24 j\)/);
 
   // ----------------------------------------------------------------------------
   // 6. Règle 1re case d'année : plafonnée à 30 j (pas de cumul avant 2024 / 1re année),
@@ -545,28 +555,88 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal(parc13_2027.bilans[2025].ouverture, 29, 'Mat 13 en 2027 : 1re case 2025 = 29 j (< 30 j suite à avance consommée)');
   assert.equal(parc14_2027.bilans[2025].ouverture, 27, 'Mat 14 en 2027 : 1re case 2025 = 27 j (< 30 j suite à avance consommée)');
 
-  // Saisie directe par le comptable dans la 1re case de la liste des années (0 à 30 j)
-  assert.equal((await api.saisirOuverturePremiereAnnee(parcMat1.employe_id, 2024, 35, meta)).success, false, '> 30 j refusé');
-  assert.equal((await api.saisirOuverturePremiereAnnee(parcMat1.employe_id, 2024, -1, meta)).success, false, '< 0 j refusé');
+  // Contrôle total de saisie dans le tableau 2024 / 2025 / 2026 (ouverture, solde final, valeurs > 30 j ou < 0 j, et modification en ligne)
+  assert.deepEqual(EC.anneesEditables(parcMat1, etat2026.annees), [2024, 2025, 2026], 'toutes les années 2024/2025/2026 sont éditables');
+  assert.deepEqual(EC.anneesEditables(parcMat63, etat2026.annees), [2024, 2025, 2026], 'toutes les années 2024/2025/2026 sont éditables même pour embauche 2025');
+
+  // 1) Saisie directe sur 2024 (22 j, puis > 30 j et < 0 j autorisés)
   const resSaisie22 = await api.saisirOuverturePremiereAnnee(parcMat1.employe_id, 2024, 22, meta);
-  assert.equal(resSaisie22.success, true, 'saisie de 22 j dans la 1re case 2024 acceptée pour le comptable');
+  assert.equal(resSaisie22.success, true, 'saisie de 22 j en 2024 acceptée pour le comptable');
   const etatApres22 = await api.fetchEtatConges(2026);
   const mat1Apres22 = etatApres22.parcours.find((p) => p.numero_matricule === 1);
-  assert.equal(mat1Apres22.bilans[2024].ouverture, 22, '1re case 2024 mise à 22 j');
-  assert.equal(mat1Apres22.bilans[2024].ouvertureSaisie, true, 'marqueur de saisie manuelle actif');
+  assert.equal(mat1Apres22.bilans[2024].ouverture, 22, 'ouverture 2024 mise à 22 j');
+  assert.equal(mat1Apres22.bilans[2024].ouvertureSaisie, true, 'marqueur de saisie manuelle 2024 actif');
   assert.equal(mat1Apres22.bilans[2024].fin, 2, '22 - 20 = 2 j fin 2024');
   assert.equal(mat1Apres22.bilans[2025].ouverture, 32, '2 + 30 = 32 j ouverture 2025');
-  assert.equal(mat1Apres22.bilans[2026].fin, 31, 'solde fin 2026 répercuté à 31 j');
-  assert.equal((await api.fetchPaiesMois(2026, 'OCTOBRE')).employes.find((p) => p.numero_matricule === 1).conge_restant, 31, 'bulletin/état de paie synchronisé à 31 j');
+  assert.equal(mat1Apres22.bilans[2026].fin, 16, 'solde fin 2026 répercuté à 16 j (41 - 25)');
+  assert.equal((await api.fetchPaiesMois(2026, 'OCTOBRE')).employes.find((p) => p.numero_matricule === 1).conge_restant, 16, 'bulletin/état de paie synchronisé à 16 j');
 
-  // Valeur 0 autorisée + réinitialisation au calcul automatique (null)
-  assert.equal((await api.saisirOuverturePremiereAnnee(parcMat1.employe_id, 2024, 0, meta)).success, true, '0 j autorisé dans la 1re case');
-  assert.equal((await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1).bilans[2024].ouverture, 0);
-  assert.equal((await api.saisirOuverturePremiereAnnee(parcMat1.employe_id, 2024, null, meta)).success, true, 'réinitialisation acceptée');
+  assert.equal((await api.saisirOuverturePremiereAnnee(parcMat1.employe_id, 2024, 35, meta)).success, true, '> 30 j autorisé en contrôle total');
+  assert.equal((await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1).bilans[2024].ouverture, 35);
+  assert.equal((await api.saisirOuverturePremiereAnnee(parcMat1.employe_id, 2024, -2, meta)).success, true, '< 0 j autorisé en contrôle total');
+  assert.equal((await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1).bilans[2024].ouverture, -2);
+  assert.equal((await api.saisirOuverturePremiereAnnee(parcMat1.employe_id, 2024, null, meta)).success, true, 'réinitialisation 2024 acceptée');
+
+  // 2) Saisie directe sur 2025 (OUVERTURE et SOLDE_FINAL)
+  assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2025, 50, meta, 'OUVERTURE')).success, true, 'saisie ouverture 2025 acceptée');
+  let mat1_2025 = (await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1);
+  assert.equal(mat1_2025.bilans[2025].ouverture, 50, 'ouverture 2025 fixée à 50 j');
+  assert.equal(mat1_2025.bilans[2025].ouvertureSaisie, true);
+  assert.equal(mat1_2025.bilans[2025].fin, 29, '50 - 21 = 29 j fin 2025');
+  assert.equal(mat1_2025.bilans[2026].ouverture, 59, '29 + 30 = 59 j ouverture 2026');
+  assert.equal(mat1_2025.bilans[2026].fin, 34, '59 - 25 = 34 j fin 2026');
+
+  assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2025, 30, meta, 'SOLDE_FINAL')).success, true, 'saisie solde final 2025 acceptée');
+  mat1_2025 = (await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1);
+  assert.equal(mat1_2025.bilans[2025].fin, 30, 'solde final 2025 fixé exactement à 30 j');
+  assert.equal(mat1_2025.bilans[2026].ouverture, 60, '30 + 30 = 60 j ouverture 2026');
+  assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2025, null, meta)).success, true, 'réinitialisation 2025 acceptée');
+
+  // 3) Saisie directe sur 2026 (OUVERTURE et SOLDE_FINAL)
+  assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2026, 45, meta, 'OUVERTURE')).success, true, 'saisie ouverture 2026 acceptée');
+  let mat1_2026 = (await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1);
+  assert.equal(mat1_2026.bilans[2026].ouverture, 45, 'ouverture 2026 fixée à 45 j');
+  assert.equal(mat1_2026.bilans[2026].fin, 20, '45 - 25 = 20 j fin 2026');
+
+  assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2026, 18, meta, 'SOLDE_FINAL')).success, true, 'saisie solde final 2026 acceptée');
+  mat1_2026 = (await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1);
+  assert.equal(mat1_2026.bilans[2026].fin, 18, 'solde final 2026 fixé exactement à 18 j');
+  assert.equal((await api.fetchPaiesMois(2026, 'OCTOBRE')).employes.find((p) => p.numero_matricule === 1).conge_restant, 18, 'bulletin synchronisé à 18 j');
+  assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2026, null, meta)).success, true, 'réinitialisation 2026 acceptée');
+
+  // 4) Saisie 2024 sur un salarié embauché en 2025 (aucun blocage) + reset
+  assert.equal((await api.saisirSoldeAnnee(parcMat63.employe_id, 2024, 10, meta, 'OUVERTURE')).success, true, 'saisie 2024 acceptée même pour embauche 2025');
+  assert.equal((await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 63).bilans[2024].ouverture, 10);
+  assert.equal((await api.saisirSoldeAnnee(parcMat63.employe_id, 2024, null, meta)).success, true);
+
+  // 5) Modification en ligne des jours demandés sur une fiche validée
+  const premiereDemandeMat1 = parcMat1.lignes.find((l) => l.type === 'DEMANDE' && l.annee === 2026 && l.categorie === 'CONGE');
+  const joursOrigMat1 = premiereDemandeMat1.jours_conge;
+  assert.equal((await api.modifierConge(premiereDemandeMat1.conge_id, { jours_demandes: joursOrigMat1 + 2 }, meta)).success, true);
+  assert.equal((await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1).soldeActuel, 22, 'solde recalculé immédiatement après édition en ligne des jours');
+  assert.equal((await api.modifierConge(premiereDemandeMat1.conge_id, { jours_demandes: joursOrigMat1 }, meta)).success, true);
+
   const mat1Reset = (await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1);
   assert.equal(mat1Reset.bilans[2024].ouverture, 30, 'retour à 30 j automatiques');
   assert.equal(mat1Reset.bilans[2024].ouvertureSaisie, false);
-  assert.equal(mat1Reset.soldeActuel, 39, 'solde 2026 revenu à 39 j');
+  assert.equal(mat1Reset.soldeActuel, 24, 'solde 2026 revenu à 24 j');
+
+  // ----------------------------------------------------------------------------
+  // 7. Vérification du script SQL WAMP des congés (wamp/sql/salfa_conges_excel.sql)
+  // ----------------------------------------------------------------------------
+  const sqlConges = fs.readFileSync('wamp/sql/salfa_conges_excel.sql', 'utf8');
+  assert.ok(sqlConges.includes('CREATE DATABASE IF NOT EXISTS `salfa_paie`'), 'création base salfa_paie');
+  assert.ok(sqlConges.includes('START TRANSACTION;') && sqlConges.includes('COMMIT;'), 'transaction atomique');
+  assert.ok(!/\bDROP\s+(TABLE|DATABASE)\b/i.test(sqlConges), 'aucun DROP destructif (droits minimaux WAMP)');
+  assert.ok(!/\bDELETE\s+FROM\b/i.test(sqlConges), 'aucun DELETE (conservation des données)');
+  let jsonReconstruit = '';
+  for (const ligneSql of sqlConges.split('\n')) {
+    const mSql = ligneSql.match(/^SET @conges_json = (?:CONCAT\(@conges_json, )?'(.*)'\)?;$/);
+    if (mSql) jsonReconstruit += mSql[1].replace(/''/g, "'").replace(/\\\\/g, '\\');
+  }
+  const congesDuSql = JSON.parse(jsonReconstruit);
+  assert.equal(congesDuSql.length, 610, '610 fiches (527 salariés 2026 + 83 anciens 2022–2025) dans salfa_conges_excel.sql');
+  assert.ok(congesDuSql.every((c) => /^__MAT_\d+__$/.test(c.employe_id)), 'jetons dynamiques __MAT_<M>__ prêts pour résolution MySQL');
 
   console.log('Congés & Permissions : tests OK');
 })().catch((e) => {

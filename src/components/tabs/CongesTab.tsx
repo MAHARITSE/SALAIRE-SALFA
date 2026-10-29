@@ -176,22 +176,62 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
   const saisirOuverture = useCallback(async (
     employeId: number,
     anneeCible: number,
-    valeur: number | null
+    valeur: number | null,
+    mode: 'OUVERTURE' | 'SOLDE_FINAL' = 'OUVERTURE'
   ): Promise<boolean> => {
-    const res = await saisirOuverturePremiereAnnee(employeId, anneeCible, valeur, meta);
+    const res = await saisirOuverturePremiereAnnee(employeId, anneeCible, valeur, meta, mode);
     if (!res.success) {
       setMessage({ type: 'err', texte: res.message || 'Saisie non enregistrée.' });
       return false;
     }
     await charger();
+    const labelMode = mode === 'SOLDE_FINAL' ? 'Solde final' : 'Solde d’ouverture';
     setMessage({
       type: 'ok',
       texte: valeur === null
-        ? `Solde initial ${anneeCible} rétabli au calcul automatique.`
-        : `Solde initial ${anneeCible} enregistré (${encadre(valeur)} j) et répercuté sur l’état et les bulletins.`,
+        ? `Solde ${anneeCible} rétabli au calcul automatique.`
+        : `${labelMode} ${anneeCible} enregistré (${encadre(valeur)} j) et répercuté sur l’état et les bulletins.`,
     });
     return true;
   }, [meta.utilisateur, meta.role, charger]);
+
+  const modifierJoursDepuisTableau = useCallback(async (
+    congeId: number,
+    jours: number
+  ): Promise<boolean> => {
+    const res = await modifierConge(congeId, { jours_demandes: jours }, meta);
+    if (!res.success) {
+      setMessage({ type: 'err', texte: res.message || 'Modification refusée.' });
+      return false;
+    }
+    await charger();
+    setMessage({
+      type: 'ok',
+      texte: [`Jours demandés mis à jour (${encadre(jours)} j).`, res.avertissement].filter(Boolean).join(' '),
+    });
+    return true;
+  }, [meta.utilisateur, meta.role, charger]);
+
+  const creerDansAnneeDepuisTableau = useCallback((employeId: number, anneeCible: number) => {
+    const emp = employes.find((e) => Number(e.id) === Number(employeId));
+    const dateDefaut = `${anneeCible}-01-02`;
+    setModal({
+      ouvert: true,
+      initial: {
+        employe_id: employeId,
+        service: emp?.jobs || '',
+        contact: contactsConnus[employeId] || '',
+        categorie: 'CONGE',
+        imputation: 'CONGE',
+        annee: anneeCible,
+        date_demande: dateDefaut,
+        date_debut: dateDefaut,
+        jours_demandes: 1,
+        titre_periode: `Titre ${anneeCible}`,
+        statut: 'VALIDE',
+      },
+    });
+  }, [employes, contactsConnus]);
 
   const enregistrer = async (
     draft: Partial<CongeAbsence>,
@@ -636,7 +676,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             </div>
             {etat && etat.annees.length > 0 && (
               <div className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400">
-                Première case d’année (<b>{etat.annees[0]}</b>) modifiable directement (<b>0 à {encadre(etat.config.joursCongeParAn)} j</b> — aucun cumul des congés non pris avant cette période ; valeur &lt; {encadre(etat.config.joursCongeParAn)} j possible en cas d’avance déjà consommée).
+                Contrôle total de saisie activé sur toutes les colonnes <b>{etat.annees.join(', ')}</b> : modifiez librement le solde d’ouverture ou le solde final de chaque année, les <b>jours demandés</b> en ligne, ou cliquez sur <b>+ {etat.annees.join(' / + ')}</b> pour ajouter une absence. (Vider une case jaune rétablit le calcul automatique.)
               </div>
             )}
           </div>
@@ -645,11 +685,13 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
               etat={etat}
               onOuvrir={(id) => { const c = conges.find((x) => Number(x.id) === id); if (c) setModal({ ouvert: true, initial: c }); }}
               onSaisirOuverture={saisirOuverture}
+              onModifierJours={modifierJoursDepuisTableau}
+              onCreerDansAnnee={creerDansAnneeDepuisTableau}
             />
           )}
           <div className="mt-2 flex flex-wrap justify-between gap-2 text-[9px] sm:text-[10px] text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 pt-2">
             <span>
-              Lecture du classeur : solde de congé par année (colonnes {etat?.annees.join(', ')}, 1re case plafonnée à {encadre(config.joursCongeParAn)} j et modifiable) ; à droite, jours et dates de congé, puis droit de permission, jours, date, reste et motifs.
+              Contrôle total de saisie : colonnes {etat?.annees.join(', ')} modifiables (ouverture et solde final), jours demandés éditables dans le tableau, clic sur une date ou un motif pour ouvrir la fiche complète.
             </span>
             <span>Édité le {new Date().toLocaleDateString('fr-FR')} — CLINIQUE SALFA TANAMBAO · Gestion des Congés & Permissions</span>
           </div>
