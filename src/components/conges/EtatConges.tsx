@@ -20,13 +20,14 @@ const LARGEURS = {
  * (conservée pour compatibilité).
  */
 export function premiereAnneeEditable(p: ParcoursConges, annees: number[]): number | null {
-  if (!annees.length) return null;
+  if (p.inactif || !annees.length) return null;
   const trouv = annees.find((a) => !p.annee_embauche || a >= p.annee_embauche);
   return trouv ?? annees[0];
 }
 
-/** Retourne toutes les colonnes d'années modifiables dans le tableau (ex. [2024, 2025, 2026]). */
-export function anneesEditables(_p: ParcoursConges, annees: number[]): number[] {
+/** Retourne toutes les colonnes d'années modifiables dans le tableau (aucune si salarié inactif). */
+export function anneesEditables(p: ParcoursConges, annees: number[]): number[] {
+  if (p.inactif) return [];
   return annees.slice();
 }
 
@@ -87,13 +88,15 @@ const CelluleSoldeAnneeEditable: React.FC<{
   return (
     <input
       type="number"
+      min={0}
+      max={30}
       step="0.5"
       disabled={enCours}
       aria-label={`${libelleType} — ${nomPrenoms}`}
       title={
         estSaisieManuelle
-          ? `${libelleType} saisi manuellement (${fmtJours(valeur)} j). Vider puis valider (Entrée) pour rétablir le calcul automatique.`
-          : `Saisir directement le ${libelleType.toLowerCase()} de ${nomPrenoms}.`
+          ? `${libelleType} saisi manuellement (${fmtJours(valeur)} j, max 30 j/an indépendant). Vider puis valider (Entrée) pour rétablir le calcul automatique.`
+          : `Saisir directement le ${libelleType.toLowerCase()} de ${nomPrenoms} (0 à 30 j — gestion indépendante par année).`
       }
       value={texte}
       onFocus={(e) => {
@@ -208,7 +211,7 @@ interface ColonnesEtat {
 export function colonnesEtat(annees: number[]): { groupes: string[]; colonnes: ColonnesEtat[] } {
   const groupes = [
     'IDENTIFICATION',
-    annees.length === 3 ? 'SOLDE DE CONGÉ (3 DERNIÈRES ANNÉES)' : 'SOLDE DE CONGÉ PAR ANNÉE',
+    'SOLDE DE CONGÉ PAR ANNÉE (MAX 30 J / AN — INDÉPENDANT)',
     'CONGÉ',
     'PERMISSION',
     'SUIVI',
@@ -333,7 +336,7 @@ export const EtatCongesEcran: React.FC<{
                   key={c.cle}
                   title={
                     estColAnneeEditable
-                      ? `Saisie directe autorisée sur ${c.label} (ouverture et solde de fin d'année)`
+                      ? `Saisie directe sur ${c.label} (plafonnée à 30 j/an, gérée indépendamment des autres années)`
                       : estColJoursEditable
                         ? 'Modification directe du nombre de jours demandés'
                         : undefined
@@ -347,7 +350,7 @@ export const EtatCongesEcran: React.FC<{
                   {c.label}
                   {estColAnneeEditable && (
                     <span className="block text-[8px] font-semibold normal-case text-salfa-teal dark:text-sky-300">
-                      saisie libre
+                      max 30 j
                     </span>
                   )}
                   {estColJoursEditable && (
@@ -391,23 +394,31 @@ export const EtatCongesEcran: React.FC<{
                     </td>
                     <td rowSpan={lignes.length} className="border border-slate-200 dark:border-slate-700 px-1.5 py-1 text-[11px] align-top bg-white dark:bg-slate-800 sticky z-10" style={{ left: LARGEURS.mat, minWidth: LARGEURS.nom }}>
                       <div className="font-bold whitespace-normal">{p.nom_prenoms}</div>
-                      <div className="text-[9px] text-slate-500 dark:text-slate-400 font-normal whitespace-normal">
-                        Titre {p.titreActif} : {fmtJours(p.resteTitreActif)} j · cumul {fmtJours(p.soldeActuel)} j · perm. {fmtJours(p.permissionActuelle)} j{p.nbEnAttente ? ` · ${p.nbEnAttente} att.` : ''}
-                      </div>
-                      {onCreerDansAnnee && etat.annees.length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {etat.annees.map((a) => (
-                            <button
-                              key={a}
-                              type="button"
-                              onClick={() => onCreerDansAnnee(p.employe_id, a)}
-                              title={`Ajouter un congé ou une permission en ${a} pour ${p.nom_prenoms}`}
-                              className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-50 dark:bg-sky-900/40 text-salfa-teal dark:text-sky-200 border border-sky-200 dark:border-sky-700 hover:bg-salfa-teal hover:text-white transition"
-                            >
-                              + {a}
-                            </button>
-                          ))}
+                      {p.inactif ? (
+                        <div className="mt-0.5 inline-block px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-[9px] font-bold">
+                          Inactif — aucun droit aux congés (0 j)
                         </div>
+                      ) : (
+                        <>
+                          <div className="text-[9px] text-slate-500 dark:text-slate-400 font-normal whitespace-normal">
+                            {etat.annees.map((a) => `${a}: ${fmtJours(p.bilans[a]?.fin ?? 0)} j`).join(' · ')} · perm. {fmtJours(p.permissionActuelle)} j{p.nbEnAttente ? ` · ${p.nbEnAttente} att.` : ''}
+                          </div>
+                          {onCreerDansAnnee && etat.annees.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {etat.annees.map((a) => (
+                                <button
+                                  key={a}
+                                  type="button"
+                                  onClick={() => onCreerDansAnnee(p.employe_id, a)}
+                                  title={`Ajouter un congé ou une permission en ${a} pour ${p.nom_prenoms}`}
+                                  className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-50 dark:bg-sky-900/40 text-salfa-teal dark:text-sky-200 border border-sky-200 dark:border-sky-700 hover:bg-salfa-teal hover:text-white transition"
+                                >
+                                  + {a}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
                       )}
                     </td>
                     <td rowSpan={lignes.length} className="border border-slate-200 dark:border-slate-700 px-1 py-1 text-[10px] align-top bg-white dark:bg-slate-800 whitespace-normal">
@@ -416,8 +427,8 @@ export const EtatCongesEcran: React.FC<{
                   </>
                 )}
                 {colonnes.filter((c) => c.cle !== 'mat' && c.cle !== 'nom' && c.cle !== 'fonction').map((c) => {
-                  // 1) Saisie directe sur TOUTES les colonnes d'années (2024, 2025, 2026…) : ouverture ET solde final
-                  if (onSaisirOuverture && String(c.cle).startsWith('an')) {
+                  // 1) Saisie directe sur TOUTES les colonnes d'années (2024, 2025, 2026…) pour les salariés actifs
+                  if (!p.inactif && onSaisirOuverture && String(c.cle).startsWith('an')) {
                     const anneeCol = Number(String(c.cle).slice(2));
                     const bilanCol = p.bilans[anneeCol];
                     if (ligne.type === 'SOLDE_FINAL') {
@@ -460,8 +471,8 @@ export const EtatCongesEcran: React.FC<{
                     }
                   }
 
-                  // 2) Saisie directe des jours demandés (Congé ou Permission) sur toute ligne DEMANDE (2024, 2025, 2026…)
-                  if (onModifierJours && ligne.type === 'DEMANDE' && ligne.conge_id) {
+                  // 2) Saisie directe des jours demandés (Congé ou Permission) sur toute ligne DEMANDE d'un salarié actif
+                  if (!p.inactif && onModifierJours && ligne.type === 'DEMANDE' && ligne.conge_id) {
                     if (c.cle === 'jours_conge' && (ligne.categorie === 'CONGE' || ligne.jours_conge > 0)) {
                       return (
                         <td key={c.cle} className="border border-slate-200 dark:border-slate-700 px-0.5 py-0.5 text-right font-mono align-middle">

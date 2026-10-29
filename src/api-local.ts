@@ -15,9 +15,25 @@ import {
   CongeAbsence, CongesConfig, CategorieAbsence, ImputationConges, StatutConges,
   normaliserConge, joursDemandesPour, calculerDateFin, calculerDateRetourDepuisFin,
   construireEtat, calculerSoldes, controleSolde, anneesSuccessives, calculerSyntheseCongesPeriode,
-  EtatConges, SoldeSaisie, LIBELLES_CATEGORIE, aBesoinMedecin, trouverMotif, estPrisEnCompte,
+  EtatConges, SoldeSaisie, LIBELLES_CATEGORIE, aBesoinMedecin, trouverMotif, estPrisEnCompte, estEmployeInactif,
 } from './local/conges';
 import { CongeImportLigne, CongeImportRapport } from './local/importConges';
+import {
+  buildRelationalSqlBackup,
+  buildSqlBackupFilename,
+  triggerSqlDownload,
+  lireHistoriqueSauvegardesSql,
+  enregistrerEntreeHistoriqueSql,
+  setDerniereSauvegardeSql,
+  getDerniereSauvegardeSql,
+  readStoredHeaderSnapshot,
+  EntreeHistoriqueSql,
+  ResultatSauvegardeSql,
+  formatSqlStamp,
+} from './local/sqlBackup';
+
+export { getDerniereSauvegardeSql };
+export type { EntreeHistoriqueSql, ResultatSauvegardeSql };
 
 // ------------------------------------------------------------------------------
 // AUTHENTIFICATION & CONTRÔLE D'ACCÈS PAR RÔLE (locale)
@@ -873,7 +889,7 @@ export async function savePaieReglement(
   return { success: true, updated: enrichirLignePaieConges(store, updated) };
 }
 
-export async function cloturerMois(annee: number, mois: string): Promise<boolean> {
+export async function cloturerMois(annee: number, mois: string, skipAutoSqlBackup = false): Promise<boolean> {
   exigerAdmin();
   const store = getStore();
   const a = Number(annee);
@@ -887,6 +903,14 @@ export async function cloturerMois(annee: number, mois: string): Promise<boolean
     }
   }
   if (touched) saveStore();
+  if (!skipAutoSqlBackup) {
+    await exporterSauvegardeSqlLocale({
+      type: 'CLOTURE',
+      periode: `${m} ${a}`,
+      motif: `Clôture de caisse / paie validée — ${m} ${a}`,
+      telecharger: true,
+    });
+  }
   return true;
 }
 
@@ -1385,11 +1409,14 @@ export async function fetchSituationConges(annee: number, actifsSeulement = fals
 /** État « Contrôle des congés et permissions », tel qu'imprimé et exporté (3 dernières années par défaut). */
 export async function fetchEtatConges(
   annee: number,
-  options: { nbAnnees?: number; recherche?: string; inclureRefuses?: boolean } = {}
+  options: { nbAnnees?: number; recherche?: string; inclureRefuses?: boolean; inclureInactifs?: boolean } = {}
 ): Promise<EtatConges> {
   const store = getStore();
   const cfg = configConges();
   let employes = [...(store.employes || [])];
+  if (options.inclureInactifs === false) {
+    employes = employes.filter((e: any) => !estEmployeInactif(e));
+  }
   const q = String(options.recherche || '').trim().toLowerCase();
   if (q) {
     employes = employes.filter((e: any) =>
@@ -1454,6 +1481,9 @@ async function prepareConge(
   const cfg = configConges();
   const emp = (store.employes || []).find((e: any) => Number(e.id) === Number(draft.employe_id));
   if (!emp) return { erreur: 'Choisissez le salarié concerné.' };
+  if (estEmployeInactif(emp)) {
+    return { erreur: "Ce salarié est inactif : les personnes inactives n'ont plus droit aux congés." };
+  }
 
   const categorie: CategorieAbsence = (['CONGE', 'PERMISSION', 'EXAMEN_MEDICAL', 'AJUSTEMENT'] as CategorieAbsence[]).includes(
     String(draft.categorie) as CategorieAbsence
@@ -1664,6 +1694,13 @@ export async function deciderConge(
   const idx = (store.conges || []).findIndex((c: any) => Number(c.id) === Number(id));
   if (idx === -1) return { success: false, message: 'Fiche introuvable.' };
   const c = normaliserConge(store.conges[idx], configConges());
+  const empCible = (store.employes || []).find((e: any) => Number(e.id) === Number(c.employe_id));
+  if (action !== 'REFUSE' && empCible && estEmployeInactif(empCible)) {
+    return {
+      success: false,
+      message: "Ce salarié est inactif : les personnes inactives n'ont plus droit aux congés.",
+    };
+  }
   const qui = nettoyerTexte(meta?.utilisateur, 60) || '—';
   const ceJour = new Date().toISOString().slice(0, 10);
   const avant = store.conges[idx];
@@ -1759,6 +1796,12 @@ export async function saisirOuverturePremiereAnnee(
   }
   const emp = (store.employes || []).find((e: any) => Number(e.id) === Number(employeId));
   if (!emp) return { success: false, message: 'Salarié introuvable.' };
+  if (valeur !== null && estEmployeInactif(emp)) {
+    return {
+      success: false,
+      message: "Ce salarié est inactif : les personnes inactives n'ont plus droit aux congés.",
+    };
+  }
 
   const anneeCible = Math.round(Number(annee) || 0);
   if (anneeCible < 1990 || anneeCible > 2100) {
@@ -1789,8 +1832,12 @@ export async function saisirOuverturePremiereAnnee(
   if (!Number.isFinite(num)) {
     return { success: false, message: 'Veuillez saisir un nombre de jours valide.' };
   }
-  if (num < -365 || num > 365) {
-    return { success: false, message: 'Le solde saisi doit être compris entre -365 et 365 jours.' };
+  const plafondAnnee = Math.min(30, Number(cfg.joursCongeParAn) > 0 ? Number(cfg.joursCongeParAn) : 30);
+  if (mode === 'OUVERTURE' && (num < 0 || num > plafondAnnee)) {
+    return {
+      success: false,
+      message: `Le congé annuel est plafonné à ${plafondAnnee} jours par an (entre 0 et ${plafondAnnee} jours).`,
+    };
   }
 
   let cibleOuverture = Math.round(num * 100) / 100;
@@ -1805,6 +1852,12 @@ export async function saisirOuverturePremiereAnnee(
       .filter((c: CongeAbsence) => c.categorie === 'AJUSTEMENT' && c.ajustement_type !== 'OUVERTURE' && c.statut === 'VALIDE')
       .reduce((s: number, c: CongeAbsence) => s + Number(c.jours_valides ?? c.jours_demandes ?? 0), 0);
     cibleOuverture = Math.round((cibleOuverture + prisAnnee - autresAjusts) * 100) / 100;
+    if (cibleOuverture < 0 || cibleOuverture > plafondAnnee) {
+      return {
+        success: false,
+        message: `Le congé annuel de ${anneeCible} est plafonné à ${plafondAnnee} jours par an (pris : ${prisAnnee} j, ouverture résultante : ${cibleOuverture} j).`,
+      };
+    }
   }
 
   const existIdx = store.conges.findIndex(
@@ -1982,3 +2035,74 @@ export async function importerConges(
   if (rapport.importees) rapport.messages.push(`${rapport.importees} fiche(s) reprise(s). Vérifiez les soldes avant toute décision.`);
   return rapport;
 }
+
+// ------------------------------------------------------------------------------
+// SAUVEGARDE SQL RELATIONNELLE (MANUELLE & AUTOMATIQUE SUR CLÔTURE)
+// ------------------------------------------------------------------------------
+export async function exporterSauvegardeSqlLocale(options: {
+  type?: 'CLOTURE' | 'MANUELLE' | 'CONGES';
+  periode?: string;
+  motif?: string;
+  telecharger?: boolean;
+} = {}): Promise<ResultatSauvegardeSql> {
+  exigerAdmin();
+  const store = getStore();
+  const config = loadConfig();
+  const header = readStoredHeaderSnapshot();
+  const type = options.type || 'MANUELLE';
+  const congesOnly = type === 'CONGES';
+  const dateNow = new Date();
+  const { iso } = formatSqlStamp(dateNow);
+  const motif =
+    options.motif ||
+    (type === 'CLOTURE'
+      ? `Clôture validée${options.periode ? ` — ${options.periode}` : ''}`
+      : type === 'CONGES'
+        ? 'Sauvegarde SQL Congés & Permissions'
+        : 'Sauvegarde SQL manuelle (Administration)');
+  const filename = buildSqlBackupFilename({ type, periode: options.periode, date: dateNow });
+  const sql = buildRelationalSqlBackup({
+    store,
+    config,
+    header,
+    motif,
+    congesOnly,
+    date: dateNow,
+  });
+  const size = typeof Blob !== 'undefined' ? new Blob([sql]).size : Buffer.byteLength(sql, 'utf8');
+  const downloaded = options.telecharger === false ? false : triggerSqlDownload(filename, sql);
+
+  const entree: EntreeHistoriqueSql = {
+    id: `${dateNow.getTime()}_${Math.random().toString(36).slice(2, 7)}`,
+    filename,
+    created_at: iso,
+    motif,
+    type,
+    size,
+    nb_employes: Array.isArray(store.employes) ? store.employes.length : 0,
+    nb_paies: congesOnly ? 0 : (Array.isArray(store.paies) ? store.paies.length : 0),
+    nb_conges: Array.isArray(store.conges) ? store.conges.length : 0,
+    server_saved: false,
+  };
+  enregistrerEntreeHistoriqueSql(entree);
+
+  const res: ResultatSauvegardeSql = {
+    success: true,
+    filename,
+    sql,
+    size,
+    created_at: iso,
+    motif,
+    type,
+    downloaded,
+    server_saved: false,
+  };
+  setDerniereSauvegardeSql(res);
+  return res;
+}
+
+export async function fetchHistoriqueSauvegardesSqlLocale(): Promise<EntreeHistoriqueSql[]> {
+  exigerAdmin();
+  return lireHistoriqueSauvegardesSql();
+}
+

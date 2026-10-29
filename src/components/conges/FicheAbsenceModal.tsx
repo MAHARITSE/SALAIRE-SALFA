@@ -148,6 +148,7 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
     () => employes.find((e) => Number(e.id) === Number(b.employe_id)) || null,
     [employes, b.employe_id]
   );
+  const estInactifSelectionne = Boolean(employe && Number(employe.actif) === 0);
   const motif = useMemo(() => trouverMotif(b.motif_code || ''), [b.motif_code]);
   const motifs = useMemo(
     () => MOTIFS_ABSENCE.filter((m) => m.categorie === b.categorie),
@@ -156,7 +157,7 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
   const solde: SoldeSaisie | null = b.employe_id ? soldes[Number(b.employe_id)] || null : null;
   const q = recherche.trim().toLowerCase();
   const candidats = useMemo(() => {
-    const liste = employes.filter((e) => Number(e.actif) === 1 || Number(e.id) === Number(b.employe_id));
+    const liste = employes.filter((e) => Number(e.actif) === 1 || (b.id && Number(e.id) === Number(b.employe_id)));
     const filtres = q
       ? liste.filter((e) =>
           String(e.nom_prenoms || '').toLowerCase().includes(q) ||
@@ -165,7 +166,7 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
         )
       : liste;
     return filtres.slice(0, 40);
-  }, [employes, q, b.employe_id]);
+  }, [employes, q, b.employe_id, b.id]);
 
   // Jours calculés sur la période incluse Du … au … et date de prise de service (Daty fiverenana miasa).
   const joursCalcules = useMemo(
@@ -302,7 +303,7 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
               {b.id ? 'Modifier la fiche d’absence' : 'Nouvelle fiche d’absence'}
             </h3>
             <p className="text-[10px] sm:text-xs text-slate-300">
-              Droits et motifs de la FICHE D’ABSENCE — congé 30 j/an (90 j au maximum), permission 10 j/an
+              Congé bloqué à 30 j/an (géré indépendamment), permission 10 j/an — salariés actifs uniquement (inactifs sans droit)
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -629,13 +630,19 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
                   Rappel Fitsipika Anatiny : le droit prévu pour « {motif.libelleDocx} » est de {motif.jours} andro.
                 </div>
               )}
-              {projection && (
+              {estInactifSelectionne && (
+                <div className="mt-2 rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/30 px-2.5 py-2 text-[11px] font-bold text-red-700 dark:text-red-300 flex items-center gap-1.5">
+                  <Info className="w-4 h-4 shrink-0" />
+                  Ce salarié est inactif : les personnes inactives n’ont plus droit aux congés (solde = 0 j).
+                </div>
+              )}
+              {projection && !estInactifSelectionne && (
                 <div className={`mt-2 text-[11px] font-bold flex items-center gap-1.5 ${projection.apres < 0 ? 'text-red-600 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
                   {projection.apres < 0 ? <Info className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
                   {b.imputation === 'CONGE' && recap
-                    ? `Après cette demande : ${fmtJours(recap.resteTitreApres)} j sur Titre ${recap.titreApres} (cumul ${fmtJours(projection.apres)} j)`
+                    ? `Après cette demande : ${fmtJours(recap.resteTitreApres)} j sur l’exercice ${recap.titreApres}`
                     : `Après cette demande : ${fmtJours(projection.apres)} jour(s) de ${projection.libelle}`}
-                  {projection.apres < 0 ? ' — solde dépassé, le reliquat négatif sera reporté sur l’année suivante.' : '.'}
+                  {projection.apres < 0 ? ' — solde dépassé (bloqué à 30 j/an).' : '.'}
                 </div>
               )}
             </div>
@@ -667,13 +674,13 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
           </div>
           <div className="flex gap-2">
             <button onClick={onClose} className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-slate-200 dark:bg-slate-600 text-sm font-semibold">Annuler</button>
-            <button onClick={() => enregistrer({ imprimerApres: false, valider: false })} disabled={enCours} className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-salfa-dark hover:bg-salfa-teal text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-60">
+            <button onClick={() => enregistrer({ imprimerApres: false, valider: false })} disabled={enCours || estInactifSelectionne} className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-salfa-dark hover:bg-salfa-teal text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
               <Save className="w-4 h-4" />{enCours ? '…' : 'Enregistrer'}
             </button>
-            <button onClick={() => enregistrer({ imprimerApres: true, valider: false })} disabled={enCours} className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-60">
+            <button onClick={() => enregistrer({ imprimerApres: true, valider: false })} disabled={enCours || estInactifSelectionne} className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
               <Printer className="w-4 h-4" />Enregistrer + imprimer
             </button>
-            <button onClick={() => enregistrer({ imprimerApres: false, valider: true })} disabled={enCours || b.categorie === 'AJUSTEMENT'} className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50" title="Enregistrer et valider directement (fiche déjà signée)">
+            <button onClick={() => enregistrer({ imprimerApres: false, valider: true })} disabled={enCours || estInactifSelectionne || b.categorie === 'AJUSTEMENT'} className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50" title="Enregistrer et valider directement (fiche déjà signée)">
               <CheckCircle2 className="w-4 h-4" />Enregistrer et valider
             </button>
           </div>

@@ -4,19 +4,30 @@ import { WAMP } from '../runtime';
 import { remoteSaveSetting } from '../wampClient';
 import {
   ShieldCheck, X, Plus, Trash2, HeartHandshake, CheckCircle2, Info,
-  Sliders, Layers, Calculator, Award, RotateCcw, Save, CalendarCheck2,
+  Sliders, Layers, Calculator, Award, RotateCcw, Save, CalendarCheck2, Image as ImageIcon, Upload,
 } from 'lucide-react';
 import { CongesConfig, DEFAULT_CONGES_CONFIG, MOTIFS_ABSENCE, LIBELLES_CATEGORIE } from '../local/conges';
 import { loadConfig, saveConfig, PaieConfig, BaremeAncienneteConfig, TrancheIrsaConfig, DEFAULT_CONFIG, DEFAULT_BAREME_ANCIENNETE, DEFAULT_BAREME_IRSA, resetConfig } from '../local/config';
 import { detailIrsaAvecConfig, obtenirIndiceAncienneteAvecBareme } from '../local/calcul';
+import { DEFAULT_APP_ICON, PRESET_APP_ICONS, applyAppFavicon, prepareFaviconDataUrl } from '../local/favicon';
 
-interface AdminModalProps { onClose: () => void; }
+export type AdminTabKey = 'formules' | 'irsa' | 'anciennete' | 'colonnes' | 'conges' | 'icone';
 
-type TabKey = 'formules' | 'irsa' | 'anciennete' | 'colonnes' | 'conges';
+interface AdminModalProps {
+  onClose: () => void;
+  initialTab?: AdminTabKey;
+}
 
-export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
+type TabKey = AdminTabKey;
+
+export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'formules' }) => {
   const initial = loadConfig();
-  const [activeTab, setActiveTab] = useState<TabKey>('formules');
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+
+  // Icône personnalisée de l'onglet navigateur (remplace l'icône WampServer)
+  const [iconeApp, setIconeApp] = useState<string>(() => initial.iconeApp || '');
+  const [iconeMsg, setIconeMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [savingIcone, setSavingIcone] = useState(false);
 
   // Formules générales
   const [tauxMaternite, setTauxMaternite] = useState<number>(initial.tauxMaternite);
@@ -37,15 +48,57 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
   const [congies, setCongies] = useState<CongesConfig>(() => ({ ...(initial.congies || DEFAULT_CONGES_CONFIG) }));
   const majConges = <K extends keyof CongesConfig>(cle: K, valeur: CongesConfig[K]) =>
     setCongies((prev) => {
-      const next = { ...prev, [cle]: valeur };
-      if (cle === 'nbAnneesCumul' || cle === 'joursCongeParAn') {
-        const nb = Math.max(1, Math.min(10, Math.round(Number(next.nbAnneesCumul) || 3)));
-        const jpa = Math.max(0, Number(next.joursCongeParAn) || 0);
-        next.nbAnneesCumul = nb;
-        next.plafondCumulConge = Math.round(nb * jpa * 100) / 100;
+      const next = { ...prev, [cle]: valeur, reportAutorise: false };
+      const jpa = Math.max(0, Math.min(30, Number(next.joursCongeParAn) || 0));
+      next.joursCongeParAn = jpa;
+      next.plafondCumulConge = jpa;
+      if (cle === 'nbAnneesCumul') {
+        next.nbAnneesCumul = Math.max(1, Math.min(10, Math.round(Number(next.nbAnneesCumul) || 3)));
       }
       return next;
     });
+
+  const handleUploadIcone = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setIconeMsg(null);
+    try {
+      const dataUrl = await prepareFaviconDataUrl(file, 64);
+      setIconeApp(dataUrl);
+      applyAppFavicon(dataUrl);
+      setIconeMsg({
+        type: 'ok',
+        text: `Icône « ${file.name} » chargée en aperçu sur l’onglet. Cliquez sur « Enregistrer l’icône » pour la sauvegarder.`,
+      });
+    } catch (err: any) {
+      setIconeMsg({ type: 'err', text: err?.message || 'Fichier icône invalide.' });
+    }
+  };
+
+  const handleSaveIconeOnly = async (nextIcon?: string) => {
+    const val = nextIcon !== undefined ? nextIcon : iconeApp;
+    setSavingIcone(true);
+    setIconeMsg(null);
+    try {
+      const cfg = saveConfig({ iconeApp: val });
+      if (WAMP) {
+        await remoteSaveSetting('config', cfg);
+      }
+      applyAppFavicon(cfg.iconeApp || '');
+      setIconeApp(cfg.iconeApp || '');
+      setIconeMsg({
+        type: 'ok',
+        text: val
+          ? 'Icône personnalisée enregistrée et appliquée sur l’onglet du navigateur.'
+          : 'Logo SALFA par défaut rétabli sur l’onglet du navigateur.',
+      });
+    } catch (err: any) {
+      setIconeMsg({ type: 'err', text: err?.message || 'Impossible de sauvegarder l’icône.' });
+    } finally {
+      setSavingIcone(false);
+    }
+  };
 
   // Simulateurs
   const [salaireEssai, setSalaireEssai] = useState<number>(500000);
@@ -203,9 +256,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
       plafondEspeces: Number(plafondEspeces) || 0,
       baremeIrsa: [...baremeIrsa].sort((a, b) => a.min - b.min),
       baremeAnciennete: [...baremeAnciennete].sort((a, b) => a.min - b.min),
-      congies: { ...congies },
+      congies: { ...congies, reportAutorise: false },
+      iconeApp,
     });
     if (WAMP) { try { await remoteSaveSetting('config', cfg); } catch (e) { alert(e instanceof Error ? e.message : 'Sauvegarde serveur impossible.'); window.location.reload(); return; } }
+    applyAppFavicon(cfg.iconeApp || '');
     setTauxMaternite(cfg.tauxMaternite);
     setDureeMaternite(cfg.dureeMaterniteMois);
     setCnapsSalariale(cfg.cnapsSalariale);
@@ -263,6 +318,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
             { id: 'anciennete' as TabKey, label: '3. Ancienneté', short: 'Anc.', icon: Award },
             { id: 'colonnes' as TabKey, label: '4. Colonnes', short: 'Cols', icon: Layers },
             { id: 'conges' as TabKey, label: '5. Congés & permissions', short: 'Congés', icon: CalendarCheck2 },
+            { id: 'icone' as TabKey, label: '6. Icône application', short: 'Icône', icon: ImageIcon },
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 border-b-2 whitespace-nowrap shrink-0 ${activeTab === tab.id ? 'border-salfa-teal dark:border-sky-400 text-salfa-dark dark:text-white bg-white dark:bg-slate-800' : 'border-transparent text-slate-600 dark:text-slate-300'}`}>
               <tab.icon className="w-4 h-4 text-salfa-teal dark:text-sky-300" />
@@ -481,30 +537,30 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-[11px] sm:text-xs text-amber-900 dark:text-amber-200 flex gap-2">
                 <Info className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>
-                  Ces réglages alimentent l'onglet <b>Congés & Permissions</b> (comptable) selon le <b>Code du Travail malgache</b> et la <b>FICHE D'ABSENCE</b> :
-                  congé de 30 jours par an cumulable uniquement sur <b>les 3 dernières années successives</b> (plafond 90 jours, prescription au-delà de 3 ans), permission de 10 jours par an, examens médicaux sur justificatif du médecin.
+                  Ces réglages alimentent l'onglet <b>Congés & Permissions</b> (comptable) :{' '}
+                  <b>congé bloqué à 30 jours maximum tous les ans</b> et <b>géré indépendamment année par année</b> (aucun report ni cumul d'une année sur l'autre sur 2024, 2025, 2026…), permission de 10 jours par an, examens médicaux sur justificatif du médecin.
                 </span>
               </div>
 
               <div className="bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-4 space-y-3">
                 <h4 className="text-[11px] sm:text-xs font-extrabold text-salfa-dark dark:text-white uppercase tracking-wider border-b dark:border-slate-600 pb-2 flex items-center gap-2">
-                  <CalendarCheck2 className="w-4 h-4 text-salfa-teal" />Droits annuels &amp; prescription légale
+                  <CalendarCheck2 className="w-4 h-4 text-salfa-teal" />Droits annuels indépendants (plafond 30 j / an)
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Congé par an (jours)</label>
-                    <input type="number" min={0} step="0.5" value={congies.joursCongeParAn} onChange={(e) => majConges('joursCongeParAn', Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" />
-                    <span className="text-[10px] text-slate-500">« 30 andro isan-taona »</span>
+                    <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Congé par an (max 30 j)</label>
+                    <input type="number" min={0} max={30} step="0.5" value={congies.joursCongeParAn} onChange={(e) => majConges('joursCongeParAn', Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" />
+                    <span className="text-[10px] text-slate-500">Bloqué à 30 jours / an</span>
                   </div>
                   <div>
-                    <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Années successives</label>
+                    <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Colonnes d'années affichées</label>
                     <input type="number" min={1} max={10} step={1} value={congies.nbAnneesCumul ?? 3} onChange={(e) => majConges('nbAnneesCumul', Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" />
-                    <span className="text-[10px] text-slate-500">Loi malgache : 3 dernières années</span>
+                    <span className="text-[10px] text-slate-500">Ex. 3 colonnes (2024, 2025, 2026)</span>
                   </div>
                   <div>
-                    <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Cumul maximum (jours)</label>
-                    <input type="number" min={0} step="0.5" value={congies.plafondCumulConge} onChange={(e) => majConges('plafondCumulConge', Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" />
-                    <span className="text-[10px] text-slate-500">« tsy mihoatra ny 90 andro »</span>
+                    <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Plafond par année (jours)</label>
+                    <input type="number" readOnly value={Math.min(30, congies.joursCongeParAn)} className="w-full rounded-lg border dark:border-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-200 px-3 py-2 text-sm font-mono font-bold" />
+                    <span className="text-[10px] text-slate-500">Chaque année est indépendante (max 30 j)</span>
                   </div>
                   <div>
                     <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Permission par an (jours)</label>
@@ -514,9 +570,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <label className="flex items-start gap-2 text-[11px] sm:text-xs cursor-pointer"><input type="checkbox" className="mt-0.5 rounded" checked={congies.reportAutorise} onChange={(e) => majConges('reportAutorise', e.target.checked)} /><span><b>Report du solde</b> non consommé sur l'année suivante (plafonné au cumul maximum).</span></label>
+                  <div className="flex items-start gap-2 text-[11px] sm:text-xs text-emerald-800 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg px-2.5 py-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                    <span><b>Gestion indépendante activée :</b> chaque année repart à 30 j maximum sans report de l'année précédente.</span>
+                  </div>
                   <label className="flex items-start gap-2 text-[11px] sm:text-xs cursor-pointer"><input type="checkbox" className="mt-0.5 rounded" checked={congies.examenSurPermission} onChange={(e) => majConges('examenSurPermission', e.target.checked)} /><span>Un <b>examen médical</b> décompte aussi la permission.</span></label>
-                  <label className="flex items-start gap-2 text-[11px] sm:text-xs cursor-pointer"><input type="checkbox" className="mt-0.5 rounded" checked={congies.bloquerDepassement} onChange={(e) => majConges('bloquerDepassement', e.target.checked)} /><span><b>Bloquer</b> une demande validée dépassant le solde (sinon simple rappel).</span></label>
+                  <label className="flex items-start gap-2 text-[11px] sm:text-xs cursor-pointer"><input type="checkbox" className="mt-0.5 rounded" checked={congies.bloquerDepassement} onChange={(e) => majConges('bloquerDepassement', e.target.checked)} /><span><b>Bloquer</b> une demande validée dépassant le plafond de 30 j de l'année (sinon simple rappel).</span></label>
                   <div className="flex items-center gap-3">
                     <label className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold cursor-pointer"><input type="checkbox" className="rounded" checked={congies.exclureDimanche} onChange={(e) => majConges('exclureDimanche', e.target.checked)} />Dimanche</label>
                     <label className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold cursor-pointer"><input type="checkbox" className="rounded" checked={congies.exclureSamedi} onChange={(e) => majConges('exclureSamedi', e.target.checked)} />Samedi</label>
@@ -564,6 +623,129 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
                   Le référentiel des motifs est fixé par la fiche d'absence de la société ; sa structure (libellés malgaches, nombre de jours) est reprise à l'identique
                   sur les fiches imprimées et dans l'état de contrôle. Pour un changement de règlement, demandez une mise à jour de l'application.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'icone' && (
+            <div className="space-y-5">
+              <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-xl p-3.5 text-xs text-sky-900 dark:text-sky-200 flex items-start gap-2.5">
+                <ImageIcon className="w-5 h-5 text-salfa-teal dark:text-sky-400 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-extrabold uppercase mb-0.5">Icône de l'application (Onglet du navigateur)</div>
+                  <p className="text-[11px] sm:text-xs leading-relaxed">
+                    Remplace l'icône rose par défaut de WampServer dans l'onglet du navigateur (<code>Clinique SALFA TANAMBAO…</code>) par le logo SALFA ou par une icône personnalisée de votre choix (PNG, ICO, SVG, JPG, WebP).
+                  </p>
+                </div>
+              </div>
+
+              {iconeMsg && (
+                <div
+                  role="status"
+                  className={`rounded-xl border px-3.5 py-2.5 text-xs sm:text-sm flex items-center gap-2 ${
+                    iconeMsg.type === 'ok'
+                      ? 'bg-emerald-50 dark:bg-emerald-900/25 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200'
+                      : 'bg-red-50 dark:bg-red-900/25 border-red-300 dark:border-red-700 text-red-700 dark:text-red-200'
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{iconeMsg.text}</span>
+                </div>
+              )}
+
+              {/* Aperçu réaliste de l'onglet du navigateur */}
+              <div className="bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-3">
+                <div className="text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400">
+                  Aperçu en direct de l'onglet du navigateur
+                </div>
+                <div className="bg-[#dce6f7] dark:bg-slate-800 rounded-xl p-2.5 inline-flex items-center max-w-full">
+                  <div className="bg-white dark:bg-slate-700 rounded-lg px-3 py-2 shadow-sm border border-slate-200/80 dark:border-slate-600 flex items-center gap-2.5 max-w-[280px]">
+                    <img
+                      src={iconeApp || DEFAULT_APP_ICON}
+                      alt="Icône onglet"
+                      className="w-5 h-5 object-contain shrink-0 rounded-sm"
+                    />
+                    <span className="text-xs font-medium text-slate-800 dark:text-slate-100 truncate">
+                      Clinique SALFA TANAMBAO
+                    </span>
+                    <span className="text-slate-400 text-xs font-bold ml-1">×</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Champ d'import et modèles prédéfinis */}
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center p-2 shrink-0">
+                      <img
+                        src={iconeApp || DEFAULT_APP_ICON}
+                        alt="Aperçu icône 64×64"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-xs sm:text-sm font-bold text-slate-800 dark:text-white">
+                        {iconeApp ? 'Icône personnalisée sélectionnée' : 'Logo SALFA par défaut actif'}
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Formats acceptés : <b>.png, .ico, .svg, .jpg, .webp</b> (redimensionné automatiquement en 64×64 px).
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="cursor-pointer inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-salfa-dark hover:bg-salfa-teal text-white text-xs sm:text-sm font-bold shadow transition shrink-0">
+                    <Upload className="w-4 h-4 shrink-0" />
+                    <span>Choisir une icône…</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/svg+xml,image/jpeg,image/webp,.ico,.png,.svg,.jpg,.jpeg,.webp"
+                      onChange={handleUploadIcone}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mr-1">Modèles intégrés :</span>
+                  {PRESET_APP_ICONS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        setIconeApp(preset.src);
+                        applyAppFavicon(preset.src);
+                      }}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 hover:border-salfa-teal bg-slate-50 dark:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
+                    >
+                      <img src={preset.src} alt="" className="w-4 h-4 object-contain" />
+                      <span>{preset.label}</span>
+                    </button>
+                  ))}
+                  {iconeApp && (
+                    <button
+                      type="button"
+                      onClick={() => handleSaveIconeOnly('')}
+                      disabled={savingIcone}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 text-amber-800 dark:text-amber-200 text-xs font-bold transition"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Rétablir logo SALFA par défaut</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="pt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleSaveIconeOnly()}
+                    disabled={savingIcone}
+                    className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow transition disabled:opacity-60"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{savingIcone ? 'Enregistrement…' : 'Enregistrer l’icône'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

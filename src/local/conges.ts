@@ -178,15 +178,15 @@ export interface CongesConfig {
 export const DEFAULT_CONGES_CONFIG: CongesConfig = {
   joursCongeParAn: 30,
   nbAnneesCumul: 3,
-  plafondCumulConge: 90,
+  plafondCumulConge: 30,
   joursPermissionParAn: 10,
-  reportAutorise: true,
+  reportAutorise: false,
   exclureDimanche: false,
   exclureSamedi: false,
   joursFeries: '',
   examenSurPermission: false,
-  bloquerDepassement: false,
-  versionCalendrier: 2,
+  bloquerDepassement: true,
+  versionCalendrier: 3,
 };
 
 function sanitizeListFeries(raw: any): string {
@@ -195,7 +195,11 @@ function sanitizeListFeries(raw: any): string {
   return '';
 }
 
-/** Nettoie et borne une configuration de congés (Loi malgache : 3 dernières années successives). */
+/**
+ * Nettoie et borne une configuration de congés :
+ * plafond strict de 30 jours maximum par an et gestion indépendante année par année
+ * (aucun report/cumul d'une année sur l'autre).
+ */
 export function sanitizeCongesConfig(raw: any): CongesConfig {
   const src = raw && typeof raw === 'object' ? raw : {};
   const pos = (value: any, def: number, max: number) => {
@@ -203,26 +207,25 @@ export function sanitizeCongesConfig(raw: any): CongesConfig {
     if (!Number.isFinite(n) || n < 0) return def;
     return Math.min(max, Math.round(n * 100) / 100);
   };
-  const joursCongeParAn = pos(src.joursCongeParAn, DEFAULT_CONGES_CONFIG.joursCongeParAn, 3650);
+  const joursCongeParAn = pos(src.joursCongeParAn, DEFAULT_CONGES_CONFIG.joursCongeParAn, 30);
   const nbBrut = Math.round(Number(src.nbAnneesCumul));
   const nbAnneesCumul = Number.isFinite(nbBrut) && nbBrut >= 1 && nbBrut <= 10
     ? nbBrut
     : DEFAULT_CONGES_CONFIG.nbAnneesCumul;
-  const plafondLoi = Math.round(nbAnneesCumul * joursCongeParAn * 100) / 100;
-  const plafondSaisi = pos(src.plafondCumulConge, plafondLoi, 36500);
-  const plafondCumulConge = plafondSaisi > 0 ? Math.min(plafondSaisi, plafondLoi) : plafondLoi;
+  const plafondSaisi = pos(src.plafondCumulConge, joursCongeParAn, joursCongeParAn);
+  const plafondCumulConge = plafondSaisi > 0 ? Math.min(plafondSaisi, joursCongeParAn) : joursCongeParAn;
   return {
     joursCongeParAn,
     nbAnneesCumul,
     plafondCumulConge,
     joursPermissionParAn: pos(src.joursPermissionParAn, DEFAULT_CONGES_CONFIG.joursPermissionParAn, 3650),
-    reportAutorise: src.reportAutorise !== false,
+    reportAutorise: false,
     exclureDimanche: src.exclureDimanche === true,
     exclureSamedi: src.exclureSamedi === true,
     joursFeries: sanitizeListFeries(src.joursFeries),
     examenSurPermission: src.examenSurPermission === true,
-    bloquerDepassement: src.bloquerDepassement === true,
-    ...(src.versionCalendrier === 2 ? { versionCalendrier: 2 } : {}),
+    bloquerDepassement: true,
+    versionCalendrier: 3,
   };
 }
 
@@ -543,7 +546,7 @@ export function decomposerDroitsSuccessifs(
   soldeTotal: number,
   annee: number,
   droitAnnuel: number = 30,
-  anneeEmbauche: number = 0,
+  _anneeEmbauche: number = 0,
   nbAnneesCumul: number = DEFAULT_CONGES_CONFIG.nbAnneesCumul
 ): {
   annees: number[];
@@ -551,7 +554,7 @@ export function decomposerDroitsSuccessifs(
   titreActif: number;
   resteTitreActif: number;
 } {
-  const droit = droitAnnuel > 0 ? droitAnnuel : 30;
+  const droit = Math.min(30, droitAnnuel > 0 ? droitAnnuel : 30);
   const nb = Math.max(1, Math.min(10, Math.round(Number(nbAnneesCumul) || DEFAULT_CONGES_CONFIG.nbAnneesCumul)));
   const annees = anneesSuccessives(annee, nb);
   const droitsParTitre: Record<number, number> = {};
@@ -559,37 +562,18 @@ export function decomposerDroitsSuccessifs(
 
   const totalBrut = Number((Number(soldeTotal) || 0).toFixed(2));
   if (totalBrut <= 0) {
+    droitsParTitre[annee] = totalBrut;
     return { annees, droitsParTitre, titreActif: annee, resteTitreActif: totalBrut };
   }
 
-  const plafondLoi = Number((nb * droit).toFixed(2));
-  let restantARepartir = Math.min(plafondLoi, totalBrut);
-  const nbDepuisEmbauche = anneeEmbauche > 0 ? Math.max(1, annee - anneeEmbauche + 1) : nb;
-  const bornerEmbauche = anneeEmbauche > 0 && restantARepartir <= nbDepuisEmbauche * droit;
-
-  // Les jours non encore consommés appartiennent d'abord à l'exercice le plus récent (N),
-  // puis N-1, puis N-2 (puisque N-2 a été consommé en premier).
-  for (let i = annees.length - 1; i >= 0; i--) {
-    const a = annees[i];
-    if (bornerEmbauche && a < anneeEmbauche) {
-      droitsParTitre[a] = 0;
-      continue;
-    }
-    const part = Math.min(droit, restantARepartir);
-    droitsParTitre[a] = Number(part.toFixed(2));
-    restantARepartir = Number((restantARepartir - part).toFixed(2));
-  }
-
-  let titreActif = annee;
-  let resteTitreActif = droitsParTitre[annee] || 0;
-  for (const a of annees) {
-    if ((droitsParTitre[a] || 0) > 0) {
-      titreActif = a;
-      resteTitreActif = droitsParTitre[a];
-      break;
-    }
-  }
-  return { annees, droitsParTitre, titreActif, resteTitreActif };
+  const resteAnnee = Number(Math.min(droit, totalBrut).toFixed(2));
+  droitsParTitre[annee] = resteAnnee;
+  return {
+    annees,
+    droitsParTitre,
+    titreActif: annee,
+    resteTitreActif: resteAnnee,
+  };
 }
 
 /**
@@ -714,6 +698,9 @@ export interface ParcoursConges {
   numero_matricule: number;
   nom_prenoms: string;
   fonction: string;
+  /** Salarié inactif : n'a plus aucun droit aux congés ni permissions (droit = 0, restant = 0). */
+  inactif?: boolean;
+  date_inactif?: string;
   /** Année d'embauche (0 = inconnue) : les exercices antérieurs restent vides, comme au classeur. */
   annee_embauche: number;
   annees: number[];
@@ -756,6 +743,13 @@ export interface OptionsEtat {
   employes?: any[];
   /** Inclure les demandes refusées (par défaut non). */
   inclureRefuses?: boolean;
+}
+
+/** Retourne vrai si la fiche salarié est marquée inactive (`actif = 0`). */
+export function estEmployeInactif(emp: any): boolean {
+  if (!emp || typeof emp !== 'object') return false;
+  if (emp.actif === undefined || emp.actif === null || emp.actif === '') return false;
+  return Number(emp.actif) === 0;
 }
 
 /** Année extraite d'une date AAAA-MM-JJ ou JJ/MM/AAAA (0 si absente). */
@@ -852,11 +846,15 @@ export function construireEtat(
     const fin = Math.max(derniere, anneesColonnes[anneesColonnes.length - 1] ?? anneeCourante);
 
     const anneeEmbauche = anneeDebut(emp.date_embauche);
+    const inactif = estEmployeInactif(emp);
+    const dateInactif = String(emp.date_inactif || '').trim();
     const p: ParcoursConges = {
       employe_id: Number(emp.id) || 0,
       numero_matricule: Number(emp.numero_matricule) || 0,
       nom_prenoms: String(emp.nom_prenoms || '').trim(),
       fonction: String(emp.jobs || emp.fonction || '').trim(),
+      inactif,
+      date_inactif: dateInactif,
       annee_embauche: anneeEmbauche,
       annees: anneesColonnes.filter((a) => a >= debut && a <= fin),
       bilans: {},
@@ -870,89 +868,47 @@ export function construireEtat(
     };
     if (!p.annees.length) p.annees = anneesColonnes.slice();
 
-    let solde = 0;
+    const plafondAnnee = Math.min(30, cfg.joursCongeParAn);
     let derniereAnnee = Math.max(debut, Math.min(fin, finColonnes));
-    // Règle SALFA & Code du Travail : aucun cumul des congés non pris avant 2024 ni avant
-    // la première année de la liste d'années affichée (ex. 2024 en 2026, 2025 en 2027),
-    // de sorte que la première case ne dépasse jamais 30 j tout en pouvant être < 30 j
-    // si des avances ont déjà été consommées (solde < 0) ou via saisie manuelle (OUVERTURE).
-    const premiereAnneeSansCumulPositif = nbAnnees > 1
-      ? Math.max(2024, anneesColonnes[0] ?? anneeCourante)
-      : 2024;
+    // Gestion indépendante année par année : chaque exercice (2024, 2025, 2026…)
+    // dispose de son propre solde plafonné à 30 jours maximum par an, sans report
+    // positif ni report de dépassement d'une année sur l'autre.
+    // Les personnes inactives n'ont plus aucun droit aux congés (droit = 0, solde = 0).
     for (let annee = debut; annee <= fin; annee++) {
       const eventsAnnee = evenements.filter((c) => Number(c.annee) === annee);
       const ajustements = eventsAnnee.filter((c) => c.categorie === 'AJUSTEMENT');
-      // Le droit annuel est accordé à chaque exercice (30 j de congé, 10 j de permission),
-      // à partir de l'année d'embauche uniquement : le classeur note d'ailleurs
-      // « ENTREE LE 08/01/2024 » et n'ouvre alors aucun droit les années précédentes.
-      const droitOuvert = !anneeEmbauche || annee >= anneeEmbauche;
-      const droitBase = droitOuvert ? cfg.joursCongeParAn : 0;
+      const droitOuvert = !inactif && (!anneeEmbauche || annee >= anneeEmbauche);
+      const droitBase = droitOuvert ? plafondAnnee : 0;
       const ajustsOuverture = ajustements.filter((c) => c.ajustement_type === 'OUVERTURE');
-      const derniereOuverture = ajustsOuverture.length ? ajustsOuverture[ajustsOuverture.length - 1] : null;
-      const ajustReport = ajustements
-        .filter((c) => c.ajustement_type === 'REPORT')
-        .reduce((s, c) => s + joursAffiches(c), 0);
-      const ajustDroit = ajustements
-        .filter((c) => c.ajustement_type !== 'REPORT' && c.ajustement_type !== 'OUVERTURE')
-        .reduce((s, c) => s + joursAffiches(c), 0);
+      const derniereOuverture = !inactif && ajustsOuverture.length ? ajustsOuverture[ajustsOuverture.length - 1] : null;
+      const ajustDroit = inactif
+        ? 0
+        : ajustements
+            .filter((c) => c.ajustement_type !== 'REPORT' && c.ajustement_type !== 'OUVERTURE')
+            .reduce((s, c) => s + joursAffiches(c), 0);
 
-      // Prescription triennale & non-cumul positif avant la première année de la fenêtre :
-      // - Sur `annee <= premiereAnneeSansCumulPositif`, les congés positifs antérieurs non pris
-      //   ne sont jamais cumulés (report = 0), mais un dépassement/avance antérieur (solde < 0)
-      //   diminue bien l'ouverture (< 30 j).
-      // - Sur les années suivantes de la fenêtre, report plafonné à (nbSuccessives - 1) × 30 = 60 j.
-      const estPremiereOuAnterieure = annee <= premiereAnneeSansCumulPositif;
-      const reportBrut = cfg.reportAutorise ? solde : 0;
-      const maxReportable = cfg.reportAutorise && !estPremiereOuAnterieure && plafondCumul > 0
-        ? Math.max(0, plafondCumul - droitBase)
-        : 0;
-      let prescrits = 0;
-      let report = reportBrut;
-      if (estPremiereOuAnterieure) {
-        if (solde > 0) {
-          prescrits = Number(solde.toFixed(2));
-          report = 0;
-        }
-      } else if (cfg.reportAutorise) {
-        if (plafondCumul > 0 && reportBrut > maxReportable) {
-          prescrits = Number((reportBrut - maxReportable).toFixed(2));
-          report = maxReportable;
-        }
-      } else if (solde > 0) {
-        prescrits = Number(solde.toFixed(2));
-        report = 0;
-      }
+      const prescrits = 0;
+      const report = 0;
 
       let ouverture: number;
-      if (derniereOuverture) {
-        // Contrôle total de saisie dans le tableau (2024, 2025, 2026…) : la valeur saisie
-        // s'applique directement à l'année ciblée sans plafond ni blocage d'embauche.
-        const cibleSaisie = Math.max(-3650, Math.min(3650, Math.round(joursAffiches(derniereOuverture) * 100) / 100));
-        ouverture = cibleSaisie + ajustReport + ajustDroit;
+      if (inactif) {
+        ouverture = 0;
+      } else if (derniereOuverture) {
+        // Saisie manuelle dans le tableau (2024, 2025, 2026…), gérée indépendamment par année
+        // et strictement plafonnée entre 0 et 30 jours (plafond annuel).
+        const cibleSaisie = Math.max(0, Math.min(plafondAnnee, Math.round(joursAffiches(derniereOuverture) * 100) / 100));
+        ouverture = Math.max(0, Math.min(plafondAnnee, cibleSaisie + ajustDroit));
       } else {
-        ouverture = droitBase + report + ajustReport;
-        if (estPremiereOuAnterieure && ouverture > droitBase) {
-          prescrits = Number((prescrits + (ouverture - droitBase)).toFixed(2));
-          ouverture = droitBase;
-        } else if (plafondCumul > 0 && ouverture > plafondCumul) {
-          prescrits = Number((prescrits + (ouverture - plafondCumul)).toFixed(2));
-          ouverture = plafondCumul;
-        }
-        ouverture += ajustDroit;
-        if (estPremiereOuAnterieure && nbAnnees > 1 && ouverture > droitBase) {
-          ouverture = droitBase;
-        } else if (plafondCumul > 0 && ouverture > plafondCumul) {
-          ouverture = plafondCumul;
-        }
+        ouverture = Math.max(0, Math.min(plafondAnnee, droitBase + ajustDroit));
       }
-      const ajust = Number((ouverture - (droitBase + report)).toFixed(2));
+      const ajust = inactif ? 0 : Number((ouverture - droitBase).toFixed(2));
 
       const dansFenetre = fenetre.has(annee);
       const bilan: BilanAnnee = {
         annee, report: Number(report.toFixed(2)), prescrits, droit: droitBase, ajustements: ajust,
         ouverture: Number(ouverture.toFixed(2)), pris: 0, attente: 0, fin: 0,
-        ouvertureSaisie: Boolean(derniereOuverture),
-        permDroit: (droitOuvert || Boolean(derniereOuverture)) ? cfg.joursPermissionParAn : 0,
+        ouvertureSaisie: !inactif && Boolean(derniereOuverture),
+        permDroit: !inactif && (droitOuvert || Boolean(derniereOuverture)) ? cfg.joursPermissionParAn : 0,
         permPris: 0, permAttente: 0, permFin: 0,
         examenPris: 0, examenAttente: 0, nbDemandes: 0, nbEnAttente: 0,
       };
@@ -997,9 +953,9 @@ export function construireEtat(
         if (c.imputation === 'CONGE') {
           ligne.jours_conge = jours;
           ligne.date_conge = c.date_debut || dateEvenement(c);
-          ligne.solde_par_annee[annee] = Number(soldeAnnee.toFixed(2));
+          ligne.solde_par_annee[annee] = inactif ? 0 : Number(soldeAnnee.toFixed(2));
           if (estValide(c)) {
-            soldeAnnee -= jours;
+            if (!inactif) soldeAnnee -= jours;
             bilan.pris += jours;
           } else {
             bilan.attente += jours;
@@ -1009,21 +965,21 @@ export function construireEtat(
           ligne.perm_date = c.date_debut || dateEvenement(c);
           ligne.perm_droit = bilan.permDroit;
           if (estValide(c)) {
-            permAnnee -= jours;
+            if (!inactif) permAnnee -= jours;
             bilan.permPris += jours;
           } else {
             bilan.permAttente += jours;
           }
-          ligne.perm_restant = Number(permAnnee.toFixed(2));
-          ligne.solde_par_annee[annee] = Number(soldeAnnee.toFixed(2));
+          ligne.perm_restant = inactif ? 0 : Number(permAnnee.toFixed(2));
+          ligne.solde_par_annee[annee] = inactif ? 0 : Number(soldeAnnee.toFixed(2));
         } else {
           ligne.examen_jours = total;
           ligne.date_conge = c.date_debut || dateEvenement(c);
-          ligne.solde_par_annee[annee] = Number(soldeAnnee.toFixed(2));
+          ligne.solde_par_annee[annee] = inactif ? 0 : Number(soldeAnnee.toFixed(2));
           if (estValide(c)) bilan.examenPris += total;
           else bilan.examenAttente += total;
         }
-        ligne.restant_apres = Number((c.imputation === 'PERMISSION' ? permAnnee : soldeAnnee).toFixed(2));
+        ligne.restant_apres = inactif ? 0 : Number((c.imputation === 'PERMISSION' ? permAnnee : soldeAnnee).toFixed(2));
         if (dansFenetre) lignesAnnee.push(ligne);
         bilan.nbDemandes++;
         if (c.statut !== 'VALIDE') {
@@ -1032,11 +988,10 @@ export function construireEtat(
         }
       }
 
-      bilan.fin = Number(soldeAnnee.toFixed(2));
-      bilan.permFin = Number(permAnnee.toFixed(2));
+      bilan.fin = inactif ? 0 : Number(soldeAnnee.toFixed(2));
+      bilan.permFin = inactif ? 0 : Number(permAnnee.toFixed(2));
       p.bilans[annee] = bilan;
       if (dansFenetre) p.lignes.push(...lignesAnnee);
-      solde = soldeAnnee;
       derniereAnnee = Math.max(derniereAnnee, annee);
     }
 
@@ -1052,47 +1007,61 @@ export function construireEtat(
       date_retour: '',
       categorie: 'AJUSTEMENT',
       libelle_categorie: '',
-      motif: `Solde de fin d’année${p.lignes.length ? '' : ' — aucune demande enregistrée'}`,
+      motif: inactif
+        ? 'Salarié inactif — aucun droit aux congés'
+        : `Solde de fin d’année${p.lignes.length ? '' : ' — aucune demande enregistrée'}`,
       statut: '',
-      situation: '',
+      situation: inactif ? 'Inactif' : '',
       jours_conge: 0,
       date_conge: '',
-      perm_droit: (p.bilans[anneeCourante] || p.bilans[derniereAnnee])?.permDroit || 0,
+      perm_droit: inactif ? 0 : ((p.bilans[anneeCourante] || p.bilans[derniereAnnee])?.permDroit || 0),
       perm_jours: 0,
       perm_date: '',
-      perm_restant: (p.bilans[anneeCourante] || p.bilans[derniereAnnee])?.permFin || 0,
+      perm_restant: inactif ? 0 : ((p.bilans[anneeCourante] || p.bilans[derniereAnnee])?.permFin || 0),
       solde_par_annee: {},
       examen_jours: 0,
       heures: '',
       remplacements: '',
       observations: '',
       jours: 0,
-      restant_apres: (p.bilans[anneeCourante] || p.bilans[derniereAnnee])?.fin || 0,
+      restant_apres: inactif ? 0 : ((p.bilans[anneeCourante] || p.bilans[derniereAnnee])?.fin || 0),
     };
-    for (const a of p.annees) soldeLigne.solde_par_annee[a] = p.bilans[a] ? p.bilans[a].fin : 0;
+    for (const a of p.annees) soldeLigne.solde_par_annee[a] = inactif ? 0 : (p.bilans[a] ? p.bilans[a].fin : 0);
     p.lignes.push(soldeLigne);
 
     // Les années hors fenêtre (mais dans la fenêtre d'affichage) doivent quand même
-    // apparaître avec leur solde de fin, pour une colonne remplie partout.
+    // apparaître avec leur solde de fin indépendant, plafonné à 30 j (ou 0 j si inactif).
     for (const a of p.annees) {
       if (!p.bilans[a]) {
+        const ouvertA = !inactif && (!anneeEmbauche || a >= anneeEmbauche);
+        const drA = ouvertA ? plafondAnnee : 0;
+        const permA = ouvertA ? cfg.joursPermissionParAn : 0;
         p.bilans[a] = {
-          annee: a, report: 0, prescrits: 0, droit: cfg.joursCongeParAn, ajustements: 0, ouverture: cfg.joursCongeParAn,
-          pris: 0, attente: 0, fin: cfg.joursCongeParAn, permDroit: cfg.joursPermissionParAn, permPris: 0,
-          permAttente: 0, permFin: cfg.joursPermissionParAn, examenPris: 0, examenAttente: 0,
+          annee: a, report: 0, prescrits: 0, droit: drA, ajustements: 0, ouverture: drA,
+          pris: 0, attente: 0, fin: drA, permDroit: permA, permPris: 0,
+          permAttente: 0, permFin: permA, examenPris: 0, examenAttente: 0,
           nbDemandes: 0, nbEnAttente: 0,
         };
       }
     }
     const bilanCourant = p.bilans[anneeCourante] || p.bilans[Math.max(...Object.keys(p.bilans).map(Number))] || null;
     const anneeReference = bilanCourant ? bilanCourant.annee : anneeCourante;
-    p.soldeActuel = bilanCourant ? bilanCourant.fin : 0;
-    const dec = decomposerDroitsSuccessifs(p.soldeActuel, anneeReference, cfg.joursCongeParAn, anneeEmbauche, nbSuccessives);
-    p.droitsParTitre = dec.droitsParTitre;
-    p.titreActif = dec.titreActif;
-    p.resteTitreActif = dec.resteTitreActif;
-    p.permissionActuelle = bilanCourant ? bilanCourant.permFin : 0;
-    if (bilanCourant) {
+    p.soldeActuel = inactif ? 0 : (bilanCourant ? bilanCourant.fin : 0);
+    const droitsParTitreIndependants: Record<number, number> = {};
+    for (const a of anneesSuccessives(anneeReference, nbSuccessives)) {
+      if (inactif) {
+        droitsParTitreIndependants[a] = 0;
+      } else if (p.bilans[a]) {
+        droitsParTitreIndependants[a] = p.bilans[a].fin;
+      } else {
+        droitsParTitreIndependants[a] = !anneeEmbauche || a >= anneeEmbauche ? plafondAnnee : 0;
+      }
+    }
+    p.droitsParTitre = droitsParTitreIndependants;
+    p.titreActif = anneeReference;
+    p.resteTitreActif = inactif ? 0 : p.soldeActuel;
+    p.permissionActuelle = inactif ? 0 : (bilanCourant ? bilanCourant.permFin : 0);
+    if (bilanCourant && !inactif) {
       totaux.nbSalaries++;
       totaux.nbDemandes += bilanCourant.nbDemandes;
       totaux.nbEnAttente += bilanCourant.nbEnAttente;
@@ -1113,6 +1082,8 @@ export interface SoldeSaisie {
   employe_id: number;
   numero_matricule: number;
   nom_prenoms: string;
+  inactif?: boolean;
+  date_inactif?: string;
   annee_embauche: number;
   annee: number;
   droit: number;
@@ -1125,9 +1096,9 @@ export interface SoldeSaisie {
   pris: number;
   attente: number;
   restant: number;
-  /** Détail des jours restants sur chacune des 3 dernières années successives (ex. { 2024: 25, 2025: 30, 2026: 30 }). */
+  /** Détail des jours restants indépendants sur chaque année affichée (ex. { 2024: 10, 2025: 9, 2026: 5 }). */
   droitsParTitre: Record<number, number>;
-  /** Titre/Année actif en cours de consommation (mode FIFO sur les 3 dernières années). */
+  /** Titre/Année actif en cours (géré indépendamment année par année). */
   titreActif: number;
   /** Jours restants sur le Titre/Année actif (« Congé sisa ambiny »). */
   resteTitreActif: number;
@@ -1150,35 +1121,40 @@ export function calculerSoldes(
   const cfg = sanitizeCongesConfig(config);
   const etat = construireEtat(employes, conges, cfg, {
     annee,
-    nbAnnees: options.nbAnnees || 1,
+    nbAnnees: options.nbAnnees || cfg.nbAnneesCumul,
     employes: options.employes,
   });
   return etat.parcours.map((p) => {
     const b = p.bilans[annee];
+    const inactif = Boolean(p.inactif);
     const videParTitre: Record<number, number> = {};
     for (const a of anneesSuccessives(annee, etat.config.nbAnneesCumul)) videParTitre[a] = 0;
-    if (!b) {
+    if (!b || inactif) {
       return {
         employe_id: p.employe_id, numero_matricule: p.numero_matricule, nom_prenoms: p.nom_prenoms,
+        inactif, date_inactif: p.date_inactif || '',
         annee_embauche: p.annee_embauche,
-        annee, droit: 0, ajust: 0, report: 0, prescrits: 0, ouverture: 0, pris: 0, attente: 0, restant: 0,
+        annee, droit: 0, ajust: 0, report: 0, prescrits: 0, ouverture: 0,
+        pris: b ? Number(b.pris.toFixed(2)) : 0,
+        attente: b ? Number(b.attente.toFixed(2)) : 0,
+        restant: 0,
         droitsParTitre: videParTitre, titreActif: annee, resteTitreActif: 0,
-        permDroit: 0, permPris: 0, permAttente: 0, permRestant: 0, examenJours: 0, nbDemandes: 0,
+        permDroit: 0,
+        permPris: b ? Number(b.permPris.toFixed(2)) : 0,
+        permAttente: b ? Number(b.permAttente.toFixed(2)) : 0,
+        permRestant: 0,
+        examenJours: b ? Number((b.examenPris + b.examenAttente).toFixed(2)) : 0,
+        nbDemandes: b ? b.nbDemandes : 0,
         depassement: false,
       };
     }
     const restant = Number((b.fin).toFixed(2));
-    const dec = decomposerDroitsSuccessifs(
-      restant,
-      annee,
-      etat.config.joursCongeParAn,
-      p.annee_embauche,
-      etat.config.nbAnneesCumul
-    );
     return {
       employe_id: p.employe_id,
       numero_matricule: p.numero_matricule,
       nom_prenoms: p.nom_prenoms,
+      inactif: false,
+      date_inactif: p.date_inactif || '',
       annee_embauche: p.annee_embauche,
       annee,
       droit: b.droit,
@@ -1189,9 +1165,9 @@ export function calculerSoldes(
       pris: Number((b.pris).toFixed(2)),
       attente: Number((b.attente).toFixed(2)),
       restant,
-      droitsParTitre: dec.droitsParTitre,
-      titreActif: dec.titreActif,
-      resteTitreActif: dec.resteTitreActif,
+      droitsParTitre: { ...p.droitsParTitre },
+      titreActif: annee,
+      resteTitreActif: restant,
       permDroit: b.permDroit,
       permPris: Number((b.permPris).toFixed(2)),
       permAttente: Number((b.permAttente).toFixed(2)),
@@ -1219,6 +1195,8 @@ export interface ControleSolde {
   droitsParTitre?: Record<number, number>;
   /** Vrai si le titre indiqué dans la demande porte sur une année antérieure aux 3 dernières années (prescrite). */
   titrePrescrit?: boolean;
+  /** Vrai si le salarié est inactif (les personnes inactives n'ont plus droit aux congés). */
+  salarieInactif?: boolean;
 }
 
 /**
@@ -1237,6 +1215,24 @@ export function controleSolde(
   const cfg = sanitizeCongesConfig(config);
   const idDemande = Number(demande?.id) || 0;
   const employe = (employes || []).find((e) => Number(e.id) === Number(employeId));
+  const anneesAutorisees = anneesSuccessives(annee, cfg.nbAnneesCumul);
+  const jours = Number(demande?.jours_valides ?? demande?.jours_demandes ?? 0);
+  if (employe && estEmployeInactif(employe)) {
+    const zeroParTitre: Record<number, number> = {};
+    for (const a of anneesAutorisees) zeroParTitre[a] = 0;
+    return {
+      disponible: 0,
+      apresDemande: Number((-jours).toFixed(2)),
+      suffisant: false,
+      congeRestant: 0,
+      permissionRestante: 0,
+      dejaAttente: 0,
+      anneesAutorisees,
+      droitsParTitre: zeroParTitre,
+      titrePrescrit: false,
+      salarieInactif: true,
+    };
+  }
   const autres = (conges || [])
     .map((c) => normaliserConge(c, cfg))
     .filter((c) => Number(c.employe_id) === Number(employeId) && Number(c.id) !== idDemande);
@@ -1244,10 +1240,8 @@ export function controleSolde(
   const congeRestant = solde ? solde.restant : 0;
   const permissionRestante = solde ? solde.permRestant : 0;
   const imputation: ImputationConges = (demande?.imputation as ImputationConges) || 'CONGE';
-  const jours = Number(demande?.jours_valides ?? demande?.jours_demandes ?? 0);
   const base = imputation === 'PERMISSION' ? permissionRestante : congeRestant;
   const apres = imputation === 'AUCUNE' ? base : Number((base - jours).toFixed(2));
-  const anneesAutorisees = anneesSuccessives(annee, cfg.nbAnneesCumul);
   const anneeMinLoi = anneesAutorisees[0] ?? annee;
   const matchTitre = /\b(19\d{2}|20\d{2})\b/.exec(String(demande?.titre_periode || ''));
   const anneeTitre = matchTitre ? Number(matchTitre[1]) : 0;
@@ -1517,14 +1511,13 @@ export function calculerSyntheseCongesPeriode(
 
     if (!bornes) {
       const restant = s ? s.restant : 0;
-      const { titreActif, resteTitreActif } = decomposerTitreActif(restant, annee, cfg.joursCongeParAn, anneeEmb, nbAnnees);
       resultat.set(empId, {
         employe_id: empId,
         conge_pris_mois: 0,
         conge_pris_annee: s ? s.pris : 0,
         conge_restant: restant,
-        conge_titre_actif: titreActif,
-        conge_reste_titre: resteTitreActif,
+        conge_titre_actif: annee,
+        conge_reste_titre: restant,
         permission_pris_mois: 0,
         permission_restante: s ? s.permRestant : 0,
       });
@@ -1568,23 +1561,17 @@ export function calculerSyntheseCongesPeriode(
       }
     }
 
-    const congeRestant = Number((ouverture - congeJusquaMois).toFixed(2));
-    const permRestante = Number((permDroit - permJusquaMois).toFixed(2));
-    const { titreActif, resteTitreActif } = decomposerTitreActif(
-      congeRestant,
-      annee,
-      cfg.joursCongeParAn,
-      anneeEmb,
-      nbAnnees
-    );
+    const inactif = estEmployeInactif(emp);
+    const congeRestant = inactif ? 0 : Number((ouverture - congeJusquaMois).toFixed(2));
+    const permRestante = inactif ? 0 : Number((permDroit - permJusquaMois).toFixed(2));
 
     resultat.set(empId, {
       employe_id: empId,
       conge_pris_mois: Number(congeMois.toFixed(2)),
       conge_pris_annee: Number(congeJusquaMois.toFixed(2)),
       conge_restant: congeRestant,
-      conge_titre_actif: titreActif,
-      conge_reste_titre: resteTitreActif,
+      conge_titre_actif: annee,
+      conge_reste_titre: congeRestant,
       permission_pris_mois: Number(permMois.toFixed(2)),
       permission_restante: permRestante,
     });

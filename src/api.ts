@@ -13,8 +13,13 @@ import {
   remoteUsersPassword,
   remoteUsersToggle,
   remoteUsersDelete,
+  remoteExportSqlBackup,
+  remoteListSqlBackups,
+  remoteDownloadSqlBackupFile,
 } from './wampClient';
-export type { ImportOptions, ImportRapport, SaisieLot, CongeFiltres, CongeMeta } from './api-local';
+import { setDerniereSauvegardeSql, getDerniereSauvegardeSql } from './local/sqlBackup';
+export type { ImportOptions, ImportRapport, SaisieLot, CongeFiltres, CongeMeta, EntreeHistoriqueSql, ResultatSauvegardeSql } from './api-local';
+export { getDerniereSauvegardeSql };
 export type { CongeImportLigne, CongeImportRapport, AnalyseControleConges } from './local/importConges';
 export const apiLogin: typeof local.apiLogin = async (u, p) => {
   const user = WAMP ? await remoteLogin(u, p) : await local.apiLogin(u, p);
@@ -38,7 +43,23 @@ export const initPaieEmploye: typeof local.initPaieEmploye = (...args) => WAMP ?
 export const initMoisPaie: typeof local.initMoisPaie = (...args) => WAMP ? remoteWrite('initMoisPaie', () => local.initMoisPaie(...args), { success: false, initializedCount: 0 }) : local.initMoisPaie(...args);
 export const savePaieSaisie: typeof local.savePaieSaisie = (...args) => WAMP ? remoteWrite('savePaieSaisie', () => local.savePaieSaisie(...args), { success: false }) : local.savePaieSaisie(...args);
 export const savePaieReglement: typeof local.savePaieReglement = (...args) => WAMP ? remoteWrite('savePaieReglement', () => local.savePaieReglement(...args), { success: false }) : local.savePaieReglement(...args);
-export const cloturerMois: typeof local.cloturerMois = (...args) => WAMP ? remoteWrite('cloturerMois', () => local.cloturerMois(...args), false) : local.cloturerMois(...args);
+export const cloturerMois = async (annee: number, mois: string): Promise<boolean> => {
+  setDerniereSauvegardeSql(null);
+  if (WAMP) {
+    const ok = await remoteWrite('cloturerMois', () => local.cloturerMois(annee, mois, true), false);
+    if (ok && !getDerniereSauvegardeSql()) {
+      const m = String(mois).toUpperCase();
+      await remoteExportSqlBackup({
+        type: 'CLOTURE',
+        periode: `${m} ${annee}`,
+        motif: `Clôture de caisse / paie validée — ${m} ${annee}`,
+        telecharger: true,
+      });
+    }
+    return ok;
+  }
+  return local.cloturerMois(annee, mois, false);
+};
 export const deverrouillerMois: typeof local.deverrouillerMois = (...args) => WAMP ? remoteWrite('deverrouillerMois', () => local.deverrouillerMois(...args), false) : local.deverrouillerMois(...args);
 export const enregistrerSaisieLot: typeof local.enregistrerSaisieLot = (...args) => WAMP ? remoteWrite('enregistrerSaisieLot', () => local.enregistrerSaisieLot(...args), { success: false, message: 'Sauvegarde non confirmée.' }) : local.enregistrerSaisieLot(...args);
 // --- Congés, permissions et examens médicaux ---
@@ -62,3 +83,11 @@ export const modifierUtilisateur: typeof local.modifierUtilisateur = (id, data) 
 export const changerMotDePasseUtilisateur: typeof local.changerMotDePasseUtilisateur = (id, pwd) => WAMP ? remoteUsersPassword(id, pwd) : local.changerMotDePasseUtilisateur(id, pwd);
 export const toggleActifUtilisateur: typeof local.toggleActifUtilisateur = (id, actif) => WAMP ? remoteUsersToggle(id, actif) : local.toggleActifUtilisateur(id, actif);
 export const supprimerUtilisateur: typeof local.supprimerUtilisateur = (id) => WAMP ? remoteUsersDelete(id) : local.supprimerUtilisateur(id);
+// --- Sauvegarde SQL relationnelle (manuelle & automatique sur clôture) ---
+export const exporterSauvegardeSql: typeof local.exporterSauvegardeSqlLocale = (options) =>
+  WAMP ? remoteExportSqlBackup(options) : local.exporterSauvegardeSqlLocale(options);
+export const fetchHistoriqueSauvegardesSql: typeof local.fetchHistoriqueSauvegardesSqlLocale = () =>
+  WAMP ? remoteListSqlBackups() : local.fetchHistoriqueSauvegardesSqlLocale();
+export const telechargerSauvegardeSqlServeur = async (filename: string): Promise<{ success: boolean; message?: string }> =>
+  WAMP ? remoteDownloadSqlBackupFile(filename) : { success: false, message: 'Disponible uniquement sur serveur WAMP.' };
+

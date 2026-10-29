@@ -61,6 +61,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
   const [filtre, setFiltre] = useState<FiltreListe>('TOUTES');
   const [nbAnnees, setNbAnnees] = useState(() => loadConfig().congies.nbAnneesCumul || 3);
   const [inclureRefuses, setInclureRefuses] = useState(false);
+  const [inclureInactifs, setInclureInactifs] = useState(false);
   const anneesLoi = useMemo(() => anneesSuccessives(annee, config.nbAnneesCumul), [annee, config.nbAnneesCumul]);
   const [chargement, setChargement] = useState(true);
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; texte: string } | null>(null);
@@ -74,9 +75,9 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
     try {
       const [emps, situation, liste, etatData] = await Promise.all([
         fetchEmployes(false, recherche),
-        fetchSituationConges(annee, false),
+        fetchSituationConges(annee, !inclureInactifs),
         fetchConges({ recherche, inclureRefuses: true }),
-        fetchEtatConges(annee, { nbAnnees, recherche, inclureRefuses }),
+        fetchEtatConges(annee, { nbAnnees, recherche, inclureRefuses, inclureInactifs }),
       ]);
       setEmployes(emps);
       setSoldes(Object.fromEntries(situation.map((s) => [s.employe_id, s])));
@@ -86,7 +87,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
     } finally {
       setChargement(false);
     }
-  }, [annee, recherche, nbAnnees, inclureRefuses]);
+  }, [annee, recherche, nbAnnees, inclureRefuses, inclureInactifs]);
 
   useEffect(() => { charger(); }, [charger]);
   useEffect(() => {
@@ -114,14 +115,15 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
     const q = recherche.trim().toLowerCase();
     return employes
       .map((e) => ({ employe: e, solde: soldes[Number(e.id)] }))
-      .filter(({ employe, solde }) => solde && (solde.nbDemandes > 0 || Number(employe.actif) === 1))
+      .filter(({ employe, solde }) => solde && (Number(employe.actif) === 1 || inclureInactifs))
       .filter(({ employe }) => !q || String(employe.nom_prenoms || '').toLowerCase().includes(q) || String(employe.numero_matricule || '').includes(q) || String(employe.jobs || '').toLowerCase().includes(q))
       .sort((a, b) =>
+        (Number(b.employe.actif) - Number(a.employe.actif)) ||
         (b.solde!.attente - a.solde!.attente) ||
         (a.solde!.restant - b.solde!.restant) ||
         (Number(a.employe.numero_matricule) || 0) - (Number(b.employe.numero_matricule) || 0)
       );
-  }, [employes, soldes, recherche]);
+  }, [employes, soldes, recherche, inclureInactifs]);
 
   // --------------------------------------------------------------------- actions
   const signaler = (res: { success: boolean; message?: string; avertissement?: string }, succes: string) => {
@@ -149,29 +151,32 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
   const recapPourFiche = useCallback((c: CongeAbsence): RecapFiche | null => {
     const s = soldes[c.employe_id];
     if (!s) return null;
+    const anneeFiche = c.annee || s.annee;
+    const restantAnnee =
+      s.droitsParTitre && s.droitsParTitre[anneeFiche] !== undefined
+        ? s.droitsParTitre[anneeFiche]
+        : s.restant;
     const j = joursAffiches(c);
     const estDejaDeduit = c.statut === 'VALIDE';
-    const soldeAvant = c.imputation === 'CONGE' ? (estDejaDeduit ? s.restant + j : s.restant) : s.restant;
-    const soldeApres = c.imputation === 'CONGE' ? (estDejaDeduit ? s.restant : s.restant - j) : s.restant;
+    const soldeAvant = c.imputation === 'CONGE' ? (estDejaDeduit ? restantAnnee + j : restantAnnee) : restantAnnee;
+    const soldeApres = c.imputation === 'CONGE' ? (estDejaDeduit ? restantAnnee : restantAnnee - j) : restantAnnee;
     const permAvant = c.imputation === 'PERMISSION' ? (estDejaDeduit ? s.permRestant + j : s.permRestant) : s.permRestant;
     const permApres = c.imputation === 'PERMISSION' ? (estDejaDeduit ? s.permRestant : s.permRestant - j) : s.permRestant;
-    const decAv = decomposerTitreActif(soldeAvant, s.annee, config.joursCongeParAn, s.annee_embauche, config.nbAnneesCumul);
-    const decAp = decomposerTitreActif(soldeApres, s.annee, config.joursCongeParAn, s.annee_embauche, config.nbAnneesCumul);
     return {
-      annee: c.annee || s.annee,
-      droitConge: s.droit,
-      report: s.report,
+      annee: anneeFiche,
+      droitConge: Math.min(30, s.droit || config.joursCongeParAn || 30),
+      report: 0,
       soldeAvant,
       soldeApres,
       permDroit: s.permDroit,
       permAvant,
       permApres,
-      titreAvant: decAv.titreActif,
-      resteTitreAvant: decAv.resteTitreActif,
-      titreApres: decAp.titreActif,
-      resteTitreApres: decAp.resteTitreActif,
+      titreAvant: anneeFiche,
+      resteTitreAvant: soldeAvant,
+      titreApres: anneeFiche,
+      resteTitreApres: soldeApres,
     };
-  }, [soldes, config.joursCongeParAn, config.nbAnneesCumul]);
+  }, [soldes, config.joursCongeParAn]);
 
   const saisirOuverture = useCallback(async (
     employeId: number,
@@ -363,6 +368,10 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
           <button onClick={() => setReferentiel((v) => !v)} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2.5 py-2 text-xs font-bold flex items-center gap-1.5">
             <BookOpen className="w-4 h-4" />Droits & motifs
           </button>
+          <label className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer select-none" title="Les personnes inactives n'ont aucun droit aux congés (0 j)">
+            <input type="checkbox" checked={inclureInactifs} onChange={(e) => setInclureInactifs(e.target.checked)} className="accent-salfa-teal" />
+            Afficher inactifs (0 j)
+          </label>
           <button onClick={charger} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2.5 py-2 text-xs font-bold flex items-center gap-1.5" title="Recharger depuis le stockage local">
             <RefreshCw className={`w-4 h-4 ${chargement ? 'animate-spin' : ''}`} />
           </button>
@@ -390,9 +399,9 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
         </div>
 
         <p className="text-[11px] text-slate-500 dark:text-slate-400">
-          <b>Loi malgache (Code du Travail)</b> : <b>{encadre(config.joursCongeParAn)} jours de congé par an</b>, droit cumulable uniquement sur{' '}
-          <b>les {config.nbAnneesCumul} dernières années successives ({anneesLoi.join(', ')})</b> soit un plafond de <b>{encadre(config.plafondCumulConge)} jours</b>{' '}
-          (les droits antérieurs non pris sont prescrits), et <b>{encadre(config.joursPermissionParAn)} jours de permission</b> par an.
+          <b>Règle des congés SALFA</b> : <b>{encadre(Math.min(30, config.joursCongeParAn))} jours de congé maximum tous les ans</b>, chaque année ({anneesLoi.join(', ')}) étant{' '}
+          <b>gérée indépendamment</b> (aucun report ni cumul d'une année sur l'autre), et <b>{encadre(config.joursPermissionParAn)} jours de permission</b> par an.{' '}
+          <b>Les personnes inactives n'ont plus aucun droit aux congés (0 j).</b>
         </p>
       </div>
 
@@ -526,7 +535,14 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
                       <td className="px-2 py-1.5 text-center font-bold text-salfa-dark dark:text-white">{employe.numero_matricule}</td>
                       <td className="px-2 py-1.5">
                         <div className="font-semibold text-slate-800 dark:text-slate-100 whitespace-normal">{employe.nom_prenoms}</div>
-                        <div className="text-[9px] text-slate-500 whitespace-normal">{employe.jobs || '—'} · {Number(employe.actif) === 1 ? 'actif' : 'inactif'}</div>
+                        <div className="text-[9px] text-slate-500 whitespace-normal">
+                          {employe.jobs || '—'} ·{' '}
+                          {Number(employe.actif) === 1 ? (
+                            'actif'
+                          ) : (
+                            <span className="font-bold text-red-600 dark:text-red-400">inactif — sans droit aux congés (0 j)</span>
+                          )}
+                        </div>
                       </td>
                       {anneesLoi.map((a) => {
                         const val = solde!.droitsParTitre?.[a] ?? 0;
@@ -558,9 +574,15 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
                       <td className={`px-2 py-1.5 text-right font-mono font-bold ${solde!.permRestant < 0 ? 'text-red-600' : ''}`}>{encadre(solde!.permRestant)}</td>
                       <td className="px-2 py-1.5 text-center font-mono text-slate-500">{solde!.examenJours ? encadre(solde!.examenJours) : '·'}</td>
                       <td className="px-2 py-1.5 text-right whitespace-nowrap">
-                        <button onClick={() => setModal({ ouvert: true, initial: { employe_id: Number(employe.id), annee, date_demande: new Date().toISOString().slice(0, 10) } })} className="p-1.5 rounded-md bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200" title="Nouvelle fiche pour ce salarié">
-                          <CalendarPlus className="w-3.5 h-3.5" />
-                        </button>
+                        {Number(employe.actif) === 1 ? (
+                          <button onClick={() => setModal({ ouvert: true, initial: { employe_id: Number(employe.id), annee, date_demande: new Date().toISOString().slice(0, 10) } })} className="p-1.5 rounded-md bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200" title="Nouvelle fiche pour ce salarié">
+                            <CalendarPlus className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-[9px] font-bold text-slate-400 mr-1" title="Salarié inactif : aucun droit aux congés">
+                            Sans droit
+                          </span>
+                        )}
                         <button onClick={() => setRecherche(String(employe.numero_matricule))} className="p-1.5 rounded-md bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200" title="Filtrer sur ce salarié">
                           <Eye className="w-3.5 h-3.5" />
                         </button>
@@ -776,7 +798,7 @@ const ReferentielAbsence: React.FC<{ config: CongesConfig; onClose: () => void }
         <div className="rounded-lg bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 p-2.5">
           <div className="font-bold uppercase text-[10px] text-slate-500 mb-1">Droits annuels appliqués</div>
           <ul className="space-y-1 list-disc pl-4">
-            <li>Congé : <b>{encadre(config.joursCongeParAn)} jours par an</b>, cumulable uniquement sur <b>les {config.nbAnneesCumul} dernières années successives</b> soit un plafond de <b>{encadre(config.plafondCumulConge)} jours</b> (« 30 andro isan-taona ary tsy mihoatra ny 90 andro » — Code du Travail malgache, prescription au-delà de {config.nbAnneesCumul} ans).</li>
+            <li>Congé : <b>{encadre(Math.min(30, config.joursCongeParAn))} jours maximum tous les ans</b>, <b>géré indépendamment année par année</b> (aucun report ni cumul d'une année sur l'autre).</li>
             <li>Permission : <b>{encadre(config.joursPermissionParAn)} jours par an</b> pour les événements 1* à 5*.</li>
             <li>Examen médical : consultation, dentaire, pré-natale sur « Taratasy fanamarihana avy @ dokotera », sans décompte.</li>
             <li>Période demandée incluse (<i>Du … au …</i>) et <b>Daty fiverenana miasa</b> ajustée automatiquement au lendemain de la fin demandée ({config.exclureDimanche ? 'dimanche non décompté' : 'dimanche décompté'}{config.exclureSamedi ? ', samedi non décompté' : ''}{config.joursFeries ? `, ${config.joursFeries.trim().split(/[\s,;]+/).length} jour(s) férié(s)` : ''}).</li>
