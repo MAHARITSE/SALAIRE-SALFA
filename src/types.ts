@@ -2,6 +2,19 @@
 // TYPES ET INTERFACES TYPESCRIPT - SALFA TANAMBAO
 // ==============================================================================
 
+export type {
+  CongeAbsence,
+  CategorieAbsence,
+  ImputationConges,
+  StatutConges,
+  MotifAbsence,
+  CongesConfig,
+  SoldeSaisie,
+  BilanAnnee,
+  LigneEtatConges,
+  ParcoursConges,
+} from './local/conges';
+
 export interface Employe {
   id: number;
   numero_matricule: number;
@@ -19,6 +32,7 @@ export interface Employe {
   rib: string;
   mode_paiement: string;
   actif: number;
+  date_inactif?: string;
   conge_maternite?: number | boolean;
   date_debut_maternite?: string;
 }
@@ -63,6 +77,13 @@ export interface PaieMensuelle {
   verrouille: number;
   conge_maternite?: number | boolean;
   date_debut_maternite?: string;
+  conge_pris_mois?: number;
+  conge_pris_annee?: number;
+  conge_restant?: number;
+  conge_titre_actif?: number;
+  conge_reste_titre?: number;
+  permission_pris_mois?: number;
+  permission_restante?: number;
 }
 
 export interface TotauxMois {
@@ -90,6 +111,8 @@ export interface TotauxMois {
   total_net?: number;
   total_virement?: number;
   total_especes?: number;
+  total_conge_pris_mois?: number;
+  total_conge_restant?: number;
 }
 
 export interface ComparaisonNet {
@@ -108,4 +131,20 @@ export interface UserSession {
   nom_complet: string;
   role: 'Administrateur' | 'Comptable';
   actif?: number;
+}
+
+export interface CompteUtilisateur {
+  id: number;
+  username: string;
+  nom_complet: string;
+  role: 'Administrateur' | 'Comptable';
+  actif: number;
+}
+
+export interface CompteConnexionPublic {
+  id: number;
+  username: string;
+  nom_complet: string;
+  role: 'Administrateur' | 'Comptable';
+  motDePasseDemo?: string;
 }

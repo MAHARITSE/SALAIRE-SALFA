@@ -4,14 +4,15 @@ import { WAMP } from '../runtime';
 import { remoteSaveSetting } from '../wampClient';
 import {
   ShieldCheck, X, Plus, Trash2, HeartHandshake, CheckCircle2, Info,
-  Sliders, Layers, Calculator, Award, RotateCcw, Save,
+  Sliders, Layers, Calculator, Award, RotateCcw, Save, CalendarCheck2,
 } from 'lucide-react';
+import { CongesConfig, DEFAULT_CONGES_CONFIG, MOTIFS_ABSENCE, LIBELLES_CATEGORIE } from '../local/conges';
 import { loadConfig, saveConfig, PaieConfig, BaremeAncienneteConfig, TrancheIrsaConfig, DEFAULT_CONFIG, DEFAULT_BAREME_ANCIENNETE, DEFAULT_BAREME_IRSA, resetConfig } from '../local/config';
 import { detailIrsaAvecConfig, obtenirIndiceAncienneteAvecBareme } from '../local/calcul';
 
 interface AdminModalProps { onClose: () => void; }
 
-type TabKey = 'formules' | 'irsa' | 'anciennete' | 'colonnes';
+type TabKey = 'formules' | 'irsa' | 'anciennete' | 'colonnes' | 'conges';
 
 export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
   const initial = loadConfig();
@@ -31,6 +32,20 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
   // Barèmes éditables
   const [baremeIrsa, setBaremeIrsa] = useState<TrancheIrsaConfig[]>(() => initial.baremeIrsa.map(t => ({ ...t })));
   const [baremeAnciennete, setBaremeAnciennete] = useState<BaremeAncienneteConfig[]>(() => initial.baremeAnciennete.map(b => ({ ...b })));
+
+  // Droits de congé, permission et examens médicaux (module Congés & Permissions)
+  const [congies, setCongies] = useState<CongesConfig>(() => ({ ...(initial.congies || DEFAULT_CONGES_CONFIG) }));
+  const majConges = <K extends keyof CongesConfig>(cle: K, valeur: CongesConfig[K]) =>
+    setCongies((prev) => {
+      const next = { ...prev, [cle]: valeur };
+      if (cle === 'nbAnneesCumul' || cle === 'joursCongeParAn') {
+        const nb = Math.max(1, Math.min(10, Math.round(Number(next.nbAnneesCumul) || 3)));
+        const jpa = Math.max(0, Number(next.joursCongeParAn) || 0);
+        next.nbAnneesCumul = nb;
+        next.plafondCumulConge = Math.round(nb * jpa * 100) / 100;
+      }
+      return next;
+    });
 
   // Simulateurs
   const [salaireEssai, setSalaireEssai] = useState<number>(500000);
@@ -188,6 +203,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
       plafondEspeces: Number(plafondEspeces) || 0,
       baremeIrsa: [...baremeIrsa].sort((a, b) => a.min - b.min),
       baremeAnciennete: [...baremeAnciennete].sort((a, b) => a.min - b.min),
+      congies: { ...congies },
     });
     if (WAMP) { try { await remoteSaveSetting('config', cfg); } catch (e) { alert(e instanceof Error ? e.message : 'Sauvegarde serveur impossible.'); window.location.reload(); return; } }
     setTauxMaternite(cfg.tauxMaternite);
@@ -201,6 +217,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
     setPlafondEspeces(cfg.plafondEspeces);
     setBaremeIrsa(cfg.baremeIrsa.map(t => ({ ...t })));
     setBaremeAnciennete(cfg.baremeAnciennete.map(b => ({ ...b })));
+    setCongies({ ...cfg.congies });
     alert("Paramètres de calcul enregistrés ! Les nouveaux bulletins utiliseront ces formules.");
     onClose();
     // petit reload pour être sûr que tous les onglets recalculent, mais conserve localStorage
@@ -222,6 +239,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
     setPlafondEspeces(def.plafondEspeces);
     setBaremeIrsa(def.baremeIrsa.map(t => ({ ...t })));
     setBaremeAnciennete(def.baremeAnciennete.map(b => ({ ...b })));
+    setCongies({ ...DEFAULT_CONGES_CONFIG });
   };
 
   return (
@@ -244,6 +262,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
             { id: 'irsa' as TabKey, label: '2. Barème IRSA', short: 'IRSA', icon: Calculator },
             { id: 'anciennete' as TabKey, label: '3. Ancienneté', short: 'Anc.', icon: Award },
             { id: 'colonnes' as TabKey, label: '4. Colonnes', short: 'Cols', icon: Layers },
+            { id: 'conges' as TabKey, label: '5. Congés & permissions', short: 'Congés', icon: CalendarCheck2 },
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 border-b-2 whitespace-nowrap shrink-0 ${activeTab === tab.id ? 'border-salfa-teal dark:border-sky-400 text-salfa-dark dark:text-white bg-white dark:bg-slate-800' : 'border-transparent text-slate-600 dark:text-slate-300'}`}>
               <tab.icon className="w-4 h-4 text-salfa-teal dark:text-sky-300" />
@@ -455,6 +474,97 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose }) => {
               <form onSubmit={handleAddColonne} className="bg-slate-50 dark:bg-slate-700/30 border dark:border-slate-700 rounded-xl p-3 sm:p-4 flex flex-col gap-3"><div className="flex flex-col sm:flex-row gap-3"><div className="flex-1"><label className="block text-[11px] font-bold uppercase mb-1 dark:text-slate-300">Nom nouvelle colonne</label><input type="text" value={newColNom} onChange={(e) => setNewColNom(e.target.value)} placeholder="ex: Prime Bilinguisme..." className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" /></div><div className="w-full sm:w-auto"><label className="block text-[11px] font-bold uppercase mb-1 dark:text-slate-300">Type</label><select value={newColType} onChange={(e) => setNewColType(e.target.value)} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-bold"><option value="Accessoire">Accessoire (+)</option><option value="Gain de base">Gain de base (+)</option><option value="Retenue">Retenue (-)</option></select></div></div><button type="submit" className="w-full sm:w-auto bg-salfa-dark dark:bg-slate-600 hover:bg-salfa-teal text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-1.5 shadow"><Plus className="w-4 h-4" /><span>Ajouter la Colonne</span></button></form>
               <div className="block sm:hidden space-y-2">{colonnes.map((col, idx) => (<div key={idx} className="border dark:border-slate-700 rounded-xl p-3 bg-white dark:bg-slate-700 flex justify-between items-center gap-2"><div className="min-w-0"><div className="font-bold text-sm truncate dark:text-white">{col.nom}</div><div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">{col.id} • {col.type}</div></div><div className="flex items-center gap-2 shrink-0">{col.permanent ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 font-bold">Officiel</span> : <><span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 font-bold">Perso</span><button onClick={() => handleRemoveColonne(idx)} className="p-1.5 rounded bg-red-50 dark:bg-red-900/20 text-red-600"><Trash2 className="w-4 h-4" /></button></>}</div></div>))}</div>
               <div className="hidden sm:block border dark:border-slate-700 rounded-xl overflow-hidden"><div className="overflow-x-auto thin-scrollbar"><table className="w-full text-left border-collapse text-xs min-w-[600px] dark:text-slate-200"><thead><tr className="bg-slate-100 dark:bg-slate-700 border-b dark:border-slate-600 font-bold uppercase text-slate-600 dark:text-slate-300"><th className="py-2.5 px-4">ID SQL</th><th className="py-2.5 px-4">Nom Colonne</th><th className="py-2.5 px-4">Type</th><th className="py-2.5 px-4 text-center">Statut</th><th className="py-2.5 px-4 text-center">Action</th></tr></thead><tbody className="divide-y dark:divide-slate-700">{colonnes.map((col, idx) => (<tr key={idx} className="hover:bg-sky-50/50 dark:hover:bg-slate-600/50"><td className="py-2.5 px-4 font-mono text-slate-500 dark:text-slate-400">{col.id}</td><td className="py-2.5 px-4 font-bold">{col.nom}</td><td className="py-2.5 px-4 font-semibold text-salfa-teal dark:text-sky-300">{col.type}</td><td className="py-2.5 px-4 text-center">{col.permanent ? <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 font-bold text-[11px]">Officiel</span> : <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 font-bold text-[11px]">Personnalisé</span>}</td><td className="py-2.5 px-4 text-center">{!col.permanent && <button onClick={() => handleRemoveColonne(idx)} className="p-1 rounded text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" /></button>}</td></tr>))}</tbody></table></div></div>
+            </div>
+          )}
+          {activeTab === 'conges' && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-[11px] sm:text-xs text-amber-900 dark:text-amber-200 flex gap-2">
+                <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  Ces réglages alimentent l'onglet <b>Congés & Permissions</b> (comptable) selon le <b>Code du Travail malgache</b> et la <b>FICHE D'ABSENCE</b> :
+                  congé de 30 jours par an cumulable uniquement sur <b>les 3 dernières années successives</b> (plafond 90 jours, prescription au-delà de 3 ans), permission de 10 jours par an, examens médicaux sur justificatif du médecin.
+                </span>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-4 space-y-3">
+                <h4 className="text-[11px] sm:text-xs font-extrabold text-salfa-dark dark:text-white uppercase tracking-wider border-b dark:border-slate-600 pb-2 flex items-center gap-2">
+                  <CalendarCheck2 className="w-4 h-4 text-salfa-teal" />Droits annuels &amp; prescription légale
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Congé par an (jours)</label>
+                    <input type="number" min={0} step="0.5" value={congies.joursCongeParAn} onChange={(e) => majConges('joursCongeParAn', Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" />
+                    <span className="text-[10px] text-slate-500">« 30 andro isan-taona »</span>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Années successives</label>
+                    <input type="number" min={1} max={10} step={1} value={congies.nbAnneesCumul ?? 3} onChange={(e) => majConges('nbAnneesCumul', Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" />
+                    <span className="text-[10px] text-slate-500">Loi malgache : 3 dernières années</span>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Cumul maximum (jours)</label>
+                    <input type="number" min={0} step="0.5" value={congies.plafondCumulConge} onChange={(e) => majConges('plafondCumulConge', Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" />
+                    <span className="text-[10px] text-slate-500">« tsy mihoatra ny 90 andro »</span>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Permission par an (jours)</label>
+                    <input type="number" min={0} step="0.5" value={congies.joursPermissionParAn} onChange={(e) => majConges('joursPermissionParAn', Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" />
+                    <span className="text-[10px] text-slate-500">« 10 andro isan-taona »</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <label className="flex items-start gap-2 text-[11px] sm:text-xs cursor-pointer"><input type="checkbox" className="mt-0.5 rounded" checked={congies.reportAutorise} onChange={(e) => majConges('reportAutorise', e.target.checked)} /><span><b>Report du solde</b> non consommé sur l'année suivante (plafonné au cumul maximum).</span></label>
+                  <label className="flex items-start gap-2 text-[11px] sm:text-xs cursor-pointer"><input type="checkbox" className="mt-0.5 rounded" checked={congies.examenSurPermission} onChange={(e) => majConges('examenSurPermission', e.target.checked)} /><span>Un <b>examen médical</b> décompte aussi la permission.</span></label>
+                  <label className="flex items-start gap-2 text-[11px] sm:text-xs cursor-pointer"><input type="checkbox" className="mt-0.5 rounded" checked={congies.bloquerDepassement} onChange={(e) => majConges('bloquerDepassement', e.target.checked)} /><span><b>Bloquer</b> une demande validée dépassant le solde (sinon simple rappel).</span></label>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold cursor-pointer"><input type="checkbox" className="rounded" checked={congies.exclureDimanche} onChange={(e) => majConges('exclureDimanche', e.target.checked)} />Dimanche</label>
+                    <label className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold cursor-pointer"><input type="checkbox" className="rounded" checked={congies.exclureSamedi} onChange={(e) => majConges('exclureSamedi', e.target.checked)} />Samedi</label>
+                    <span className="text-[10px] text-slate-500">jours non décomptés d'une absence</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Jours fériés non décomptés</label>
+                  <input type="text" value={congies.joursFeries} onChange={(e) => majConges('joursFeries', e.target.value)} placeholder="2026-03-08 2026-06-26 2026-08-15 2026-11-01 2026-12-25" className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono" />
+                  <span className="text-[10px] text-slate-500">Dates AAAA-MM-JJ séparées par des espaces. Le 1er mars (Insurrection) et le 26 juin (Indépendance) sont d'usage à Madagascar.</span>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2">
+                  <h4 className="text-[11px] sm:text-xs font-extrabold text-salfa-dark dark:text-white uppercase tracking-wider">Motifs prévus par le règlement intérieur</h4>
+                  <span className="text-[10px] text-slate-500">colonne « Voalazan'ny FITSIPIKA ANATINY manan-kery » de la fiche d'absence</span>
+                </div>
+                <div className="table-responsive thin-scrollbar max-h-[38vh]">
+                  <table className="w-full text-left border-collapse text-[11px]">
+                    <thead className="sticky top-0 bg-slate-100 dark:bg-slate-700 uppercase text-[9px] text-slate-600 dark:text-slate-200">
+                      <tr>
+                        <th className="px-2 py-2">Catégorie</th>
+                        <th className="px-2 py-2">Motif (fiche)</th>
+                        <th className="px-2 py-2">Lecture française</th>
+                        <th className="px-2 py-2 text-right">Jours dus</th>
+                        <th className="px-2 py-2 text-center">Visa médecin</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700 dark:text-slate-200">
+                      {MOTIFS_ABSENCE.map((m) => (
+                        <tr key={m.code}>
+                          <td className="px-2 py-1.5 font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">{LIBELLES_CATEGORIE[m.categorie]}</td>
+                          <td className="px-2 py-1.5 font-mono text-[10px] whitespace-normal">{m.libelleDocx}</td>
+                          <td className="px-2 py-1.5 whitespace-normal">{m.libelleFr}</td>
+                          <td className="px-2 py-1.5 text-right font-mono font-bold">{m.jours > 0 ? `${String(m.jours).padStart(2, '0')} andro` : '—'}</td>
+                          <td className="px-2 py-1.5 text-center">{m.avisMedecin ? '✔' : '·'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="px-3 py-2 text-[10px] text-slate-500 border-t border-slate-200 dark:border-slate-700">
+                  Le référentiel des motifs est fixé par la fiche d'absence de la société ; sa structure (libellés malgaches, nombre de jours) est reprise à l'identique
+                  sur les fiches imprimées et dans l'état de contrôle. Pour un changement de règlement, demandez une mise à jour de l'application.
+                </p>
+              </div>
             </div>
           )}
         </div>

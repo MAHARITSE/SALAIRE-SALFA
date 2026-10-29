@@ -1,636 +1,1040 @@
-import { YearSelect, YearProps } from '../YearSelect';
-// ==============================================================================
-// ONGLET 1 FUSIONNÉ - SALARIÉS & FICHES + SAISIE MENSUELLE (AVANCE / MED)
-// Vue unique intégrée : la période en haut, chaque ligne = un salarié avec les
-// infos de sa fiche ET la saisie directe AVANCE / MED dans le tableau.
-// ==============================================================================
-import React, { useState, useEffect } from 'react';
-import { Employe, PaieMensuelle, TotauxMois } from '../../types';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import * as XLSX from 'xlsx';
+import { Employe, PaieMensuelle, UserSession } from '../../types';
 import {
+  fetchEmployes,
+  fetchEmployePaies,
   fetchPaiesMois,
   initMoisPaie,
   savePaieSaisie,
+  savePaieReglement,
   cloturerMois,
   deverrouillerMois,
-  fetchEmployes,
-  fetchEmployePaies,
-  createEmploye,
-  updateEmploye,
-  toggleActifEmploye,
-  initPaieEmploye,
+  fetchPeriodes,
 } from '../../api';
-import { MonetaryInput } from '../MonetaryInput';
-import { downloadPayrollBookletPDF } from '../../pdf/bulletinsPdf';
-import { ImportExcelModal } from '../ImportExcelModal';
-import { SaisieLotModal } from '../SaisieLotModal';
 import {
-  Calendar, Lock, Unlock, RefreshCw, ShieldCheck, CheckCircle, CheckCircle2,
-  Search, Plus, Edit2, UserX, UserCheck, History, X, Award, Info, Save,
-  HeartHandshake, Upload, FileSpreadsheet, CalendarPlus, ClipboardList,
+  Plus,
+  Search,
+  Edit3,
+  History,
+  X,
+  Calendar,
+  Lock,
+  Unlock,
+  RefreshCw,
+  PlusCircle,
+  Save,
+  Check,
+  Baby,
+  ListChecks,
+  Printer,
+  Download,
+  ChevronDown,
+  FileSpreadsheet,
+  Files,
 } from 'lucide-react';
+import { YearProps, YearSelect } from '../YearSelect';
+import { SaisieLotModal } from '../SaisieLotModal';
+import { EmployeModalForm } from '../EmployeModalForm';
 
-function fmt(val: number | undefined | null): string {
-  if (val === undefined || val === null) return '0,00';
-  return val.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const MOIS_LISTE = ['JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', 'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE'];
+
+const num = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const fmt = (val: number | undefined | null) =>
+  val === undefined || val === null
+    ? '0,00'
+    : Number(val).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const formatInputDisplay = (val: number): string => {
+  if (!val) return '';
+  return Number(val)
+    .toLocaleString('fr-FR', { maximumFractionDigits: 2 })
+    .replace(/\u202f/g, ' ');
+};
+
+const parseInputNumber = (raw: string): number => {
+  const cleaned = raw.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
+  if (cleaned === '' || cleaned === '-' || cleaned === '.') return 0;
+  const n = Number(cleaned);
+  return isNaN(n) ? 0 : Math.max(0, Math.round(n * 100) / 100);
+};
+
+function formatDateCourt(raw: unknown) {
+  const s = String(raw ?? '').trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  return iso ? `${iso[3]}/${iso[2]}/${iso[1]}` : s || '—';
 }
 
-const MOIS_LISTE = [
-  'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN',
-  'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE',
-];
+function fmtJoursCourt(val: number | undefined | null): string {
+  const v = Number(val ?? 0);
+  if (!Number.isFinite(v)) return '0';
+  return (Math.round(v * 100) / 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+}
 
 // ------------------------------------------------------------------------------
-// Cellule de saisie monétaire INLINE (validation avec Entrée ou clic hors champ)
+// Colonnes de l'État de paie mensuel (colonnes du classeur Excel + Congés)
+// ------------------------------------------------------------------------------
+type Align = 'left' | 'center' | 'right';
+type EditableColKey = 'avance' | 'med' | 'virement' | 'especes';
+
+type Column = {
+  key: string;
+  label: string;
+  group: number;
+  align: Align;
+  money?: boolean;
+  days?: boolean;
+  sum?: boolean;
+  editable?: EditableColKey;
+  rawValue: (p: PaieMensuelle) => number | string;
+};
+
+const ETAT_GROUPS = [
+  { label: 'IDENTIFICATION DU SALARIÉ', span: 8, bg: 'bg-slate-800' },
+  { label: 'SALAIRE DE BASE', span: 4, bg: 'bg-sky-900' },
+  { label: 'COTISATIONS & IMPÔT', span: 6, bg: 'bg-indigo-900' },
+  { label: 'ACCESSOIRES', span: 7, bg: 'bg-teal-900' },
+  { label: 'RETENUES & RÈGLEMENT (AVANCE · MED · VIREMENT · ESPÈCES ÉDITABLES)', span: 7, bg: 'bg-emerald-900' },
+  { label: 'CONGÉS', span: 2, bg: 'bg-violet-900' },
+];
+
+const ETAT_COLUMNS: Column[] = [
+  // 0 — Identification (8)
+  { key: 'mat', label: 'MAT', group: 0, align: 'center', rawValue: (p) => num(p.numero_matricule) },
+  { key: 'nom', label: 'NOM ET PRÉNOMS', group: 0, align: 'left', rawValue: (p) => p.nom_prenoms || '' },
+  { key: 'cnaps', label: 'N° CNAPS', group: 0, align: 'center', rawValue: (p) => p.numero_cnaps || '' },
+  { key: 'cat', label: 'CAT', group: 0, align: 'center', rawValue: (p) => p.categorie || '' },
+  { key: 'job', label: 'FONCTION (JOB)', group: 0, align: 'left', rawValue: (p) => p.jobs || '' },
+  { key: 'dateEmb', label: 'DATE EMB.', group: 0, align: 'center', rawValue: (p) => formatDateCourt(p.date_embauche) },
+  { key: 'annees', label: 'ANNÉE', group: 0, align: 'center', rawValue: (p) => num(p.nombre_annees) },
+  { key: 'enfants', label: 'ENF.', group: 0, align: 'center', rawValue: (p) => num(p.enfant_a_charge) },
+
+  // 1 — Salaire de base (4)
+  { key: 'base_aj', label: 'BASE AJ', group: 1, align: 'right', money: true, sum: true, rawValue: (p) => num(p.base_aj) },
+  { key: 'logt_trsp', label: 'LOGT/TRSP', group: 1, align: 'right', money: true, sum: true, rawValue: (p) => num(p.logt_trsp) },
+  { key: 'rendement', label: 'RENDEMENT', group: 1, align: 'right', money: true, sum: true, rawValue: (p) => num(p.rendement) },
+  { key: 'resp_repres', label: 'RESP/REPRES', group: 1, align: 'right', money: true, sum: true, rawValue: (p) => num(p.resp_repres) },
+
+  // 2 — Cotisations & impôt (6)
+  { key: 'salaire_brut', label: 'SALAIRE BRUT', group: 2, align: 'right', money: true, sum: true, rawValue: (p) => num(p.salaire_brut) },
+  { key: 'cnaps_sal', label: 'CNaPS', group: 2, align: 'right', money: true, sum: true, rawValue: (p) => num(p.cnaps) },
+  { key: 'patronal', label: 'PATRONAL', group: 2, align: 'right', money: true, sum: true, rawValue: (p) => num(p.patronal) },
+  { key: 'imposable', label: 'SAL. IMPOSABLE', group: 2, align: 'right', money: true, sum: true, rawValue: (p) => num(p.salaire_imposable) },
+  { key: 'irsa', label: 'IRSA', group: 2, align: 'right', money: true, sum: true, rawValue: (p) => num(p.irsa) },
+  { key: 'salaire_net', label: 'SALAIRE NET', group: 2, align: 'right', money: true, sum: true, rawValue: (p) => num(p.salaire_net) },
+
+  // 3 — Accessoires (7)
+  { key: 'augmentation_divers', label: 'AUGM. DIVERS', group: 3, align: 'right', money: true, sum: true, rawValue: (p) => num(p.augmentation_divers) },
+  { key: 'prime_de_garde', label: 'PRIME GARDE', group: 3, align: 'right', money: true, sum: true, rawValue: (p) => num(p.prime_de_garde) },
+  { key: 'anciennete2', label: 'ANC 2', group: 3, align: 'right', money: true, sum: true, rawValue: (p) => num(p.anciennete2) },
+  { key: 'risque', label: 'RISQUE', group: 3, align: 'right', money: true, sum: true, rawValue: (p) => num(p.risque) },
+  { key: 'repr_rec', label: 'REPR/REC', group: 3, align: 'right', money: true, sum: true, rawValue: (p) => num(p.repr_rec) },
+  { key: 'accessoir', label: 'ACCESSOIR', group: 3, align: 'right', money: true, sum: true, rawValue: (p) => num(p.accessoir) },
+  { key: 'brut', label: 'BRUT', group: 3, align: 'right', money: true, sum: true, rawValue: (p) => num(p.brut) },
+
+  // 4 — Retenues & règlement (7)
+  { key: 'avance', label: 'AVANCE', group: 4, align: 'right', money: true, sum: true, editable: 'avance', rawValue: (p) => num(p.avance) },
+  { key: 'med', label: 'MED', group: 4, align: 'right', money: true, sum: true, editable: 'med', rawValue: (p) => num(p.med) },
+  { key: 'net', label: 'NET À PAYER', group: 4, align: 'right', money: true, sum: true, rawValue: (p) => num(p.net) },
+  { key: 'virement', label: 'VIREMENT', group: 4, align: 'right', money: true, sum: true, editable: 'virement', rawValue: (p) => num(p.virement) },
+  { key: 'especes', label: 'ESPÈCES', group: 4, align: 'right', money: true, sum: true, editable: 'especes', rawValue: (p) => num(p.especes) },
+  { key: 'rap', label: 'RAP', group: 4, align: 'center', rawValue: (p) => (num(p.rap) ? 'X' : '') },
+  { key: 'rib', label: 'RIB', group: 4, align: 'left', rawValue: (p) => p.rib || '' },
+
+  // 5 — Congés (alimentés automatiquement par Congés & Permissions) (2)
+  { key: 'conge_pris', label: 'CONGÉ PRIS', group: 5, align: 'right', days: true, sum: true, rawValue: (p) => num(p.conge_pris_mois) },
+  { key: 'conge_restant', label: 'CONGÉ RESTANT', group: 5, align: 'right', days: true, sum: true, rawValue: (p) => num(p.conge_restant) },
+];
+
+// Découpage en 2 pages A4 paysage pour l'impression papier de l'État de paie
+const PRINT_PAGES: { title: string; columns: Column[]; widths: number[] }[] = [
+  {
+    title: 'Identification, salaire de base et charges (CNaPS / IRSA)',
+    columns: ETAT_COLUMNS.slice(0, 18),
+    widths: [2.5, 13.5, 4.8, 2.5, 10.2, 5.0, 2.5, 2.5, 5.8, 5.5, 5.5, 5.5, 6.2, 5.2, 5.5, 6.0, 5.3, 6.0],
+  },
+  {
+    title: 'Accessoires, retenues, règlement et congés',
+    columns: [ETAT_COLUMNS[0], ETAT_COLUMNS[1], ...ETAT_COLUMNS.slice(18, 34)],
+    widths: [2.6, 13.8, 5.0, 5.0, 4.6, 4.6, 4.6, 5.3, 5.8, 5.3, 5.0, 6.0, 5.8, 5.8, 2.0, 10.0, 4.2, 4.6],
+  },
+];
+
+function cellValue(row: PaieMensuelle, col: Column): string {
+  const raw = col.rawValue(row);
+  if (col.money) return fmt(Number(raw || 0));
+  if (col.days) {
+    const v = Number(raw || 0);
+    if (col.key === 'conge_pris' && v === 0) return '—';
+    return `${fmtJoursCourt(v)} j`;
+  }
+  return raw === '' ? '—' : String(raw);
+}
+
+function calcTotals(lignes: PaieMensuelle[]): Record<string, number> {
+  return ETAT_COLUMNS.reduce<Record<string, number>>((acc, col) => {
+    if (col.sum) acc[col.key] = lignes.reduce((s, r) => s + Number(col.rawValue(r) || 0), 0);
+    return acc;
+  }, {});
+}
+
+// ------------------------------------------------------------------------------
+// Composant de saisie monétaire (modales)
+// ------------------------------------------------------------------------------
+// Cellule d'édition rapide en ligne (AVANCE, MED, VIREMENT, ESPÈCES)
 // ------------------------------------------------------------------------------
 interface InlineMoneyInputProps {
   value: number;
   disabled?: boolean;
-  saving?: boolean;
-  onCommit: (val: number) => void;
-  className?: string;
+  onCommit: (num: number) => Promise<void> | void;
+  tone?: 'red' | 'amber' | 'sky' | 'emerald';
+  colKey?: EditableColKey;
+  rowIndex?: number;
+  compact?: boolean;
 }
 
 const InlineMoneyInput: React.FC<InlineMoneyInputProps> = ({
   value,
-  disabled = false,
-  saving = false,
+  disabled,
   onCommit,
-  className = '',
+  tone = 'red',
+  colKey,
+  rowIndex,
+  compact = false,
 }) => {
+  const [text, setText] = useState<string>(() => (value ? formatInputDisplay(value) : '0'));
   const [focused, setFocused] = useState(false);
-  const formatInput = (n: number) => Number(n || 0).toLocaleString('fr-FR', { maximumFractionDigits: 10 });
-  const [txt, setTxt] = useState<string>(formatInput(value));
+  const [savedFlash, setSavedFlash] = useState(false);
 
-  // Resynchronise l'affichage quand la valeur sauvegardée change (hors édition)
   useEffect(() => {
-    if (!focused) setTxt(formatInput(value));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!focused) setText(value ? formatInputDisplay(value) : '0');
   }, [value, focused]);
 
-  const parseNum = (s: string): number | null => {
-    const raw = s.replace(/\s/g, '').replace(',', '.');
-    if (!raw) return 0;
-    if (!/^\d+(?:\.\d*)?$/.test(raw)) return null;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : null;
+  const commit = async () => {
+    const n = parseInputNumber(text);
+    setText(n ? formatInputDisplay(n) : '0');
+    if (Math.abs(n - Number(value || 0)) > 0.004) {
+      await onCommit(n);
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 900);
+    }
   };
 
-  const commit = () => {
-    const num = parseNum(txt);
-    if (num !== null && num !== Number(value || 0)) onCommit(num);
-    else setTxt(formatInput(value));
+  const toneClasses: Record<'red' | 'amber' | 'sky' | 'emerald', string> = {
+    red: 'border-red-300 dark:border-red-700/70 focus:border-red-500 text-red-700 dark:text-red-300 bg-red-50/50 dark:bg-red-950/30',
+    amber: 'border-amber-300 dark:border-amber-700/70 focus:border-amber-500 text-amber-800 dark:text-amber-300 bg-amber-50/50 dark:bg-amber-950/30',
+    sky: 'border-sky-300 dark:border-sky-700/70 focus:border-sky-500 text-sky-900 dark:text-sky-200 bg-sky-50/60 dark:bg-sky-950/30',
+    emerald: 'border-emerald-300 dark:border-emerald-700/70 focus:border-emerald-500 text-emerald-900 dark:text-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/30',
   };
+
+  if (disabled) {
+    return (
+      <span className="font-mono text-xs text-slate-600 dark:text-slate-300">
+        {fmt(value)}
+      </span>
+    );
+  }
 
   return (
-    <input
-      type="text"
-      inputMode="decimal"
-      disabled={disabled}
-      value={txt}
-      onFocus={() => setFocused(true)}
-      onChange={(e) => setTxt(e.target.value.replace(/[^0-9.,\s]/g, ''))}
-      onBlur={() => { setFocused(false); commit(); }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          (e.target as HTMLInputElement).blur();
-        } else if (e.key === 'Escape') {
-          setTxt(formatInput(value));
-          requestAnimationFrame(() => (e.target as HTMLInputElement).blur());
-        }
-      }}
-      className={`font-mono font-bold text-right transition ${saving ? 'opacity-50 animate-pulse' : ''} ${className}`}
-    />
+    <div className="relative inline-flex items-center justify-end w-full">
+      <input
+        type="text"
+        inputMode="decimal"
+        data-saisie-col={colKey}
+        data-saisie-row={rowIndex}
+        value={text}
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onFocus={(e) => {
+          setFocused(true);
+          setText(value ? String(Math.round(value * 100) / 100).replace('.', ',') : '');
+          setTimeout(() => e.target.select(), 0);
+        }}
+        onBlur={() => {
+          setFocused(false);
+          commit();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            const currentInput = e.target as HTMLInputElement;
+            currentInput.blur();
+            if (colKey !== undefined && rowIndex !== undefined) {
+              setTimeout(() => {
+                const next = document.querySelector<HTMLInputElement>(
+                  `input[data-saisie-col="${colKey}"][data-saisie-row="${rowIndex + 1}"]`
+                );
+                if (next) {
+                  next.focus();
+                  next.select();
+                }
+              }, 30);
+            }
+          } else if (e.key === 'Escape') {
+            setText(value ? formatInputDisplay(value) : '0');
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        onChange={(e) => setText(e.target.value)}
+        className={`${compact ? 'w-24 px-1.5 py-0.5 text-[11px]' : 'w-28 px-2 py-1 text-xs'} rounded-md border text-right font-mono font-bold outline-none focus:ring-2 focus:ring-salfa-sky/50 transition ${toneClasses[tone]}`}
+      />
+      {savedFlash && (
+        <span className="absolute -right-2 -top-2 bg-emerald-500 text-white rounded-full p-0.5 shadow">
+          <Check className="w-2.5 h-2.5" />
+        </span>
+      )}
+    </div>
   );
 };
 
-interface SalariesSaisieTabProps {
+// ------------------------------------------------------------------------------
+// Composant Principal : Onglet unifié Salariés, Saisie & État de Paie Mensuel
+// ------------------------------------------------------------------------------
+interface Props extends YearProps {
+  currentUser?: UserSession | null;
   userRole?: string;
-  onOpenAdmin?: () => void;
-  annee: number;
-  setAnnee: YearProps['setAnnee'];
+  refreshKey?: number;
+  importedMois?: string | null;
 }
 
-export const SalariesSaisieTab: React.FC<SalariesSaisieTabProps> = ({ userRole, onOpenAdmin, annee, setAnnee }) => {
-  const now = new Date();
-  const [mois, setMois] = useState(MOIS_LISTE[now.getMonth()]);
+type EtatMoisImprimable = {
+  mois: string;
+  annee: number;
+  lignes: PaieMensuelle[];
+  totals: Record<string, number>;
+};
 
+export const SalariesSaisieTab: React.FC<Props> = ({
+  currentUser,
+  userRole,
+  annee,
+  setAnnee,
+  refreshKey,
+  importedMois,
+}) => {
+  const effectiveRole = currentUser?.role || userRole || 'Administrateur';
+  const [mois, setMois] = useState<string>(() => importedMois || MOIS_LISTE[new Date().getMonth()]);
+
+  useEffect(() => {
+    if (importedMois && MOIS_LISTE.includes(importedMois)) {
+      setMois(importedMois);
+    }
+  }, [importedMois]);
+
+  // Données employés + paies du mois
+  const [employes, setEmployes] = useState<Employe[]>([]);
   const [paies, setPaies] = useState<PaieMensuelle[]>([]);
-  const [employesById, setEmployesById] = useState<Record<number, Employe>>({});
-  const [verrouille, setVerrouille] = useState(false);
-  const [totaux, setTotaux] = useState<TotauxMois>({});
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [savingId, setSavingId] = useState<number | null>(null);
+  const [verrouille, setVerrouille] = useState<boolean>(false);
+  const [periodes, setPeriodes] = useState<{ annee: number; mois: string; nb: number }[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [actionLoading, setActionLoading] = useState<boolean>(false);
+  const [search, setSearch] = useState<string>('');
 
-  const [showModal, setShowModal] = useState(false);
-  const [editEmploye, setEditEmploye] = useState<Employe | null>(null);
-  const [historyEmp, setHistoryEmp] = useState<Employe | null>(null);
-  const [paiesHistory, setPaiesHistory] = useState<PaieMensuelle[]>([]);
-  const [accessoiresPaie, setAccessoiresPaie] = useState<PaieMensuelle | null>(null);
-  const [showImport, setShowImport] = useState(false);
-  const [showSaisieLot, setShowSaisieLot] = useState(false);
-  const [lotMessage, setLotMessage] = useState('');
+  // Impression de l'État : état actif seul ou tous les états de l'année
+  const [openPrintMenu, setOpenPrintMenu] = useState<boolean>(false);
+  const [etatsImpression, setEtatsImpression] = useState<EtatMoisImprimable[] | null>(null);
+  const printMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const loadData = async () => {
+  // Modales
+  const [showEmpModal, setShowEmpModal] = useState<boolean>(false);
+  const [editingEmploye, setEditingEmploye] = useState<Employe | null>(null);
+  const [accModalPaie, setAccModalPaie] = useState<PaieMensuelle | null>(null);
+  const [historyModal, setHistoryModal] = useState<{ employe: Employe; paies: PaieMensuelle[] } | null>(null);
+  const [showLotModal, setShowLotModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!openPrintMenu) return;
+    const close = (e: MouseEvent) => {
+      if (printMenuRef.current && !printMenuRef.current.contains(e.target as Node)) {
+        setOpenPrintMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [openPrintMenu]);
+
+  const loadAll = useCallback(async () => {
     setLoading(true);
-    const [d, emps] = await Promise.all([fetchPaiesMois(annee, mois), fetchEmployes(false, '')]);
-    const map: Record<number, Employe> = {};
-    for (const e of emps) map[Number(e.id)] = e;
-    setEmployesById(map);
-    setPaies(d.employes || []);
-    setVerrouille(d.verrouille || false);
-    setTotaux(d.totaux || {});
+    const [emps, paiesData, per] = await Promise.all([
+      fetchEmployes(false),
+      fetchPaiesMois(annee, mois),
+      fetchPeriodes(),
+    ]);
+    setEmployes(emps);
+    setPaies(paiesData.employes || []);
+    setVerrouille(paiesData.verrouille || false);
+    setPeriodes(per);
     setLoading(false);
-  };
-  useEffect(() => { loadData(); /* eslint-disable-next-line */ }, [mois, annee]);
+  }, [annee, mois]);
 
-  // ------------------------------------------------------------------ helpers
-  const getEmployeForPaie = (p: PaieMensuelle): Employe =>
-    employesById[Number(p.employe_id)] || {
-      id: p.employe_id,
-      numero_matricule: p.numero_matricule,
-      nom_prenoms: p.nom_prenoms,
-      numero_cnaps: p.numero_cnaps || '',
-      categorie: p.categorie || '',
-      jobs: p.jobs || '',
-      date_embauche: p.date_embauche || '',
-      nombre_annees: p.nombre_annees || 0,
-      enfant_a_charge: p.enfant_a_charge || 0,
-      base_aj: p.base_aj || 0,
-      logement_transport: p.logt_trsp || 0,
-      rendement: p.rendement || 0,
-      responsabilite_representation: p.resp_repres || 0,
-    rib: p.rib || '',
-    mode_paiement: 'ESPECES',
-    actif: 1,
-    conge_maternite: p.conge_maternite || 0,
-    date_debut_maternite: p.date_debut_maternite || '',
-  };
+  useEffect(() => {
+    loadAll();
+  }, [loadAll, refreshKey]);
 
-  const isActif = (p: PaieMensuelle): boolean => {
-    const emp = employesById[Number(p.employe_id)];
-    return emp ? Number(emp.actif) === 1 : true;
-  };
+  const empById = new Map<number, Employe>(employes.map((e) => [e.id, e]));
 
-  const actifs = Object.values(employesById).filter((e) => Number(e.actif) === 1);
-  const paieEmpIds = new Set(paies.map((p) => Number(p.employe_id)));
-  const missingCount = actifs.filter((e) => !paieEmpIds.has(Number(e.id))).length;
-
-  // Salariés actifs qui n'ont PAS encore de bulletin pour la période affichée
-  const sansBulletin = actifs
-    .filter((e) => !paieEmpIds.has(Number(e.id)))
-    .filter((e) => {
-      const s = search.trim().toLowerCase();
-      return (
-        !s ||
-        String(e.nom_prenoms || '').toLowerCase().includes(s) ||
-        String(e.jobs || '').toLowerCase().includes(s) ||
-        String(e.categorie || '').toLowerCase().includes(s) ||
-        String(e.numero_matricule || '').includes(s)
-      );
-    })
-    .sort((a, b) => Number(a.numero_matricule) - Number(b.numero_matricule));
-
-  const handleCreerBulletin = async (employeId: number, nom: string) => {
-    if (verrouille) return;
-    const res = await initPaieEmploye(employeId, annee, mois);
-    if (res.created) {
-      await loadData();
-    } else {
-      alert(`Le bulletin de ${nom} existe déjà pour ${mois} ${annee}.`);
-      await loadData();
-    }
-  };
-
-  const q = search.trim().toLowerCase();
-  const rows = paies.filter(
-    (p) =>
-      !q ||
-      String(p.nom_prenoms || '').toLowerCase().includes(q) ||
-      String(p.jobs || '').toLowerCase().includes(q) ||
-      String(p.categorie || '').toLowerCase().includes(q) ||
-      String(p.numero_matricule || '').includes(q)
-  );
-
-  // ----------------------------------------------------------------- actions
   const handleInitMois = async () => {
-    if (verrouille) return;
-    if (!window.confirm(`Ouvrir et initialiser ${mois} ${annee} ? Les bulletins manquants des salariés actifs seront créés (AVANCE et MED à 0).`)) return;
+    setActionLoading(true);
     const res = await initMoisPaie(annee, mois);
-    if (res.success) {
-      alert(`${res.initializedCount} bulletin(s) initialisé(s).`);
-      loadData();
+    if (res.success) await loadAll();
+    else alert("Erreur lors de l'initialisation du mois.");
+    setActionLoading(false);
+  };
+
+  // Enregistrement rapide d'une cellule AVANCE ou MED
+  const handleInlineSave = async (paie: PaieMensuelle, newAvance: number, newMed: number) => {
+    const res = await savePaieSaisie(paie.id, newAvance, newMed);
+    if (res.success && res.updated) {
+      setPaies((prev) => prev.map((p) => (p.id === paie.id ? res.updated! : p)));
+    } else if (!res.success) {
+      alert('Erreur lors de la sauvegarde.');
     }
   };
 
-  const handleCommit = async (p: PaieMensuelle, field: 'avance' | 'med', num: number) => {
-    if (verrouille || savingId === p.id) return;
-    const av = field === 'avance' ? num : Number(p.avance || 0);
-    const me = field === 'med' ? num : Number(p.med || 0);
-    setSavingId(p.id);
-    const res = await savePaieSaisie(p.id, av, me);
-    setSavingId(null);
-    if (res.success) await loadData();
-    else alert('Erreur sauvegarde.');
+  // Enregistrement direct d'une cellule VIREMENT ou ESPÈCES (répartition automatique du complément sur NET)
+  const handleInlineReglement = async (paie: PaieMensuelle, champ: 'virement' | 'especes', montant: number) => {
+    const res = await savePaieReglement(paie.id, champ, montant);
+    if (res.success && res.updated) {
+      setPaies((prev) => prev.map((p) => (p.id === paie.id ? res.updated! : p)));
+    } else if (!res.success) {
+      alert('Erreur lors de la sauvegarde du règlement.');
+    }
   };
 
   const handleCloturer = async () => {
-    if (!window.confirm(`Clôturer ${mois} ${annee} ?
-
-Un fichier PDF unique contenant tous les états, avec sa page de couverture, sera téléchargé.`)) return;
-    const success = await cloturerMois(annee, mois);
-    if (!success) {
-      alert('La clôture a échoué. Aucun état PDF n’a été exporté.');
-      return;
-    }
-    // Recharger les valeurs définitives avant de produire l'archive imprimable.
-    const data = await fetchPaiesMois(annee, mois);
-    const etats = data.employes || [];
-    if (etats.length === 0) {
-      alert('Période clôturée, mais aucun bulletin n’est disponible à exporter.');
-    } else {
-      downloadPayrollBookletPDF(etats, mois, annee);
-    }
-    await loadData();
+    if (!window.confirm(`Clôturer et verrouiller définitivement la paie de ${mois} ${annee} ?`)) return;
+    setActionLoading(true);
+    const ok = await cloturerMois(annee, mois);
+    if (ok) await loadAll();
+    setActionLoading(false);
   };
 
   const handleDeverrouiller = async () => {
-    if (userRole !== 'Administrateur') {
-      alert('Admin seulement.');
+    if (!window.confirm(`Déverrouiller ${mois} ${annee} pour autoriser des modifications ?`)) return;
+    setActionLoading(true);
+    const ok = await deverrouillerMois(annee, mois, effectiveRole);
+    if (ok) await loadAll();
+    setActionLoading(false);
+  };
+
+  const handleViewHistory = async (emp: Employe) => {
+    const hist = await fetchEmployePaies(emp.id);
+    setHistoryModal({ employe: emp, paies: hist });
+  };
+
+  // Filtrage recherche
+  const q = search.trim().toLowerCase();
+  const rows = paies.filter((p) => {
+    if (!q) return true;
+    return (
+      String(p.numero_matricule).includes(q) ||
+      p.nom_prenoms.toLowerCase().includes(q) ||
+      (p.jobs || '').toLowerCase().includes(q) ||
+      (p.categorie || '').toLowerCase().includes(q)
+    );
+  });
+
+  // Salariés actifs qui n'ont pas encore de ligne de paie ce mois-ci
+  const paieEmpIds = new Set(paies.map((p) => p.employe_id));
+  const missingCount = employes.filter((e) => e.actif === 1 && !paieEmpIds.has(e.id)).length;
+
+  // Totaux de l'état affiché
+  const etatTotals = calcTotals(rows);
+
+  // Export Excel de l'état de paie actif (identique au classeur Excel)
+  const exportExcelEtat = () => {
+    const groupRow: string[] = [];
+    ETAT_GROUPS.forEach((g) => {
+      groupRow.push(g.label);
+      for (let i = 1; i < g.span; i++) groupRow.push('');
+    });
+    const headerRow = ETAT_COLUMNS.map((c) => c.label);
+    const dataRows = rows.map((r) =>
+      ETAT_COLUMNS.map((c) => (c.money || c.sum ? Number(c.rawValue(r) || 0) : c.rawValue(r)))
+    );
+    const totalRow = ETAT_COLUMNS.map((c, idx) =>
+      idx === 0 ? '' : idx === 1 ? 'TOTAUX' : c.sum ? Math.round((etatTotals[c.key] || 0) * 100) / 100 : ''
+    );
+    const ws = XLSX.utils.aoa_to_sheet([groupRow, headerRow, ...dataRows, totalRow]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `${mois}_${annee}`.slice(0, 31));
+    XLSX.writeFile(wb, `ETAT_PAIE_SALFA_${mois}_${annee}.xlsx`);
+  };
+
+  // Impression : uniquement l'état actif OU tous les états initialisés de l'année
+  const periodesAnnee = periodes
+    .filter((p) => p.annee === annee && p.nb > 0)
+    .sort((a, b) => MOIS_LISTE.indexOf(a.mois) - MOIS_LISTE.indexOf(b.mois));
+
+  const lancerImpressionEtat = async (scope: 'actif' | 'tous') => {
+    setOpenPrintMenu(false);
+    if (scope === 'actif') {
+      setEtatsImpression([{ mois, annee, lignes: rows, totals: etatTotals }]);
+      setTimeout(() => window.print(), 60);
       return;
     }
-    if (!window.confirm(`Déverrouiller ${mois} ${annee} ?`)) return;
-    await deverrouillerMois(annee, mois, userRole);
-    loadData();
+    setActionLoading(true);
+    try {
+      const cibles = periodesAnnee.length > 0 ? periodesAnnee.map((p) => p.mois) : [mois];
+      const chargements = await Promise.all(cibles.map((m) => fetchPaiesMois(annee, m)));
+      const liste: EtatMoisImprimable[] = [];
+      cibles.forEach((m, i) => {
+        const lignesMois = (chargements[i].employes || []).filter((p) => {
+          if (!q) return true;
+          return (
+            String(p.numero_matricule).includes(q) ||
+            p.nom_prenoms.toLowerCase().includes(q) ||
+            (p.jobs || '').toLowerCase().includes(q)
+          );
+        });
+        if (lignesMois.length > 0) {
+          liste.push({ mois: m, annee, lignes: lignesMois, totals: calcTotals(lignesMois) });
+        }
+      });
+      setEtatsImpression(liste.length > 0 ? liste : [{ mois, annee, lignes: rows, totals: etatTotals }]);
+      setTimeout(() => window.print(), 80);
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const openFiche = (p: PaieMensuelle) => {
-    setEditEmploye(getEmployeForPaie(p));
-    setShowModal(true);
-  };
+  const etatsPourImpression: EtatMoisImprimable[] =
+    etatsImpression && etatsImpression.length > 0
+      ? etatsImpression
+      : [{ mois, annee, lignes: rows, totals: etatTotals }];
 
-  const openHistory = async (p: PaieMensuelle) => {
-    setHistoryEmp(getEmployeForPaie(p));
-    setPaiesHistory(await fetchEmployePaies(Number(p.employe_id)));
-  };
-
-  const handleToggleActif = async (p: PaieMensuelle) => {
-    const emp = getEmployeForPaie(p);
-    if (!window.confirm(`Confirmer ${Number(emp.actif) === 1 ? 'désactiver' : 'réactiver'} ${emp.nom_prenoms} ?`)) return;
-    await toggleActifEmploye(Number(emp.id), Number(emp.actif) === 0);
-    loadData();
-  };
-
-  const isMaternite = (p: PaieMensuelle) =>
-    p.conge_maternite === 1 || (p.conge_maternite as any) === true;
-
-  const badges = (p: PaieMensuelle) => {
-    return (
-      <>
-        {isMaternite(p) && (
-          <span title="Congé de maternité (3 mois, base brute à 50%)" className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-pink-100 dark:bg-pink-900/40 text-pink-800 dark:text-pink-200 font-bold uppercase shrink-0 ring-1 ring-pink-300 dark:ring-pink-700">
-            <HeartHandshake className="w-2.5 h-2.5" />Maternité · 3 mois
-          </span>
-        )}
-        {!isActif(p) && (
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold uppercase shrink-0">Départ</span>
-        )}
-      </>
-    );
-  };
-
-  // ------------------------------------------------------------------- rendu
   return (
-    <div className="space-y-3 sm:space-y-6 w-full max-w-full overflow-x-hidden">
-      {/* Astuce + bouton admin */}
-      <div className="bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-xl p-2.5 sm:p-3 text-[11px] sm:text-xs text-salfa-dark dark:text-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
-        <div className="flex items-start sm:items-center gap-2">
-          <Info className="w-4 h-4 text-salfa-teal dark:text-sky-300 shrink-0 mt-0.5 sm:mt-0" />
-          <span>
-            <b>Astuce :</b> saisissez <b>AVANCE</b> et <b>MED</b> directement dans le tableau (touche <b>Entrée</b> ou clic hors du champ pour valider). Double-cliquez sur une ligne pour ouvrir la fiche du salarié.
+    <div className="etat-page-root space-y-3 sm:space-y-4 w-full">
+      {/* BARRE D'OUTILS PRINCIPALE : PÉRIODE + SAISIE EN LOT + IMPRESSION (ACTIF / TOUS) + EXPORT EXCEL + CLÔTURE */}
+      <div className="no-print bg-white dark:bg-slate-800 rounded-xl p-3 sm:p-4 shadow-sm border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 text-salfa-dark dark:text-sky-300 font-bold text-xs sm:text-sm">
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-salfa-teal shrink-0" />
+            <span>Période :</span>
+          </div>
+          <select
+            aria-label="Mois de paie"
+            value={mois}
+            onChange={(e) => {
+              setEtatsImpression(null);
+              setMois(e.target.value);
+            }}
+            className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-salfa-dark focus:ring-2 focus:ring-salfa-sky outline-none"
+          >
+            {MOIS_LISTE.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <YearSelect
+            annee={annee}
+            setAnnee={(y) => {
+              setEtatsImpression(null);
+              setAnnee(y);
+            }}
+          />
+          {verrouille ? (
+            <span className="inline-flex items-center gap-1 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 text-xs font-bold px-2.5 py-1 rounded-full">
+              <Lock className="w-3.5 h-3.5" />CLÔTURÉ
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 text-xs font-bold px-2.5 py-1 rounded-full">
+              <Unlock className="w-3.5 h-3.5" />OUVERT
+            </span>
+          )}
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+            {rows.length} salarié{rows.length > 1 ? 's' : ''}
           </span>
         </div>
-        {userRole === 'Administrateur' && onOpenAdmin && (
-          <button onClick={onOpenAdmin} className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs shrink-0 shadow w-full sm:w-auto justify-center">
-            <ShieldCheck className="w-4 h-4" /><span>Admin : Formules, IRSA & Colonnes</span>
-          </button>
-        )}
-      </div>
 
-      {/* Barre période + clôture */}
-      <div className="bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2 sm:gap-3 w-full">
-          <div className="flex flex-wrap items-center gap-2">
-            <Calendar className="w-4 h-4 text-salfa-teal dark:text-sky-300" />
-            <span className="text-[11px] sm:text-xs font-bold uppercase text-slate-700 dark:text-slate-300 hidden xs:inline">Période :</span>
-            <select value={mois} onChange={(e) => setMois(e.target.value)} className="rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-bold">
-              {MOIS_LISTE.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <YearSelect annee={annee} setAnnee={setAnnee} />
-          </div>
-          <button onClick={() => { setLotMessage(''); setShowSaisieLot(true); }} aria-label="Saisie en lot AVANCE / MED" disabled={loading || verrouille || savingId !== null} title={verrouille ? 'Déverrouillez la période avant de saisir' : 'Saisir plusieurs avances et médicaments'} className="min-h-9 bg-salfa-teal hover:bg-sky-800 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5">
-            <ClipboardList className="w-4 h-4" /><span className="lg:hidden xl:inline">Saisie en lot AVANCE / MED</span><span className="hidden lg:inline xl:hidden">Saisie en lot</span>
-          </button>
-          <button onClick={handleInitMois} disabled={verrouille} className="min-h-9 bg-sky-100 dark:bg-sky-900/30 hover:bg-sky-200 dark:hover:bg-sky-800 text-salfa-teal dark:text-sky-300 disabled:opacity-50 px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center justify-center gap-1.5">
-            <RefreshCw className="w-3.5 h-3.5" /><span className="hidden xs:inline">Ouvrir / Initialiser</span><span className="xs:hidden">Init</span>
-          </button>
-          {verrouille
-            ? <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"><Lock className="w-3.5 h-3.5" />CLÔTURÉ</span>
-            : <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"><Unlock className="w-3.5 h-3.5" />OUVERT</span>}
-          {missingCount > 0 && paies.length > 0 && (
-            <button onClick={handleInitMois} disabled={verrouille} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 hover:bg-amber-200 dark:hover:bg-amber-800/50 disabled:opacity-50">
-              <Info className="w-3.5 h-3.5" />{missingCount} actif(s) sans bulletin — initialiser
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+          {!verrouille && paies.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowLotModal(true)}
+              className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold shadow-sm transition"
+              title="Saisir rapidement en lot les Avances ou les Médicaments"
+            >
+              <ListChecks className="w-3.5 h-3.5" />
+              <span>Saisie en lot</span>
             </button>
           )}
-        <div className="flex items-center w-full sm:w-auto sm:ml-auto">
-          {!verrouille
-            ? <button onClick={handleCloturer} className="w-full sm:w-auto min-h-9 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow"><CheckCircle className="w-4 h-4" /><span>Clôturer / Valider</span></button>
-            : userRole === 'Administrateur' && <button onClick={handleDeverrouiller} className="w-full sm:w-auto min-h-9 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow"><ShieldCheck className="w-4 h-4" /><span>Déverrouiller (Admin)</span></button>}
+
+          {!verrouille && missingCount > 0 && paies.length > 0 && (
+            <button
+              type="button"
+              onClick={handleInitMois}
+              disabled={actionLoading}
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold shadow-sm animate-pulse"
+              title="Ajouter les salariés actifs qui n'ont pas encore de bulletin sur ce mois"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>+{missingCount} salarié{missingCount > 1 ? 's' : ''} sans bulletin</span>
+            </button>
+          )}
+
+          {!verrouille && (
+            <button
+              type="button"
+              onClick={handleInitMois}
+              disabled={actionLoading}
+              className="flex items-center gap-1.5 bg-sky-100 dark:bg-sky-900/30 hover:bg-sky-200 dark:hover:bg-sky-900/50 text-salfa-teal dark:text-sky-300 px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold"
+              title="Initialiser ou mettre à jour les bulletins du mois à partir des fiches salariés"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${actionLoading ? 'animate-spin' : ''}`} />
+              <span>Ouvrir / Initialiser</span>
+            </button>
+          )}
+
+          {/* Bouton Imprimer État avec choix : État actif seul OU Tous les états */}
+          <div ref={printMenuRef} className="relative">
+            <button
+              type="button"
+              disabled={rows.length === 0 || actionLoading}
+              onClick={() => setOpenPrintMenu((v) => !v)}
+              className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold text-slate-800 dark:text-slate-100"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Imprimer</span>
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+            {openPrintMenu && (
+              <div className="absolute right-0 mt-1.5 w-72 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1 z-40">
+                <button
+                  type="button"
+                  onClick={() => lancerImpressionEtat('actif')}
+                  className="w-full px-3.5 py-2.5 text-left text-xs font-semibold hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-salfa-teal shrink-0" />
+                  <div>
+                    <div>Imprimer uniquement l'état actif</div>
+                    <div className="text-[10px] font-normal text-slate-400">
+                      {mois} {annee} ({rows.length} salarié{rows.length > 1 ? 's' : ''} · 2 pages A4)
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => lancerImpressionEtat('tous')}
+                  className="w-full px-3.5 py-2.5 text-left text-xs font-semibold hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5 border-t border-slate-100 dark:border-slate-700"
+                >
+                  <Files className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div>
+                    <div>Imprimer tous les états ({periodesAnnee.length || 1} mois)</div>
+                    <div className="text-[10px] font-normal text-slate-400">
+                      Tous les mois initialisés de l'année {annee}
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            disabled={rows.length === 0}
+            onClick={exportExcelEtat}
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold shadow-sm"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Exporter Excel</span>
+          </button>
+
+          {!verrouille ? (
+            <button
+              type="button"
+              onClick={handleCloturer}
+              disabled={paies.length === 0 || actionLoading}
+              className="flex items-center gap-1.5 bg-salfa-dark hover:bg-slate-800 disabled:opacity-40 text-white px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold shadow-sm"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Clôturer / Valider</span>
+            </button>
+          ) : (
+            effectiveRole === 'Administrateur' && (
+              <button
+                type="button"
+                onClick={handleDeverrouiller}
+                disabled={actionLoading}
+                className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold shadow-sm"
+              >
+                <Unlock className="w-3.5 h-3.5" />
+                <span>Déverrouiller (Admin)</span>
+              </button>
+            )
+          )}
         </div>
       </div>
 
-      {lotMessage && <div role="status" className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 px-3 py-2 text-sm">{lotMessage}</div>}
-
-      {/* Barre recherche + nouveau salarié */}
-      <div className="bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
-        <div className="relative flex-1 max-w-full sm:max-w-md w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+      {/* BARRE DE RECHERCHE + NOUVEAU SALARIÉ */}
+      <div className="no-print bg-white dark:bg-slate-800 rounded-xl p-3 sm:p-4 shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3">
+        <div className="relative flex-1 min-w-0">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
+            placeholder="Rechercher par matricule, nom, fonction, catégorie..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Matricule, nom, fonction..."
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-salfa-teal"
+            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white text-sm focus:ring-2 focus:ring-salfa-sky outline-none"
           />
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 shrink-0 w-full sm:w-auto">
-          <button onClick={() => setShowImport(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto">
-            <Upload className="w-4 h-4" /><span>Importer Excel</span>
-          </button>
-          <button onClick={() => { setEditEmploye(null); setShowModal(true); }} className="bg-salfa-dark dark:bg-slate-700 hover:bg-salfa-teal dark:hover:bg-slate-600 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 shadow-sm w-full sm:w-auto">
-            <Plus className="w-4 h-4" /><span>Nouveau Salarié</span>
-          </button>
-        </div>
-      </div>
 
-      {/* ------------------------- VERSION MOBILE : cartes ------------------------- */}
-      <div className="block lg:hidden space-y-2 w-full">
-        {loading ? (
-          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 text-center text-sm text-slate-500 border dark:border-slate-700">Chargement...</div>
-        ) : rows.length === 0 && sansBulletin.length === 0 ? (
-          <EmptyState search={q} mois={mois} annee={annee} verrouille={verrouille} onInit={handleInitMois} />
-        ) : rows.map((p) => (
-          <div key={p.id} onDoubleClick={() => openFiche(p)} className={`rounded-xl border p-3 shadow-sm w-full ${isMaternite(p) ? 'bg-pink-50 dark:bg-pink-950/30 border-pink-300 dark:border-pink-800 ring-1 ring-pink-200 dark:ring-pink-900' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-salfa-dark dark:text-white text-sm">Mat {p.numero_matricule}</span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/30 text-salfa-teal dark:text-sky-300">{p.categorie || '—'}</span>
-                  {badges(p)}
-                </div>
-                <div className="font-semibold text-slate-800 dark:text-slate-100 text-sm truncate mt-1">{p.nom_prenoms}</div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{p.jobs || '—'}</div>
-              </div>
-              <div className="text-right shrink-0">
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">NET À PAYER</div>
-                <div className="font-mono font-extrabold text-emerald-700 dark:text-emerald-400 text-sm">{fmt(p.net)}</div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-4 gap-1.5 mt-2.5">
-              <div className={`rounded-lg p-1.5 text-center ${isMaternite(p) ? 'bg-white/70 dark:bg-slate-800/60' : 'bg-slate-50 dark:bg-slate-700/50'}`}><div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Brut</div><div className="font-mono text-[11px] font-bold dark:text-slate-200">{fmt(p.brut)}</div></div>
-              <div className={`rounded-lg p-1.5 text-center ${isMaternite(p) ? 'bg-white/70 dark:bg-slate-800/60' : 'bg-slate-50 dark:bg-slate-700/50'}`}><div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Net base</div><div className="font-mono text-[11px] font-bold dark:text-slate-200">{fmt(p.salaire_net)}</div></div>
-              <div className={`rounded-lg p-1.5 text-center ${isMaternite(p) ? 'bg-white/70 dark:bg-slate-800/60' : 'bg-slate-50 dark:bg-slate-700/50'}`}><div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Access.</div><div className="font-mono text-[11px] font-bold dark:text-slate-200">{fmt(p.accessoir)}</div></div>
-              <div className={`rounded-lg p-1.5 text-center ${isMaternite(p) ? 'bg-white/70 dark:bg-slate-800/60' : 'bg-slate-50 dark:bg-slate-700/50'}`}><div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase">Base AJ</div><div className="font-mono text-[11px] font-bold dark:text-slate-200">{fmt(p.base_aj)}</div></div>
-            </div>
-
-            {/* Saisie directe AVANCE / MED */}
-            <div className="grid grid-cols-2 gap-1.5 mt-2">
-              <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-1.5 border border-red-100 dark:border-red-900/40">
-                <div className="text-[9px] font-bold text-red-600 dark:text-red-300 uppercase mb-1">AVANCE</div>
-                <InlineMoneyInput
-                  value={Number(p.avance || 0)}
-                  disabled={verrouille}
-                  saving={savingId === p.id}
-                  onCommit={(n) => handleCommit(p, 'avance', n)}
-                  className="w-full bg-white dark:bg-slate-700 border border-red-200 dark:border-red-800 rounded-md px-2 py-1.5 text-xs text-red-700 dark:text-red-200 disabled:opacity-60"
-                />
-              </div>
-              <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-1.5 border border-red-100 dark:border-red-900/40">
-                <div className="text-[9px] font-bold text-red-600 dark:text-red-300 uppercase mb-1">MED</div>
-                <InlineMoneyInput
-                  value={Number(p.med || 0)}
-                  disabled={verrouille}
-                  saving={savingId === p.id}
-                  onCommit={(n) => handleCommit(p, 'med', n)}
-                  className="w-full bg-white dark:bg-slate-700 border border-red-200 dark:border-red-800 rounded-md px-2 py-1.5 text-xs text-red-700 dark:text-red-200 disabled:opacity-60"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-4 gap-1.5 mt-2">
-              <button onClick={() => openFiche(p)} className="flex items-center justify-center gap-1 px-1 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-[10px] font-bold"><Edit2 className="w-3.5 h-3.5" />Fiche</button>
-              <button onClick={() => !verrouille && setAccessoiresPaie(p)} disabled={verrouille} className="flex items-center justify-center gap-1 px-1 py-2 rounded-lg bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 text-salfa-teal dark:text-sky-300 text-[10px] font-bold disabled:opacity-50"><Plus className="w-3.5 h-3.5" />Access.</button>
-              <button onClick={() => openHistory(p)} className="flex items-center justify-center gap-1 px-1 py-2 rounded-lg bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 text-salfa-teal dark:text-sky-300 text-[10px] font-bold"><History className="w-3.5 h-3.5" />Histor.</button>
-              <button onClick={() => handleToggleActif(p)} className={`flex items-center justify-center gap-1 px-1 py-2 rounded-lg text-[10px] font-bold ${isActif(p) ? 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 text-red-600 dark:text-red-300' : 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 text-emerald-600 dark:text-emerald-300'}`}>{isActif(p) ? <><UserX className="w-3.5 h-3.5" />Désact.</> : <><UserCheck className="w-3.5 h-3.5" />Réact.</>}</button>
-            </div>
-          </div>
-        ))}
-
-        {/* Salariés actifs n'ayant pas encore de bulletin pour la période */}
-        {sansBulletin.map((e) => (
-          <div key={`sans-${e.id}`} className="rounded-xl border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/10 p-3 shadow-sm w-full">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-salfa-dark dark:text-white text-sm">Mat {e.numero_matricule}</span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/30 text-salfa-teal dark:text-sky-300">{e.categorie || '—'}</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 font-bold uppercase">Sans bulletin</span>
-                </div>
-                <div className="font-semibold text-slate-800 dark:text-slate-100 text-sm truncate mt-1">{e.nom_prenoms}</div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{e.jobs || '—'}</div>
-              </div>
-              <div className="text-right shrink-0">
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">BASE AJ</div>
-                <div className="font-mono font-bold text-slate-700 dark:text-slate-200 text-sm">{fmt(e.base_aj)}</div>
-              </div>
-            </div>
-            <button
-              onClick={() => handleCreerBulletin(Number(e.id), e.nom_prenoms)}
-              disabled={verrouille}
-              className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-[11px] font-bold"
-            >
-              <CalendarPlus className="w-3.5 h-3.5" />Créer le bulletin {mois} {annee}
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* ------------------------- VERSION DESKTOP : table ------------------------- */}
-      <div className="hidden lg:block bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden w-full">
-        <div className="table-responsive thin-scrollbar max-h-[62vh] lg:max-h-[64vh]">
-          <table className="w-full text-left border-collapse min-w-[1580px]">
-            <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-700">
-              <tr className="border-b border-slate-200 dark:border-slate-600 text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                <th className="py-3 px-3 text-center">N° Mat</th>
-                <th className="py-3 px-4">Nom et Prénoms</th>
-                <th className="py-3 px-2 text-center">CAT</th>
-                <th className="py-3 px-3">Jobs</th>
-                <th className="py-3 px-3">Mode / RIB</th>
-                <th className="py-3 px-3 text-right">Brut</th>
-                <th className="py-3 px-3 text-right">CNaPS</th>
-                <th className="py-3 px-3 text-right">IRSA</th>
-                <th className="py-3 px-3 text-right">Net base</th>
-                <th className="py-3 px-3 text-right">Access.</th>
-                <th className="py-3 px-3 text-right font-bold">BRUT</th>
-                <th className="py-3 px-3 text-right text-red-600 dark:text-red-400">AVANCE ✎</th>
-                <th className="py-3 px-3 text-right text-red-600 dark:text-red-400">MED ✎</th>
-                <th className="py-3 px-4 text-right bg-salfa-light/60 dark:bg-slate-600 font-bold text-salfa-dark dark:text-white">NET À PAYER</th>
-                <th className="py-3 px-2 text-center">Statut</th>
-                <th className="py-3 px-3 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm dark:text-slate-200">
-              {loading ? (
-                <tr><td colSpan={16} className="py-8 text-center text-slate-500">Chargement...</td></tr>
-              ) : rows.length === 0 && sansBulletin.length === 0 ? (
-                <tr>
-                  <td colSpan={16} className="py-8 text-center text-slate-500">
-                    {q ? 'Aucun salarié ne correspond à la recherche.' : `Aucun bulletin pour ${mois} ${annee}. Cliquez sur « Ouvrir / Initialiser » pour générer les bulletins des salariés actifs.`}
-                  </td>
-                </tr>
-              ) : rows.map((p) => (
-                <tr key={p.id} onDoubleClick={() => openFiche(p)} className={`cursor-pointer transition ${isMaternite(p) ? 'bg-pink-50/80 dark:bg-pink-950/20 hover:bg-pink-100/80 dark:hover:bg-pink-900/30 border-l-4 border-l-pink-400 dark:border-l-pink-600' : 'hover:bg-sky-50/70 dark:hover:bg-slate-700/50'}`}>
-                  <td className="py-2.5 px-3 text-center font-bold text-salfa-dark dark:text-white">{p.numero_matricule}</td>
-                  <td className="py-2.5 px-4 font-semibold text-slate-800 dark:text-slate-100">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate max-w-[180px]">{p.nom_prenoms}</span>
-                      {badges(p)}
-                    </div>
-                  </td>
-                  <td className="py-2.5 px-2 text-center text-xs font-bold text-salfa-teal dark:text-sky-300">{p.categorie || '—'}</td>
-                  <td className="py-2.5 px-3 text-xs truncate max-w-[120px]">{p.jobs || '—'}</td>
-                  <td className="py-2.5 px-3 text-xs">
-                    <div className="font-semibold">{getEmployeForPaie(p).mode_paiement || '—'}</div>
-                    <div className="font-mono text-slate-500 dark:text-slate-400 text-[11px] truncate max-w-[110px]">{p.rib || 'Aucun'}</div>
-                  </td>
-                  <td className="py-2.5 px-3 text-right font-mono">{fmt(p.salaire_brut)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono text-xs">{fmt(p.cnaps)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono text-xs">{fmt(p.irsa)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono">{fmt(p.salaire_net)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono">{fmt(p.accessoir)}</td>
-                  <td className="py-2.5 px-3 text-right font-mono font-bold">{fmt(p.brut)}</td>
-                  <td className="py-1.5 px-2 bg-red-50/40 dark:bg-red-900/10" onDoubleClick={(e) => e.stopPropagation()}>
-                    <InlineMoneyInput
-                      value={Number(p.avance || 0)}
-                      disabled={verrouille}
-                      saving={savingId === p.id}
-                      onCommit={(n) => handleCommit(p, 'avance', n)}
-                      className="w-28 rounded-md border border-red-200 dark:border-red-800 bg-white dark:bg-slate-700 px-2 py-1.5 text-xs text-red-700 dark:text-red-200 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-60 disabled:bg-transparent disabled:border-transparent"
-                    />
-                  </td>
-                  <td className="py-1.5 px-2 bg-red-50/40 dark:bg-red-900/10" onDoubleClick={(e) => e.stopPropagation()}>
-                    <InlineMoneyInput
-                      value={Number(p.med || 0)}
-                      disabled={verrouille}
-                      saving={savingId === p.id}
-                      onCommit={(n) => handleCommit(p, 'med', n)}
-                      className="w-28 rounded-md border border-red-200 dark:border-red-800 bg-white dark:bg-slate-700 px-2 py-1.5 text-xs text-red-700 dark:text-red-200 focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-60 disabled:bg-transparent disabled:border-transparent"
-                    />
-                  </td>
-                  <td className="py-2.5 px-4 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-salfa-light/60 dark:bg-slate-700/60">{fmt(p.net)}</td>
-                  <td className="py-2.5 px-2 text-center">
-                    {isActif(p)
-                      ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300"><CheckCircle2 className="w-3 h-3" />Actif</span>
-                      : <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">Départ</span>}
-                  </td>
-                  <td className="py-2.5 px-3 text-center" onDoubleClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-center gap-1">
-                      <button title="Modifier la fiche" onClick={(e) => { e.stopPropagation(); openFiche(p); }} className="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300"><Edit2 className="w-4 h-4" /></button>
-                      <button title="Accessoires (primes)" onClick={(e) => { e.stopPropagation(); if (!verrouille) setAccessoiresPaie(p); }} disabled={verrouille} className="px-1.5 py-1.5 rounded hover:bg-sky-100 dark:hover:bg-slate-600 text-salfa-teal dark:text-sky-300 text-[10px] font-extrabold disabled:opacity-40">+Acc.</button>
-                      <button title="Historique des paies" onClick={async (e) => { e.stopPropagation(); await openHistory(p); }} className="p-1.5 rounded hover:bg-sky-100 dark:hover:bg-slate-600 text-salfa-teal dark:text-sky-300"><History className="w-4 h-4" /></button>
-                      <button title={isActif(p) ? 'Désactiver' : 'Réactiver'} onClick={async (e) => { e.stopPropagation(); await handleToggleActif(p); }} className={`p-1.5 rounded ${isActif(p) ? 'hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400' : 'hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'}`}>{isActif(p) ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {/* Salariés actifs sans bulletin pour la période affichée */}
-              {!loading && sansBulletin.map((e) => (
-                <tr key={`sans-${e.id}`} className="bg-amber-50/50 dark:bg-amber-900/10 border-l-4 border-l-amber-400 dark:border-l-amber-600">
-                  <td className="py-2.5 px-3 text-center font-bold text-salfa-dark dark:text-white">{e.numero_matricule}</td>
-                  <td className="py-2.5 px-4 font-semibold text-slate-800 dark:text-slate-100">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate max-w-[180px]">{e.nom_prenoms}</span>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 font-bold uppercase shrink-0">Sans bulletin</span>
-                    </div>
-                  </td>
-                  <td className="py-2.5 px-2 text-center text-xs font-bold text-salfa-teal dark:text-sky-300">{e.categorie || '—'}</td>
-                  <td className="py-2.5 px-3 text-xs truncate max-w-[120px]">{e.jobs || '—'}</td>
-                  <td className="py-2.5 px-3 text-xs">
-                    <div className="font-semibold">{e.mode_paiement || '—'}</div>
-                    <div className="font-mono text-slate-500 dark:text-slate-400 text-[11px] truncate max-w-[110px]">{e.rib || 'Aucun'}</div>
-                  </td>
-                  <td className="py-2.5 px-3 text-right font-mono">{fmt(e.base_aj)}</td>
-                  <td colSpan={10} className="py-2.5 px-3 text-center text-[11px] font-semibold text-amber-800 dark:text-amber-300">
-                    Aucun bulletin pour {mois} {annee} — cliquez sur « Créer » pour générer sa paie
-                  </td>
-                  <td className="py-2.5 px-3 text-center">
-                    <button
-                      onClick={() => handleCreerBulletin(Number(e.id), e.nom_prenoms)}
-                      disabled={verrouille}
-                      title={`Créer le bulletin de ${mois} ${annee}`}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-[10px] font-bold whitespace-nowrap"
-                    >
-                      <CalendarPlus className="w-3.5 h-3.5" />Créer
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Totaux */}
-      <div className="bg-salfa-dark dark:bg-slate-800 text-white p-3 sm:p-4 rounded-xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs font-semibold border dark:border-slate-700">
-        <div className="text-[11px] sm:text-xs">Totaux {mois} {annee} : <span className="text-sky-300 font-bold">{totaux.count_employes || 0} salariés</span></div>
-        <div className="flex flex-wrap gap-2 sm:gap-4 font-mono text-[11px] sm:text-xs w-full sm:w-auto">
-          <div>BRUT : <span className="font-bold">{fmt(totaux.total_brut)}</span></div>
-          <div>AVANCE : <span className="text-red-300 font-bold">{fmt(totaux.total_avance)}</span></div>
-          <div>MED : <span className="text-red-300 font-bold">{fmt(totaux.total_med)}</span></div>
-          <div className="bg-salfa-teal dark:bg-slate-600 px-2.5 sm:px-3 py-1 rounded w-full sm:w-auto text-center">NET À PAYER : <span className="font-bold">{fmt(totaux.total_net)}</span></div>
-        </div>
-      </div>
-
-      {/* Modales */}
-      {showSaisieLot && <SaisieLotModal annee={annee} mois={mois} paies={paies} employes={Object.values(employesById)} onClose={() => setShowSaisieLot(false)} onSaved={(count) => { setShowSaisieLot(false); setLotMessage(count ? `${count} bulletin(s) mis à jour pour ${mois} ${annee}.` : 'Aucun montant modifié.'); loadData(); }} />}
-      {showModal && (
-        <EmployeModalForm
-          employe={editEmploye}
-          onClose={() => setShowModal(false)}
-          onSaved={() => { setShowModal(false); loadData(); }}
-        />
-      )}
-      {historyEmp && <EmployeHistoryModal employe={historyEmp} paies={paiesHistory} onClose={() => setHistoryEmp(null)} />}
-      {accessoiresPaie && (
-        <AccessoiresModalForm
-          paie={accessoiresPaie}
-          onClose={() => setAccessoiresPaie(null)}
-          onSaved={() => { setAccessoiresPaie(null); loadData(); }}
-        />
-      )}
-      {showImport && (
-        <ImportExcelModal
-          anneeDefaut={annee}
-          onClose={() => { setShowImport(false); loadData(); }}
-          onImported={(rap) => {
-            // Se positionner sur la dernière période présente dans le classeur
-            const derniere = rap.periodes[rap.periodes.length - 1];
-            if (derniere) {
-              setAnnee(derniere.annee);
-              setMois(derniere.mois);
-            }
+        <button
+          type="button"
+          onClick={() => {
+            setEditingEmploye(null);
+            setShowEmpModal(true);
           }}
+          className="flex items-center justify-center gap-2 bg-salfa-dark hover:bg-salfa-teal text-white px-4 py-2 rounded-lg font-bold text-xs sm:text-sm shadow-sm transition shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Nouveau Salarié</span>
+        </button>
+      </div>
+
+      {/* ÉTAT COMPLET EXCEL (32 COLONNES) */}
+      <div className="no-print block bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="overflow-auto max-h-[70vh] thin-scrollbar">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead className="sticky top-0 z-20">
+                <tr className="text-white text-[10px] font-extrabold uppercase tracking-wider">
+                  {ETAT_GROUPS.map((g) => (
+                    <th key={g.label} colSpan={g.span} className={`${g.bg} py-1.5 px-2 text-center border-r border-white/20`}>
+                      {g.label}
+                    </th>
+                  ))}
+                  <th className="bg-slate-900 py-1.5 px-2 text-center">FICHE &amp; ACC.</th>
+                </tr>
+                <tr className="bg-slate-100 dark:bg-slate-700 border-b border-slate-300 dark:border-slate-600 text-[10px] font-bold uppercase text-slate-700 dark:text-slate-200">
+                  {ETAT_COLUMNS.map((c, idx) => {
+                    const highlightCls =
+                      c.key === 'avance'
+                        ? 'bg-red-100/90 dark:bg-red-950/60 text-red-900 dark:text-red-200'
+                        : c.key === 'med'
+                        ? 'bg-amber-100/90 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200'
+                        : c.key === 'virement'
+                        ? 'bg-sky-100/90 dark:bg-sky-950/60 text-sky-900 dark:text-sky-200'
+                        : c.key === 'especes'
+                        ? 'bg-emerald-100/90 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200'
+                        : c.key === 'net'
+                        ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300'
+                        : c.key === 'conge_pris' || c.key === 'conge_restant'
+                        ? 'bg-violet-100/90 dark:bg-violet-950/60 text-violet-900 dark:text-violet-200'
+                        : '';
+                    return (
+                      <th
+                        key={c.key}
+                        className={`py-2 px-2 whitespace-nowrap border-r border-slate-200 dark:border-slate-600 text-${c.align} ${
+                          idx === 0
+                            ? 'sticky left-0 z-30 bg-slate-100 dark:bg-slate-700 w-12'
+                            : idx === 1
+                            ? 'sticky left-12 z-30 bg-slate-100 dark:bg-slate-700 min-w-[200px]'
+                            : highlightCls
+                        }`}
+                      >
+                        {c.label}
+                        {c.editable && !verrouille ? ' ✎' : ''}
+                      </th>
+                    );
+                  })}
+                  <th className="py-2 px-2 text-center whitespace-nowrap bg-slate-100 dark:bg-slate-700">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                {loading ? (
+                  <tr>
+                    <td colSpan={ETAT_COLUMNS.length + 1} className="p-8 text-center text-slate-400">
+                      Chargement de l'état de paie…
+                    </td>
+                  </tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={ETAT_COLUMNS.length + 1} className="p-8 text-center">
+                      <EmptyState search={search} mois={mois} annee={annee} verrouille={verrouille} onInit={handleInitMois} />
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((p, rowIdx) => {
+                    const emp = empById.get(p.employe_id);
+                    const mat = emp ? emp.conge_maternite === 1 || emp.conge_maternite === true : false;
+                    const stickyBg = mat
+                      ? 'bg-pink-50 dark:bg-pink-950/60 group-hover:bg-pink-100 dark:group-hover:bg-pink-900/50'
+                      : 'bg-white dark:bg-slate-800 group-hover:bg-sky-50 dark:group-hover:bg-slate-700';
+
+                    return (
+                      <tr
+                        key={p.id}
+                        onDoubleClick={() => {
+                          if (emp) {
+                            setEditingEmploye(emp);
+                            setShowEmpModal(true);
+                          }
+                        }}
+                        title="Double-cliquez pour modifier la fiche du salarié"
+                        className={`cursor-pointer transition group ${
+                          mat
+                            ? 'bg-pink-50/90 dark:bg-pink-950/35 hover:bg-pink-100/90 dark:hover:bg-pink-900/45 border-l-4 border-l-pink-500'
+                            : 'hover:bg-sky-50/60 dark:hover:bg-slate-700/50'
+                        }`}
+                      >
+                        {ETAT_COLUMNS.map((c, idx) => {
+                          if (c.editable === 'avance') {
+                            return (
+                              <td key={c.key} className="py-1 px-1.5 border-r border-slate-100 dark:border-slate-700 bg-red-50/25 dark:bg-red-950/15" onClick={(e) => e.stopPropagation()}>
+                                <InlineMoneyInput
+                                  compact
+                                  value={Number(p.avance || 0)}
+                                  disabled={verrouille}
+                                  tone="red"
+                                  colKey="avance"
+                                  rowIndex={rowIdx}
+                                  onCommit={(n) => handleInlineSave(p, n, Number(p.med || 0))}
+                                />
+                              </td>
+                            );
+                          }
+                          if (c.editable === 'med') {
+                            return (
+                              <td key={c.key} className="py-1 px-1.5 border-r border-slate-100 dark:border-slate-700 bg-amber-50/25 dark:bg-amber-950/15" onClick={(e) => e.stopPropagation()}>
+                                <InlineMoneyInput
+                                  compact
+                                  value={Number(p.med || 0)}
+                                  disabled={verrouille}
+                                  tone="amber"
+                                  colKey="med"
+                                  rowIndex={rowIdx}
+                                  onCommit={(n) => handleInlineSave(p, Number(p.avance || 0), n)}
+                                />
+                              </td>
+                            );
+                          }
+                          if (c.editable === 'virement') {
+                            return (
+                              <td key={c.key} className="py-1 px-1.5 border-r border-slate-100 dark:border-slate-700 bg-sky-50/30 dark:bg-sky-950/15" onClick={(e) => e.stopPropagation()}>
+                                <InlineMoneyInput
+                                  compact
+                                  value={Number(p.virement || 0)}
+                                  disabled={verrouille}
+                                  tone="sky"
+                                  colKey="virement"
+                                  rowIndex={rowIdx}
+                                  onCommit={(n) => handleInlineReglement(p, 'virement', n)}
+                                />
+                              </td>
+                            );
+                          }
+                          if (c.editable === 'especes') {
+                            return (
+                              <td key={c.key} className="py-1 px-1.5 border-r border-slate-100 dark:border-slate-700 bg-emerald-50/30 dark:bg-emerald-950/15" onClick={(e) => e.stopPropagation()}>
+                                <InlineMoneyInput
+                                  compact
+                                  value={Number(p.especes || 0)}
+                                  disabled={verrouille}
+                                  tone="emerald"
+                                  colKey="especes"
+                                  rowIndex={rowIdx}
+                                  onCommit={(n) => handleInlineReglement(p, 'especes', n)}
+                                />
+                              </td>
+                            );
+                          }
+
+                          const congeTitle =
+                            c.key === 'conge_restant' && p.conge_titre_actif
+                              ? `Titre ${p.conge_titre_actif} : ${fmtJoursCourt(p.conge_reste_titre)} j · Cumul restant : ${fmtJoursCourt(p.conge_restant)} j · Permission restante : ${fmtJoursCourt(p.permission_restante)} j`
+                              : undefined;
+
+                          return (
+                            <td
+                              key={c.key}
+                              title={congeTitle}
+                              className={`py-1.5 px-2 whitespace-nowrap border-r border-slate-100 dark:border-slate-700 text-${c.align} ${
+                                c.money || c.days ? 'font-mono' : ''
+                              } ${
+                                idx === 0
+                                  ? `sticky left-0 z-10 ${stickyBg} font-bold text-salfa-dark dark:text-sky-300 w-12`
+                                  : idx === 1
+                                  ? `sticky left-12 z-10 ${stickyBg} font-semibold text-slate-900 dark:text-white min-w-[200px]`
+                                  : ''
+                              } ${
+                                c.key === 'net'
+                                  ? 'font-extrabold text-emerald-700 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/20'
+                                  : c.key === 'conge_restant'
+                                  ? 'font-bold text-violet-700 dark:text-violet-300 bg-violet-50/40 dark:bg-violet-950/15'
+                                  : c.key === 'conge_pris' && Number(p.conge_pris_mois || 0) > 0
+                                  ? 'font-bold text-violet-800 dark:text-violet-200 bg-violet-50/40 dark:bg-violet-950/15'
+                                  : ''
+                              }`}
+                            >
+                              {idx === 1 ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span>{cellValue(p, c)}</span>
+                                  {mat && (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-pink-600 text-white font-extrabold">
+                                      <Baby className="w-2.5 h-2.5" />½
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                cellValue(p, c)
+                              )}
+                            </td>
+                          );
+                        })}
+
+                        <td className="py-1 px-2 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="inline-flex items-center gap-1">
+                            {!verrouille && (
+                              <button
+                                onClick={() => setAccModalPaie(p)}
+                                className="px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 text-salfa-teal dark:text-sky-300 text-[10px] font-bold"
+                                title="Modifier les accessoires (primes) du mois"
+                              >
+                                +Acc.
+                              </button>
+                            )}
+                            {emp && (
+                              <>
+                                <button
+                                  onClick={() => handleViewHistory(emp)}
+                                  className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300"
+                                  title="Historique des paies"
+                                >
+                                  <History className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingEmploye(emp);
+                                    setShowEmpModal(true);
+                                  }}
+                                  className="p-1 rounded hover:bg-amber-50 dark:hover:bg-amber-900/30 text-amber-600 dark:text-amber-400"
+                                  title="Modifier la fiche salarié (informations / mise en inactif)"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+              {rows.length > 0 && (
+                <tfoot className="sticky bottom-0 z-20 bg-salfa-dark text-white font-bold text-xs">
+                  <tr>
+                    {ETAT_COLUMNS.map((c, idx) => (
+                      <td
+                        key={c.key}
+                        className={`py-2.5 px-2 whitespace-nowrap border-r border-white/15 text-${c.align} ${
+                          c.money || c.days ? 'font-mono' : ''
+                        } ${idx === 0 ? 'sticky left-0 z-30 bg-salfa-dark' : idx === 1 ? 'sticky left-12 z-30 bg-salfa-dark' : ''}`}
+                      >
+                        {idx === 0
+                          ? ''
+                          : idx === 1
+                          ? `TOTAUX (${rows.length})`
+                          : c.sum
+                          ? c.days
+                            ? `${fmtJoursCourt(etatTotals[c.key])} j`
+                            : fmt(etatTotals[c.key])
+                          : ''}
+                      </td>
+                    ))}
+                    <td className="py-2.5 px-2 bg-salfa-dark" />
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+
+      {/* ACCÈS RAPIDE AUX PÉRIODES DISPONIBLES */}
+      {periodes.length > 0 && (
+        <div className="no-print bg-white dark:bg-slate-800 rounded-xl p-2.5 sm:p-3 border border-slate-200 dark:border-slate-700 flex items-center gap-2 overflow-x-auto thin-scrollbar">
+          <span className="text-[11px] font-bold uppercase text-slate-400 shrink-0 pl-1">Mois initialisés :</span>
+          <div className="flex items-center gap-1.5">
+            {periodes.map((p) => {
+              const active = p.annee === annee && p.mois === mois;
+              return (
+                <button
+                  key={`${p.annee}-${p.mois}`}
+                  type="button"
+                  onClick={() => {
+                    setEtatsImpression(null);
+                    setAnnee(p.annee);
+                    setMois(p.mois);
+                  }}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition ${
+                    active
+                      ? 'bg-salfa-dark text-white shadow-sm'
+                      : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'
+                  }`}
+                >
+                  <span>{p.mois} {p.annee}</span>
+                  <span className={`text-[10px] ${active ? 'text-sky-200' : 'text-slate-400'}`}>({p.nb})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* FEUILLES D'IMPRESSION PAPIER (A4 PAYSAGE : 2 PAGES PAR MOIS, UN SEUL OU TOUS LES MOIS) */}
+      <EtatImpression etats={etatsPourImpression} />
+
+      {/* MODALES */}
+      {showLotModal && (
+        <SaisieLotModal
+          mois={mois}
+          annee={annee}
+          paies={paies}
+          employes={employes}
+          onClose={() => setShowLotModal(false)}
+          onSaved={async () => {
+            setShowLotModal(false);
+            await loadAll();
+          }}
+        />
+      )}
+
+      {showEmpModal && (
+        <EmployeModalForm
+          employe={editingEmploye}
+          onClose={() => setShowEmpModal(false)}
+          onSaved={async () => {
+            const wasCreate = !editingEmploye;
+            setShowEmpModal(false);
+            if (wasCreate && !verrouille) {
+              await initMoisPaie(annee, mois);
+            }
+            await loadAll();
+          }}
+        />
+      )}
+
+      {accModalPaie && (
+        <AccessoiresModalForm
+          paie={accModalPaie}
+          onClose={() => setAccModalPaie(null)}
+          onSaved={() => {
+            setAccModalPaie(null);
+            loadAll();
+          }}
+        />
+      )}
+
+      {historyModal && (
+        <EmployeHistoryModal
+          employe={historyModal.employe}
+          paies={historyModal.paies}
+          onClose={() => setHistoryModal(null)}
         />
       )}
     </div>
@@ -638,7 +1042,82 @@ Un fichier PDF unique contenant tous les états, avec sa page de couverture, ser
 };
 
 // ------------------------------------------------------------------------------
-// État vide (mobile) : mois non initialisé
+// Impression papier de l'État de paie (un seul mois actif OU tous les mois)
+// ------------------------------------------------------------------------------
+const EtatImpression: React.FC<{ etats: EtatMoisImprimable[] }> = ({ etats }) => (
+  <div className="etat-print">
+    {etats.flatMap((etat) => {
+      const n = Math.max(etat.lignes.length + 1, 1);
+      const rowMm = Math.min(4.2, Math.max(1.8, Number((176 / n).toFixed(2))));
+      const fontPt = Math.min(6, Math.max(3.8, Number((rowMm * 1.45).toFixed(1))));
+      const style = {
+        '--etat-row-height': `${rowMm}mm`,
+        '--etat-font-size': `${fontPt}pt`,
+      } as React.CSSProperties;
+
+      return PRINT_PAGES.map((page, pageIndex) => (
+        <section key={`${etat.annee}-${etat.mois}-${page.title}`} className="etat-print-page" style={style}>
+          <div className="etat-print-heading">
+            <strong>SALFA TOLIARA — ÉTAT DE PAIE MENSUEL : {etat.mois} {etat.annee}</strong>
+            <span>Page {pageIndex + 1}/2 — {page.title} ({etat.lignes.length} salariés)</span>
+          </div>
+          <table className="etat-print-table">
+            <colgroup>
+              {page.widths.map((w, i) => (
+                <col key={i} style={{ width: `${w}%` }} />
+              ))}
+            </colgroup>
+            <thead>
+              <tr>
+                {page.columns.map((c) => (
+                  <th key={c.key}>{c.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {etat.lignes.map((r) => (
+                <tr key={r.id}>
+                  {page.columns.map((c) => (
+                    <td
+                      key={c.key}
+                      style={{
+                        textAlign: c.align,
+                        overflow: c.money ? 'visible' : 'hidden',
+                        textOverflow: c.money ? 'clip' : 'ellipsis',
+                      }}
+                    >
+                      {cellValue(r, c)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                {page.columns.map((c, idx) => (
+                  <td key={c.key} style={{ textAlign: c.align }}>
+                    {idx === 0
+                      ? ''
+                      : idx === 1
+                      ? 'TOTAUX'
+                      : c.sum
+                      ? c.days
+                        ? `${fmtJoursCourt(etat.totals[c.key])} j`
+                        : fmt(etat.totals[c.key])
+                      : ''}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          </table>
+        </section>
+      ));
+    })}
+  </div>
+);
+
+// ------------------------------------------------------------------------------
+// État vide : mois non initialisé
 // ------------------------------------------------------------------------------
 const EmptyState: React.FC<{ search: string; mois: string; annee: number; verrouille: boolean; onInit: () => void }> = ({ search, mois, annee, verrouille, onInit }) => (
   <div className="bg-white dark:bg-slate-800 rounded-xl p-6 text-center border dark:border-slate-700 space-y-3">
@@ -656,170 +1135,6 @@ const EmptyState: React.FC<{ search: string; mois: string; annee: number; verrou
     )}
   </div>
 );
-
-// ------------------------------------------------------------------------------
-// MODALE - FICHE SALARIÉ (création / modification)
-// ------------------------------------------------------------------------------
-interface ModalFormProps { employe: Employe | null; onClose: () => void; onSaved: () => void; }
-
-const EmployeModalForm: React.FC<ModalFormProps> = ({ employe, onClose, onSaved }) => {
-  const [form, setForm] = useState({
-    numero_matricule: employe?.numero_matricule || '',
-    nom_prenoms: employe?.nom_prenoms || '',
-    numero_cnaps: employe?.numero_cnaps || '',
-    categorie: employe?.categorie || '',
-    jobs: employe?.jobs || '',
-    date_embauche: employe?.date_embauche || '',
-    enfant_a_charge: employe?.enfant_a_charge || 0,
-    base_aj: employe?.base_aj || 0,
-    logement_transport: employe?.logement_transport || 0,
-    rendement: employe?.rendement || 0,
-    responsabilite_representation: employe?.responsabilite_representation || 0,
-    rib: employe?.rib || '',
-    mode_paiement: employe?.mode_paiement || 'ESPECES',
-    conge_maternite: employe ? (employe.conge_maternite === 1 || employe.conge_maternite === true) : false,
-    date_debut_maternite: employe?.date_debut_maternite || '',
-    actif: employe ? employe.actif : 1,
-  });
-  const [saving, setSaving] = useState(false);
-  const calculateAncYear = (d: string) => { if (!d) return 0; try { const y = parseInt(d.split('-')[0] || d.split('/')[2] || '0', 10); if (y > 1900 && y <= new Date().getFullYear()) return Math.max(0, new Date().getFullYear() - y); } catch { /* ignore */ } return 0; };
-  const ancYears = calculateAncYear(form.date_embauche);
-  const getIndice = (y: number) => { if (y < 2) return 1.00; if (y < 4) return 1.09; if (y < 6) return 1.18; if (y < 8) return 1.27; if (y < 10) return 1.36; if (y < 12) return 1.45; if (y < 14) return 1.53; if (y < 16) return 1.60; if (y < 18) return 1.65; if (y < 20) return 1.68; return 1.70; };
-  const indice = getIndice(ancYears);
-  const baseReval = Math.round(Number(form.base_aj || 0) * indice * 100) / 100;
-  const baseBruteNormale = Number(form.base_aj || 0) + Number(form.logement_transport || 0) + Number(form.rendement || 0) + Number(form.responsabilite_representation || 0);
-  const baseBrutAffichee = form.conge_maternite ? baseBruteNormale / 2.0 : baseBruteNormale;
-
-  // Période de 3 mois couverte par le congé maternité
-  const MOIS_LIB = ['JANVIER','FEVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOUT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DECEMBRE'];
-  const periodeMaternite = (() => {
-    if (!form.conge_maternite || !form.date_debut_maternite) return null;
-    const parts = String(form.date_debut_maternite).split('-');
-    if (parts.length < 2) return null;
-    const y = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10) - 1;
-    if (!y || m < 0) return null;
-    const debut = MOIS_LIB[m] + ' ' + y;
-    const finIdx = y * 12 + m + 2;
-    const fin = MOIS_LIB[finIdx % 12] + ' ' + Math.floor(finIdx / 12);
-    return { debut, fin };
-  })();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    const dataToSend = {
-      ...form,
-      numero_matricule: Number(form.numero_matricule),
-      base_aj: Number(form.base_aj),
-      logement_transport: Number(form.logement_transport),
-      rendement: Number(form.rendement),
-      responsabilite_representation: Number(form.responsabilite_representation),
-      enfant_a_charge: Number(form.enfant_a_charge),
-      conge_maternite: form.conge_maternite ? 1 : 0,
-    };
-    let ok = false;
-    if (employe) ok = await updateEmploye(employe.id, dataToSend);
-    else ok = await createEmploye(dataToSend);
-    setSaving(false);
-    if (ok) onSaved();
-    else alert('Erreur enregistrement.');
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 dark:border-slate-700 modal-mobile max-h-[95dvh] flex flex-col">
-        <div className="bg-salfa-dark dark:bg-slate-900 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between text-white shrink-0">
-          <h3 className="text-sm sm:text-lg font-bold truncate">{employe ? `Modifier Mat ${employe.numero_matricule}` : 'Nouveau Salarié'}</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-white/10 shrink-0"><X className="w-5 h-5" /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto thin-scrollbar">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            {[
-              { label: 'N° Matricule *', key: 'numero_matricule', type: 'number', required: true },
-              { label: 'NOM ET PRENOMS *', key: 'nom_prenoms', type: 'text', required: true },
-              { label: 'N° CNaPS', key: 'numero_cnaps', type: 'text' },
-              { label: 'Catégorie', key: 'categorie', type: 'text' },
-              { label: 'Fonction (JOBS)', key: 'jobs', type: 'text' },
-              { label: 'Date embauche', key: 'date_embauche', type: 'text' },
-              { label: 'Enfants à charge', key: 'enfant_a_charge', type: 'number' },
-            ].map((f) => (
-              <div key={f.key}>
-                <label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">{f.label}</label>
-                <input type={f.type} value={(form as any)[f.key]} onChange={(e) => setForm({ ...form, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value })} required={!!f.required} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" />
-              </div>
-            ))}
-            <div><label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">Mode règlement</label><select value={form.mode_paiement} onChange={(e) => setForm({ ...form, mode_paiement: e.target.value })} className="w-full rounded-lg border bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm"><option value="ESPECES">ESPECES</option><option value="VIREMENT">VIREMENT</option></select></div>
-            <div><label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">BASE AJ</label><MonetaryInput value={form.base_aj} onChange={(num) => setForm({ ...form, base_aj: num })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" /></div>
-            <div><label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">Logt/Trsp</label><MonetaryInput value={form.logement_transport} onChange={(num) => setForm({ ...form, logement_transport: num })} className="w-full rounded-lg border bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" /></div>
-            <div><label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">Prime Rendement</label><MonetaryInput value={form.rendement} onChange={(num) => setForm({ ...form, rendement: num })} className="w-full rounded-lg border bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" /></div>
-            <div><label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">RESP REPRES</label><MonetaryInput value={form.responsabilite_representation} onChange={(num) => setForm({ ...form, responsabilite_representation: num })} className="w-full rounded-lg border bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" /></div>
-          </div>
-          <div><label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">RIB</label><input type="text" value={form.rib} onChange={(e) => setForm({ ...form, rib: e.target.value })} className="w-full rounded-lg border bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono" /></div>
-          <div className="p-3 sm:p-4 rounded-xl bg-pink-50 dark:bg-pink-900/20 border-2 border-pink-200 dark:border-pink-800 space-y-3">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.conge_maternite}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setForm({
-                    ...form,
-                    conge_maternite: checked,
-                    date_debut_maternite: checked ? (form.date_debut_maternite || new Date().toISOString().slice(0, 10)) : '',
-                  });
-                }}
-                className="mt-0.5 rounded text-pink-600 w-4 h-4"
-              />
-              <div className="text-xs">
-                <span className="font-extrabold text-pink-900 dark:text-pink-300 block">Congé de Maternité (3 mois — base brute à 50%)</span>
-                <span className="text-slate-600 dark:text-slate-400 block">
-                  La personne est <b>mise en évidence</b> et sa base brute passe à <b className="text-pink-800 dark:text-pink-300 font-mono">{fmt(baseBrutAffichee)}</b> au lieu de {fmt(baseBruteNormale)} pendant la durée du congé.
-                </span>
-              </div>
-            </label>
-            {form.conge_maternite && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-7">
-                <div>
-                  <label className="block text-[11px] font-bold uppercase mb-1 text-pink-900 dark:text-pink-300">Date de début du congé</label>
-                  <input
-                    type="date"
-                    value={form.date_debut_maternite}
-                    onChange={(e) => setForm({ ...form, date_debut_maternite: e.target.value })}
-                    className="w-full rounded-lg border border-pink-300 dark:border-pink-700 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm"
-                  />
-                </div>
-                <div className="flex items-end">
-                  <div className="w-full rounded-lg bg-white/70 dark:bg-slate-800/60 border border-pink-200 dark:border-pink-800 px-3 py-2 text-[11px] text-pink-900 dark:text-pink-200">
-                    <b>Durée :</b> 3 mois (mois du début inclus).
-                    {periodeMaternite && (
-                      <div className="mt-0.5 font-mono">Période : <b>{periodeMaternite.debut}</b> → <b>{periodeMaternite.fin}</b></div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="p-3 sm:p-4 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 text-xs space-y-1 dark:text-slate-300">
-            <div className="font-bold text-salfa-teal dark:text-sky-300 flex items-center gap-1.5"><Award className="w-4 h-4" /><span>Ancienneté:</span></div>
-            <div>Ancienneté: <b>{ancYears} ans</b> | Indice: <b>x{indice.toFixed(2)}</b></div>
-            <div>Base revalorisée: <b className="text-sm">{fmt(baseReval)}</b></div>
-          </div>
-          {!employe && (
-            <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300">
-              <Info className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>Après l'enregistrement, cliquez sur <b>« Ouvrir / Initialiser »</b> pour générer le bulletin de ce salarié pour le mois affiché.</span>
-            </div>
-          )}
-          <div className="flex justify-end gap-3 pt-3 border-t dark:border-slate-700">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:text-slate-200 text-sm font-semibold">Annuler</button>
-            <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-salfa-dark dark:bg-slate-600 hover:bg-salfa-teal text-white text-sm font-bold shadow">{saving ? '...' : 'Enregistrer'}</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
 
 // ------------------------------------------------------------------------------
 // MODALE - HISTORIQUE DES PAIES D'UN SALARIÉ
@@ -841,10 +1156,10 @@ const EmployeHistoryModal: React.FC<HistoryModalProps> = ({ employe, paies, onCl
           {paies.length === 0 ? <div className="text-center py-8 text-slate-500 text-sm">Aucun bulletin.</div> : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:hidden">
-                {paies.map((p) => (<div key={p.id} className="border dark:border-slate-700 rounded-xl p-3 bg-slate-50 dark:bg-slate-700/50"><div className="flex justify-between items-center"><span className="font-bold text-salfa-dark dark:text-white text-sm">{p.mois} {p.annee}</span><span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${p.verrouille === 1 ? 'bg-slate-200 dark:bg-slate-600' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300'}`}>{p.verrouille === 1 ? 'Clôturé' : 'Modifiable'}</span></div><div className="grid grid-cols-2 gap-2 mt-2 text-xs dark:text-slate-300"><div>Brut: <span className="font-mono font-bold">{fmt(p.salaire_brut)}</span></div><div>NET: <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmt(p.net)}</span></div><div>Avance: <span className="font-mono text-red-600">{fmt(p.avance)}</span></div><div>MED: <span className="font-mono text-red-600">{fmt(p.med)}</span></div></div></div>))}
+                {paies.map((p) => (<div key={p.id} className="border dark:border-slate-700 rounded-xl p-3 bg-slate-50 dark:bg-slate-700/50"><div className="flex justify-between items-center"><span className="font-bold text-salfa-dark dark:text-white text-sm">{p.mois} {p.annee}</span><span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${p.verrouille === 1 ? 'bg-slate-200 dark:bg-slate-600' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300'}`}>{p.verrouille === 1 ? 'Clôturé' : 'Modifiable'}</span></div><div className="grid grid-cols-2 gap-2 mt-2 text-xs dark:text-slate-300"><div>Brut: <span className="font-mono font-bold">{fmt(p.salaire_brut)}</span></div><div>NET: <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmt(p.net)}</span></div><div>Avance: <span className="font-mono text-red-600">{fmt(p.avance)}</span></div><div>Congé restant: <span className="font-mono font-bold text-violet-700 dark:text-violet-300">{fmtJoursCourt(p.conge_restant)} j</span></div></div></div>))}
               </div>
               <div className="hidden lg:block overflow-x-auto thin-scrollbar">
-                <table className="w-full text-left border-collapse min-w-[900px]"><thead><tr className="bg-slate-50 dark:bg-slate-700 border-b dark:border-slate-600 text-xs font-bold uppercase text-slate-600 dark:text-slate-300"><th className="py-2 px-3">Période</th><th className="py-2 px-3 text-right">BASE AJ</th><th className="py-2 px-3 text-right">Brut</th><th className="py-2 px-3 text-right">CNaPS</th><th className="py-2 px-3 text-right">IRSA</th><th className="py-2 px-3 text-right">AVANCE</th><th className="py-2 px-3 text-right">MED</th><th className="py-2 px-4 text-right">NET</th><th className="py-2 px-3 text-center">Statut</th></tr></thead><tbody className="divide-y dark:divide-slate-700 text-sm dark:text-slate-200">{paies.map((p) => (<tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="py-2 px-3 font-bold">{p.mois} {p.annee}</td><td className="py-2 px-3 text-right font-mono">{fmt(p.base_aj)}</td><td className="py-2 px-3 text-right font-mono font-semibold">{fmt(p.salaire_brut)}</td><td className="py-2 px-3 text-right font-mono text-xs">{fmt(p.cnaps)}</td><td className="py-2 px-3 text-right font-mono text-xs">{fmt(p.irsa)}</td><td className="py-2 px-3 text-right font-mono text-red-600">{fmt(p.avance)}</td><td className="py-2 px-3 text-right font-mono text-red-600">{fmt(p.med)}</td><td className="py-2 px-4 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmt(p.net)}</td><td className="py-2 px-3 text-center text-xs">{p.verrouille === 1 ? <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 font-semibold">Clôturé</span> : <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 font-semibold">Modifiable</span>}</td></tr>))}</tbody></table>
+                <table className="w-full text-left border-collapse min-w-[960px]"><thead><tr className="bg-slate-50 dark:bg-slate-700 border-b dark:border-slate-600 text-xs font-bold uppercase text-slate-600 dark:text-slate-300"><th className="py-2 px-3">Période</th><th className="py-2 px-3 text-right">BASE AJ</th><th className="py-2 px-3 text-right">Brut</th><th className="py-2 px-3 text-right">CNaPS</th><th className="py-2 px-3 text-right">IRSA</th><th className="py-2 px-3 text-right">AVANCE</th><th className="py-2 px-3 text-right">MED</th><th className="py-2 px-4 text-right">NET</th><th className="py-2 px-3 text-right">VIREMENT</th><th className="py-2 px-3 text-right">ESPÈCES</th><th className="py-2 px-3 text-right">Congé pris</th><th className="py-2 px-3 text-right">Congé restant</th><th className="py-2 px-3 text-center">Statut</th></tr></thead><tbody className="divide-y dark:divide-slate-700 text-sm dark:text-slate-200">{paies.map((p) => (<tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="py-2 px-3 font-bold">{p.mois} {p.annee}</td><td className="py-2 px-3 text-right font-mono">{fmt(p.base_aj)}</td><td className="py-2 px-3 text-right font-mono font-semibold">{fmt(p.salaire_brut)}</td><td className="py-2 px-3 text-right font-mono text-xs">{fmt(p.cnaps)}</td><td className="py-2 px-3 text-right font-mono text-xs">{fmt(p.irsa)}</td><td className="py-2 px-3 text-right font-mono text-red-600">{fmt(p.avance)}</td><td className="py-2 px-3 text-right font-mono text-red-600">{fmt(p.med)}</td><td className="py-2 px-4 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmt(p.net)}</td><td className="py-2 px-3 text-right font-mono text-sky-700 dark:text-sky-300">{fmt(p.virement)}</td><td className="py-2 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300">{fmt(p.especes)}</td><td className="py-2 px-3 text-right font-mono text-violet-700 dark:text-violet-300">{Number(p.conge_pris_mois || 0) ? `${fmtJoursCourt(p.conge_pris_mois)} j` : '—'}</td><td className="py-2 px-3 text-right font-mono font-bold text-violet-700 dark:text-violet-300">{fmtJoursCourt(p.conge_restant)} j</td><td className="py-2 px-3 text-center text-xs">{p.verrouille === 1 ? <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 font-semibold">Clôturé</span> : <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 font-semibold">Modifiable</span>}</td></tr>))}</tbody></table>
               </div>
             </>
           )}
@@ -895,7 +1210,7 @@ const AccessoiresModalForm: React.FC<AccModalProps> = ({ paie, onClose, onSaved 
           ))}
           <div className="flex justify-end gap-3 pt-3 border-t dark:border-slate-700">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 dark:text-slate-200 text-sm font-semibold">Annuler</button>
-            <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-salfa-dark dark:bg-slate-600 text-white text-sm font-bold shadow flex items-center gap-2"><Save className="w-4 h-4" />{saving ? '...' : 'Appliquer'}</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 rounded-lg bg-salfa-dark dark:bg-slate-600 text-white text-sm font-bold shadow flex items-center gap-2"><Save className="w-4 h-4" />{saving ? '...' : 'Appliquer'}</button>
           </div>
         </form>
       </div>

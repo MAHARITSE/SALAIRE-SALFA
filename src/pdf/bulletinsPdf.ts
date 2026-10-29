@@ -1,11 +1,16 @@
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { PaieMensuelle } from '../types';
-import { construireBulletin, formatDate, montantEnLettres } from '../bulletin/model';
+import {
+  construireBulletin,
+  formatCnapsBulletin,
+  formatCongesRestantsBulletin,
+  formatEmbaucheBulletin,
+  formatMontantBulletin,
+  montantEnLettresBulletin,
+} from '../bulletin/model';
 import { loadBulletinHeader, defaultBulletinHeader } from '../bulletin/header';
 
 const NAVY: [number, number, number] = [26, 54, 93];
-const BLUE: [number, number, number] = [43, 108, 176];
 
 function fmt(value: number | undefined | null): string {
   return Number(value || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -15,69 +20,238 @@ function safeFilePart(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/gi, '_');
 }
 
-/** Deux exemplaires, rubriques et formules de la feuille BULLETIN. */
+function drawUnderlinedText(doc: jsPDF, text: string, x: number, y: number, bold = true): number {
+  doc.setFont('helvetica', bold ? 'bold' : 'normal');
+  doc.text(text, x, y);
+  const w = doc.getTextWidth(text);
+  doc.setLineWidth(0.22);
+  doc.line(x, y + 0.65, x + w, y + 0.65);
+  return w;
+}
+
+/** Deux exemplaires côte à côte reproduisant fidèlement le corps de la feuille BULLETIN. */
 export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
   const bulletin = construireBulletin(p);
   // Les polices PDF standard ne comprennent pas l'espace insécable étroit.
   const money = (v: number | null | undefined) => fmt(v).replace(/[\u00a0\u202f]/g, ' ');
-  // 30 mm de reliure à gauche, 8 mm à droite et deux zones séparées de 5 mm.
+  const moneyRubrique = (v: number | null | undefined) =>
+    formatMontantBulletin(v).replace(/[\u00a0\u202f]/g, ' ');
+
+  // 30 mm de reliure à gauche, 8 mm à droite et deux zones séparées.
   let image = loadBulletinHeader().image;
   let properties;
   try { properties = doc.getImageProperties(image); }
   catch { image = defaultBulletinHeader().image; properties = doc.getImageProperties(image); }
+
   const drawCopy = (x: number, width: number) => {
     const center = x + width / 2;
-    const headerHeight = Math.min(26, width * properties.height / properties.width);
-    const headerWidth = headerHeight * properties.width / properties.height;
-    doc.addImage(image, properties.fileType, center - headerWidth / 2, 6 + (26 - headerHeight) / 2, headerWidth, headerHeight);
-    const titleY = 6 + 26 + 5;
-    doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+    const headerHeight = Math.min(24, (width * properties.height) / properties.width);
+    const headerWidth = (headerHeight * properties.width) / properties.height;
+    doc.addImage(
+      image,
+      properties.fileType,
+      center - headerWidth / 2,
+      6 + (24 - headerHeight) / 2,
+      headerWidth,
+      headerHeight
+    );
+
+    const titleY = 34;
+    doc.setTextColor(0, 0, 0);
+    doc.setDrawColor(0, 0, 0);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
     doc.text('BULLETIN DE PAIE', center, titleY, { align: 'center' });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-    doc.text(`Mois de : ${p.mois} ${p.annee}`, center, titleY + 5, { align: 'center' });
-    autoTable(doc, {
-      startY: titleY + 9, tableWidth: width, theme: 'plain',
-      body: [
-        ['Employé :', p.nom_prenoms || '—'],
-        ['Fonction :', p.jobs || '—'],
-        ['N° Matricule :', String(p.numero_matricule)],
-        ['Embauche :', formatDate(p.date_embauche)],
-        ['Classification :', `${p.categorie || '—'}     N° CNaPS : ${p.numero_cnaps || '—'}`],
-      ],
-      styles: { font: 'helvetica', fontSize: 7.4, cellPadding: 0.7, overflow: 'linebreak', textColor: [0,0,0] },
-      columnStyles: { 0: { cellWidth: 27, fontStyle: 'bold' }, 1: { cellWidth: width - 27 } },
-      margin: { left: x, right: 297 - x - width },
-    });
-    const startY = (doc as any).lastAutoTable.finalY + 3;
-    autoTable(doc, {
-      startY, tableWidth: width, theme: 'grid',
-      head: [['RUBRIQUES DE PAIE', 'GAINS', 'RETENUES']],
-      body: bulletin.lignes.map(r => [r.libelle, r.gain === undefined ? '' : money(r.gain), r.retenue === undefined ? '' : money(r.retenue)]),
-      headStyles: { fillColor: [255,255,255], textColor: [0,0,0], fontStyle: 'bold', halign: 'center', lineColor: [60,60,60], lineWidth: 0.15 },
-      styles: { font: 'helvetica', fontSize: 7, cellPadding: 1.2, lineColor: [60,60,60], lineWidth: 0.15, textColor: [0,0,0] },
-      columnStyles: { 0: { cellWidth: width * .54 }, 1: { cellWidth: width * .23, halign: 'right' }, 2: { cellWidth: width * .23, halign: 'right' } },
-      didParseCell: (data) => { if (data.section === 'body' && bulletin.lignes[data.row.index]?.total) data.cell.styles.fontStyle = 'bold'; },
-      margin: { left: x, right: 297 - x - width },
-    });
-    const end = (doc as any).lastAutoTable.finalY;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
-    doc.text('NET à PAYER :', x + width * .57, end + 5);
-    doc.text(money(bulletin.net), x + width - 2, end + 5, { align: 'right' });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
-    const words = doc.splitTextToSize(`Arrêtée à la somme de : ${montantEnLettres(bulletin.net)}`, width);
-    doc.text(words, x, end + 10);
-    let y = end + 10 + words.length * 3.2;
-    doc.text(`Paiement :     Virement : ${money(p.virement)}`, x, y); y += 4;
-    doc.text(`                        Espèce : ${money(p.especes)}`, x, y); y += 4;
-    if (bulletin.ecartNet) {
-      const note = doc.splitTextToSize(`Net enregistré dans l'état : ${money(bulletin.netEnregistre)} (différent du net calculé ci-dessus).`, width);
-      doc.text(note, x, y); y += note.length * 3.2;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.2);
+    doc.text(`Mois de : ${p.mois} ${p.annee}`, center, titleY + 4.5, { align: 'center' });
+
+    // --- Bloc identité (labels soulignés exactement comme sur le modèle) ---
+    let iy = titleY + 10.5;
+    const labelColW = 27;
+    const idRows: [string, string][] = [
+      ['Employé       :', p.nom_prenoms || '—'],
+      ['Fonction      :', p.jobs || '—'],
+      ['N° Matricule :', String(p.numero_matricule)],
+      ['Embauche     :', formatEmbaucheBulletin(p.date_embauche)],
+    ];
+    doc.setFontSize(8);
+    for (const [lbl, val] of idRows) {
+      drawUnderlinedText(doc, lbl, x, iy, true);
+      doc.setFont('helvetica', 'normal');
+      const clipped = doc.splitTextToSize(val, width - labelColW - 1)[0] || '';
+      doc.text(clipped, x + labelColW, iy);
+      iy += 4.3;
     }
-    doc.text('NB CONGÉS RESTANTS : .......... jrs', x, y + 1);
-    doc.text(`Tulear le, ${new Date().toLocaleDateString('fr-FR')}`, x + width, y + 6, { align: 'right' });
+    drawUnderlinedText(doc, 'Classification :', x, iy, true);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(p.categorie || '—'), x + labelColW, iy);
+    doc.setFont('helvetica', 'bold');
+    doc.text('N° CNaPS :', x + 46, iy);
+    doc.setFont('helvetica', 'normal');
+    doc.text(formatCnapsBulletin(p.numero_cnaps), x + 65, iy);
+
+    // --- Tableau principal encadré (sans lignes horizontales internes sauf sous-total GAINS) ---
+    const tableTop = iy + 4.5;
+    const c1 = width * 0.54;
+    const c2 = width * 0.23;
+    const c3 = width - c1 - c2;
+    const x1 = x + c1;
+    const x2 = x1 + c2;
+    const x3 = x + width;
+
+    const headH = 6.2;
+    doc.setLineWidth(0.45);
+    doc.rect(x, tableTop, width, headH);
+    doc.line(x1, tableTop, x1, tableTop + headH);
+    doc.line(x2, tableTop, x2, tableTop + headH);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.8);
+    doc.text('RUBRIQUES DE PAIE', x + c1 / 2, tableTop + 4.2, { align: 'center' });
+    doc.text('GAINS', x1 + c2 / 2, tableTop + 4.2, { align: 'center' });
+    doc.text('RETENUES', x2 + c3 / 2, tableTop + 4.2, { align: 'center' });
+
+    const bodyTop = tableTop + headH;
+    const rowH = 4.5;
+    const topPad = 3.2;
+    const subGap = 2.2;
+    const botPad = 2.6;
+    const bodyH = topPad + 10 * rowH + subGap + botPad;
+
+    // Cadre extérieur + séparateurs verticaux du corps
+    doc.setLineWidth(0.45);
+    doc.rect(x, bodyTop, width, bodyH);
+    doc.line(x1, bodyTop, x1, bodyTop + bodyH);
+    doc.line(x2, bodyTop, x2, bodyTop + bodyH);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.8);
+
+    const drawGainVal = (val: number, ry: number) => {
+      const txt = moneyRubrique(val);
+      doc.text(txt, txt === '-' ? x2 - 6 : x2 - 1.8, ry, { align: 'right' });
+    };
+    const drawRetVal = (val: number, ry: number) => {
+      const txt = moneyRubrique(val);
+      doc.text(txt, txt === '-' ? x3 - 6 : x3 - 1.8, ry, { align: 'right' });
+    };
+
+    let ry = bodyTop + topPad + 2.8;
+    // 4 lignes du bloc Salaire de base
+    doc.text('Salaire de base', x + 1.5, ry);
+    drawGainVal(Number(p.base_aj || 0), ry);
+    ry += rowH;
+
+    doc.text('Indemnités de Transp et Logement', x + 1.5, ry);
+    drawGainVal(Number(p.logt_trsp || 0), ry);
+    ry += rowH;
+
+    doc.text('Indemnité de Rendement', x + 1.5, ry);
+    drawGainVal(Number(p.rendement || 0), ry);
+    ry += rowH;
+
+    doc.text('Indemnité de Responsabilité', x + 1.5, ry);
+    drawGainVal(Number(p.resp_repres || 0), ry);
+    ry += rowH + subGap;
+
+    // Filet horizontal uniquement dans la colonne GAINS au-dessus de TOTAL :
+    doc.setLineWidth(0.38);
+    doc.line(x1, ry - 3.6, x2, ry - 3.6);
+    doc.text('TOTAL :', x1 - 2.5, ry, { align: 'right' });
+    doc.text(money(bulletin.base), x2 - 1.8, ry, { align: 'right' });
+    ry += rowH;
+
+    // Retenues + Primes divers
+    doc.text('Cotisation CNaPS', x + 1.5, ry);
+    drawRetVal(Number(p.cnaps || 0), ry);
+    ry += rowH;
+
+    doc.text('Retenue IRSA', x + 1.5, ry);
+    drawRetVal(Number(p.irsa || 0), ry);
+    ry += rowH;
+
+    doc.text('Avance sur salaire / Prêt', x + 1.5, ry);
+    drawRetVal(Number(p.avance || 0), ry);
+    ry += rowH;
+
+    doc.text('Medicament', x + 1.5, ry);
+    drawRetVal(Number(p.med || 0), ry);
+    ry += rowH;
+
+    doc.text('Primes divers', x + 1.5, ry);
+    drawGainVal(Number(p.accessoir || 0), ry);
+
+    // --- Ligne TOTAL ...... ---
+    const totY = bodyTop + bodyH;
+    const totH = 6.4;
+    doc.setLineWidth(0.45);
+    doc.rect(x1, totY, c2, totH);
+    doc.rect(x2, totY, c3, totH);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.text('TOTAL ......', x1 - 12, totY + 4.5, { align: 'right' });
+    doc.setFontSize(8.2);
+    doc.text(money(bulletin.gains), x2 - 1.8, totY + 4.4, { align: 'right' });
+    doc.text(money(bulletin.retenues), x3 - 1.8, totY + 4.4, { align: 'right' });
+
+    // --- Ligne NET à PAYER : ---
+    const netY = totY + totH;
+    const netH = 6.8;
+    const partialLineX = x + c1 * 0.64;
+    doc.setLineWidth(0.45);
+    doc.line(partialLineX, netY, x2, netY);
+    doc.rect(x2, netY, c3, netH);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.8);
+    doc.text('NET à PAYER :', partialLineX + 2, netY + 4.8);
+    doc.setFontSize(8.5);
+    doc.text(money(bulletin.net), x3 - 1.8, netY + 4.7, { align: 'right' });
+
+    // --- Arrêtée à la somme de ---
+    let fy = netY + netH + 5.2;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.4);
+    const words = doc.splitTextToSize(
+      `Arrêtée à la somme de : ${montantEnLettresBulletin(bulletin.net)}`,
+      width
+    );
+    doc.text(words, x, fy);
+    fy += words.length * 3.4 + 3.2;
+
+    // --- Paiement : Virement / Espece ---
+    doc.setFontSize(9.5);
+    drawUnderlinedText(doc, 'Paiement :', x + 20, fy, false);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Virement', x + 41, fy);
+    doc.setFont('helvetica', 'bold');
+    doc.text(money(p.virement), x + 92, fy, { align: 'right' });
+    fy += 5;
+
+    doc.setFont('helvetica', 'normal');
+    doc.text('Espece', x + 41, fy);
+    doc.setFont('helvetica', 'bold');
+    doc.text(money(p.especes), x + 92, fy, { align: 'right' });
+    fy += 5.5;
+
+    // --- NB CONGES RESTANTS & Date ---
+    doc.setFontSize(7.8);
+    drawUnderlinedText(doc, 'NB CONGES RESTANTS:', x, fy, true);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${formatCongesRestantsBulletin(p.conge_restant)}   jrs`, x + 56, fy);
+    fy += 4.6;
+
+    doc.setFont('helvetica', 'normal');
+    doc.text('Tulear le,', x + 28, fy);
+    doc.text(new Date().toLocaleDateString('fr-FR'), x + 45, fy);
   };
+
   drawCopy(30, 127);
-  doc.setDrawColor(170,170,170); doc.setLineDashPattern([2, 2], 0); doc.line(159.5, 8, 159.5, 202); doc.setLineDashPattern([], 0);
+  doc.setDrawColor(170, 170, 170);
+  doc.setLineWidth(0.25);
+  doc.setLineDashPattern([2, 2], 0);
+  doc.line(159.5, 8, 159.5, 202);
+  doc.setLineDashPattern([], 0);
   drawCopy(162, 127);
 }
 

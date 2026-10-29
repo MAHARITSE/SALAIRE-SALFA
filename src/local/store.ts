@@ -15,6 +15,8 @@ export interface JsonStore {
   paies: any[];
   comparaison_net: any[];
   utilisateurs: any[];
+  /** Fiches d'absence : congés, permissions, examens médicaux, ajustements de droit. */
+  conges: any[];
 }
 
 const STORAGE_KEY = 'salfa_paie_store_v1';
@@ -42,6 +44,7 @@ function seedStore(): JsonStore {
     employes: Array.isArray(raw.employes) ? raw.employes : [],
     paies: Array.isArray(raw.paies) ? raw.paies : [],
     comparaison_net: Array.isArray(raw.comparaison_net) ? raw.comparaison_net : [],
+    conges: Array.isArray(raw.conges) ? raw.conges : [],
     utilisateurs:
       Array.isArray(raw.utilisateurs) && raw.utilisateurs.length
         ? raw.utilisateurs
@@ -104,6 +107,67 @@ export function loadStore(): JsonStore {
     catch (e) { console.error('[LOCAL STORE] Migration non sauvegardée.', e); }
   }
 
+  // Les fiches d'absence arrivent d'une version antérieure du store : garantir la liste
+  // et charger une seule fois l'historique du contrôle SALFA si aucune fiche n'était présente.
+  if (!Array.isArray(loaded.conges)) loaded.conges = [];
+  if (loaded.meta?.conges_version !== 'controle-2026') {
+    if (loaded.conges.length === 0) {
+      const seed = seedStore();
+      const byMat = new Map(loaded.employes.map((e: any) => [Number(e.numero_matricule), e]));
+      let nextC = 0;
+      for (const c of seed.conges || []) {
+        const emp = byMat.get(Number(c.numero_matricule));
+        if (emp) {
+          loaded.conges.push({ ...c, id: ++nextC, employe_id: Number(emp.id) });
+        }
+      }
+    }
+    loaded.meta = { ...loaded.meta, conges_version: 'controle-2026' };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded)); }
+    catch (e) { console.error('[LOCAL STORE] Migration congés non sauvegardée.', e); }
+  }
+
+  // Mise en conformité Code du Travail malgache & règle SALFA (pas de cumul des
+  // congés non pris avant 2024 / avant la 1re année de la fenêtre affichée) :
+  // purger les anciens ajustements automatiques d'import tout en conservant les saisies manuelles.
+  if (loaded.meta?.conges_loi_3ans !== 3) {
+    loaded.conges = loaded.conges.filter((c: any) => !(c.categorie === 'AJUSTEMENT' && c.saisie_par === 'Import Excel'));
+    for (const c of loaded.conges) {
+      const m = /^Titre\s+(20\d{2})$/.exec(String(c.titre_periode || ''));
+      if (m && Number(m[1]) < Number(c.annee) - 2) {
+        c.titre_periode = `Titre ${Number(c.annee) - 2}`;
+      }
+    }
+    loaded.meta = { ...loaded.meta, conges_loi_3ans: 3 };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded)); }
+    catch (e) { console.error('[LOCAL STORE] Migration loi 3 ans non sauvegardée.', e); }
+  }
+
+  // Renseigner la date de mise en inactif si un salarié déjà inactif n'en portait pas encore.
+  const MOIS_MIG = ['JANVIER','FEVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOUT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DECEMBRE'];
+  let majInactifs = false;
+  for (const e of loaded.employes) {
+    if (Number(e.actif) !== 1 && !e.date_inactif) {
+      const ps = (loaded.paies || []).filter((p: any) => Number(p.employe_id) === Number(e.id));
+      if (ps.length > 0) {
+        let maxIdx = -1;
+        for (const p of ps) {
+          const idx = Number(p.annee) * 12 + MOIS_MIG.indexOf(String(p.mois).toUpperCase());
+          if (idx > maxIdx) maxIdx = idx;
+        }
+        const nextIdx = maxIdx + 1;
+        e.date_inactif = `${Math.floor(nextIdx / 12)}-${String((nextIdx % 12) + 1).padStart(2, '0')}-01`;
+      } else {
+        e.date_inactif = new Date().toISOString().slice(0, 10);
+      }
+      majInactifs = true;
+    }
+  }
+  if (majInactifs) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded)); }
+    catch { /* ignore */ }
+  }
+
   // Garantir les utilisateurs par défaut
   if (!Array.isArray(loaded.utilisateurs) || loaded.utilisateurs.length === 0) {
     loaded.utilisateurs = defaultUtilisateurs();
@@ -157,6 +221,16 @@ export function nextEmployeId(): number {
 export function nextPaieId(): number {
   const store = getStore();
   return store.paies.reduce((m, p) => Math.max(m, Number(p.id) || 0), 0) + 1;
+}
+
+export function nextCongeId(): number {
+  const store = getStore();
+  return (store.conges || []).reduce((m: number, c: any) => Math.max(m, Number(c.id) || 0), 0) + 1;
+}
+
+export function nextUtilisateurId(): number {
+  const store = getStore();
+  return (store.utilisateurs || []).reduce((m: number, u: any) => Math.max(m, Number(u.id) || 0), 0) + 1;
 }
 
 export function nextComparaisonId(): number {

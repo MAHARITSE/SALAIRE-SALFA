@@ -78,12 +78,12 @@ npm run preview        # prévisualise le build
 
 ---
 
-## 🔐 Comptes par défaut
+## 🔐 Comptes par défaut & Droits d'accès
 
-| Rôle          | Identifiant | Mot de passe    |
-|---------------|-------------|-----------------|
-| Administrateur | `admin`     | `admin123`      |
-| Comptable     | `comptable` | `comptable123`  |
+| Rôle           | Identifiant | Mot de passe   | Accès autorisé                                                      |
+|----------------|-------------|----------------|---------------------------------------------------------------------|
+| Administrateur | `admin`     | `admin123`     | **Accès complet** à toutes les fonctionnalités (Paie, États, Bulletins, Rapports, Administration & Congés) |
+| Comptable      | `comptable` | `comptable123` | **Permissions & Congés uniquement** (fiches d'absence, visas, suivi et état de contrôle des congés) |
 
 ---
 
@@ -104,19 +104,20 @@ src/
 
 ---
 
-## 📥 Importer votre classeur Excel (personnel + états de paie)
+## 📥 Importer votre classeur Excel (ancien ou récent : personnel + états de paie)
 
-L'application lit directement votre fichier **`SALAIRE_SALFA_….xlsm` / `.xlsx`**
-(100 % dans le navigateur, aucune donnée envoyée sur Internet) :
+L'application lit directement vos fichiers **`SALAIRE_SALFA_….xlsm` / `.xlsx` / `.xls` / `.xlsb` / `.csv`**
+(100 % dans le navigateur, aucune donnée envoyée sur Internet) avec une **analyse préalable des colonnes** :
 
-1. Connectez-vous, puis ouvrez l'onglet **1. Salariés**.
-2. Cliquez sur **« Importer Excel »**.
-3. Déposez le classeur (ou cliquez pour le choisir).
-4. Vérifiez l'aperçu : feuilles reconnues, nombre de salariés, périodes détectées.
-5. Choisissez le mode :
-   - **Fusionner** (recommandé) : ajoute les nouveaux salariés et complète les fiches existantes ;
-   - **Remplacer tout** : efface personnel + paies puis recharge tout depuis le fichier.
-6. Cliquez sur **Importer**.
+1. Connectez-vous en tant qu'**Administrateur**, puis ouvrez le menu **Administration ▾** (en haut à droite, avec *Déconnexion*).
+2. Cliquez sur **« Importer Excel (Ancien / Récent) »**.
+3. Déposez le classeur (ancien exercice ou classeur actuel).
+4. **Onglet 1 — Analyse des champs** : inspectez comment chaque colonne du fichier est associée à sa rubrique SALFA (avec échantillons de valeurs, niveau de confiance et vérification arithmétique Base / Accessoires / Brut / Net), et réaffectez manuellement n'importe quelle colonne avant import si nécessaire.
+5. **Onglet 2 — Feuilles & Périodes** : incluez/excluez chaque feuille et corrigez si besoin son type (Personnel / État mensuel), son mois ou son année (`1995..`).
+6. Choisissez le mode :
+   - **Fusionner** (avec option **Archive historique** activée automatiquement pour les années antérieures afin de conserver vos barèmes actuels et marquer les anciens salariés sortis en *Inactif*) ;
+   - **Remplacer tout** : recharge tout depuis le fichier (les mois clôturés restent protégés).
+7. Cliquez sur **Importer**.
 
 Le lecteur reconnaît automatiquement :
 
@@ -153,9 +154,9 @@ Reproduction du classeur Excel, en plein écran et imprimable :
 
 - Authentification locale (`admin` / `comptable`)
 - Gestion des salariés (fiches, matricules, ancienneté, congé maternité)
-- **Import du classeur Excel** (personnel + états mensuels) avec aperçu avant import
+- **Import intelligent des classeurs Excel anciens et récents** (`.xlsx`, `.xlsm`, `.xls`, `.xlsb`, `.csv`) avec analyse préalable et placement interactif de chaque champ
 - **État de paie mensuel** complet (32 colonnes + totaux), impression A4 en deux pages et export Excel
-- Saisie mensuelle (AVANCE / MED), clôture et déverrouillage des mois
+- **Saisie indépendante** des **Avances** d'un côté et des **Médicaments** de l'autre (saisie directe par volet ou saisie en lot dédiée, sans champs côte à côte), clôture et déverrouillage des mois
 - Bulletins de paie (2 exemplaires, export PDF via jsPDF)
 - Rapports & comparaisons, exports Excel (xlsx) et JSON
 - Conformité CGI Madagascar (IRSA) et calcul CNaPS
@@ -235,3 +236,18 @@ marge de reliure de 3 cm à gauche. Pour l'impression depuis le navigateur, gard
 le format A4 paysage et l'échelle 100 % / par défaut (sans marges supplémentaires
 ni ajustement automatique), afin de préserver cette marge. La page de couverture
 et les états de paie ne sont pas modifiés.
+
+### Gestion des congés, permissions et fiches d'absence (onglet 5)
+
+Accessible au **Comptable** (et à l'Administrateur), l'onglet **5. Congés & Permissions**
+reprend fidèlement :
+
+- la **`FICHE D'ABSENCE 2026.docx`** (libellés malgaches, motifs 1* à 5* et droits du
+  *Fitsipika Anatiny* : permissions de 10 j/an, congés de 30 j/an plafonnés à 90 j,
+  examens médicaux sur justificatif médical, soldes *sisa ambiny* / *Titre-Année* /
+  *sisa tavela*, et circuit de visas *Ny mpangataka → Chef de Service → Médecin Chef → Gestionnaire*) ;
+- le **`CONTRÔLE DES CONGÉS ET PERMISSIONS`** (`CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb`) :
+  consommation chronologique par **Titre / Année**, état multi-années consultable à l'écran,
+  imprimable en A4 paysage, téléchargeable en **PDF** et exportable en **Excel (`.xlsx`)**,
+  ainsi que l'import direct d'un contrôle **`.xlsb` / `.xlsx`**.
+

@@ -12,7 +12,15 @@ try {
     esbuild.buildSync({ entryPoints: [entry], bundle: true, platform: 'node', format: 'cjs', outfile, logLevel: 'silent' });
     return require(outfile);
   }
-  const { construireBulletin, montantEnLettres } = bundle('src/bulletin/model.ts', 'model');
+  const {
+    construireBulletin,
+    montantEnLettres,
+    montantEnLettresBulletin,
+    formatMontantBulletin,
+    formatEmbaucheBulletin,
+    formatCnapsBulletin,
+    formatCongesRestantsBulletin,
+  } = bundle('src/bulletin/model.ts', 'model');
   const seed = require('../src/data/salfa_data.json');
   const p = seed.paies.find(p => p.annee === 2026 && p.mois === 'OCTOBRE' && p.numero_matricule === 47);
   const b = construireBulletin(p);
@@ -26,12 +34,26 @@ try {
   assert.equal(montantEnLettres(b.net), 'un million huit cent trente-huit mille huit cent quarante-neuf ariary et quatre-vingt-six centimes');
   assert.equal(montantEnLettres(0), 'zéro ariary');
   assert.equal(montantEnLettres(81.01), 'quatre-vingt-un ariary et un centime');
+  assert.equal(
+    montantEnLettresBulletin(400035.84),
+    'Quatre Cents Mille Trente-Cinq Ariary Quatre-Vingt-Quatre'
+  );
+  assert.equal(
+    montantEnLettresBulletin(1838849.86),
+    'Un Million Huit Cent Trente-Huit Mille Huit Cent Quarante-Neuf Ariary Quatre-Vingt-Six'
+  );
+  assert.equal(formatMontantBulletin(0), '-');
+  assert.equal(formatEmbaucheBulletin('1992-01-01'), 'janv.-92');
+  assert.equal(formatCnapsBulletin('863892'), '863 892');
+  assert.equal(formatCongesRestantsBulletin(85), '85');
+  assert.equal(formatCongesRestantsBulletin(undefined), '........');
   const storage = new Map();
   global.localStorage = { getItem: k => storage.get(k) || null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) };
   const api = bundle('src/api-local.ts', 'api');
   (async () => {
     const avant = await api.fetchPaiesMois(2026, 'OCTOBRE');
     assert.equal(avant.employes.length, 48);
+    assert.equal(avant.employes.find(p => p.numero_matricule === 47).conge_restant, 76);
     assert.equal((await api.fetchPaiesMois(2027, 'OCTOBRE')).employes.length, 0);
     const emp = (await api.fetchEmployes(true)).find(e => e.numero_matricule === 47);
     await api.initPaieEmploye(emp.id, 2027, 'OCTOBRE');
