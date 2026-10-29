@@ -4,6 +4,9 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 
+require_once __DIR__ . '/schema.php';
+require_once __DIR__ . '/validation.php';
+
 function answer(int $status, array $value): void {
     http_response_code($status);
     echo json_encode($value, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
@@ -83,7 +86,6 @@ function openPdoWithAutoCreateDb(array $cfg): PDO {
         return new PDO("mysql:host=$host;port=$port;dbname=$dbName;charset=utf8mb4", $user, $pass, $opts);
     } catch (PDOException $e) {
         $msg = $e->getMessage();
-        // Code 1049 = Unknown database : créer automatiquement la base puis se reconnecter
         if (strpos($msg, '1049') !== false || stripos($msg, 'Unknown database') !== false) {
             $serverPdo = new PDO("mysql:host=$host;port=$port;charset=utf8mb4", $user, $pass, $opts);
             $serverPdo->exec("CREATE DATABASE IF NOT EXISTS `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
@@ -91,30 +93,6 @@ function openPdoWithAutoCreateDb(array $cfg): PDO {
             return new PDO("mysql:host=$host;port=$port;dbname=$dbName;charset=utf8mb4", $user, $pass, $opts);
         }
         throw $e;
-    }
-}
-
-/** Crée les tables si absentes et initialise les comptes par défaut uniquement si aucun utilisateur n'existe encore. */
-function ensureSalfaInitialized(PDO $db): void {
-    $db->exec("CREATE TABLE IF NOT EXISTS salfa_users (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, username VARCHAR(80) NOT NULL UNIQUE, nom_complet VARCHAR(160) NOT NULL, role VARCHAR(32) NOT NULL, actif TINYINT NOT NULL DEFAULT 1, password_hash VARCHAR(255) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    $db->exec("CREATE TABLE IF NOT EXISTS salfa_state (id TINYINT NOT NULL PRIMARY KEY, revision BIGINT NOT NULL, store_json LONGTEXT NOT NULL, config_json LONGTEXT NULL, header_json LONGTEXT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    $empty = [
-        'meta' => ['source_version' => 'classeur-2026-10', 'conges_version' => 'controle-2026-10', 'conges_loi_3ans' => 3],
-        'bareme_anciennete' => new stdClass(),
-        'employes' => [],
-        'paies' => [],
-        'comparaison_net' => [],
-        'conges' => [],
-        'utilisateurs' => [],
-    ];
-    $qState = $db->prepare('INSERT IGNORE INTO salfa_state (id, revision, store_json) VALUES (1, 0, ?)');
-    $qState->execute([json_encode($empty, JSON_UNESCAPED_UNICODE)]);
-
-    $nbUsers = (int)$db->query('SELECT COUNT(*) FROM salfa_users')->fetchColumn();
-    if ($nbUsers === 0) {
-        $ins = $db->prepare('INSERT IGNORE INTO salfa_users (username, nom_complet, role, actif, password_hash) VALUES (?, ?, ?, 1, ?)');
-        $ins->execute(['admin', 'Administrateur Principal SALFA', 'Administrateur', password_hash('admin123', PASSWORD_DEFAULT)]);
-        $ins->execute(['comptable', 'Comptable Clinique SALFA', 'Comptable', password_hash('comptable123', PASSWORD_DEFAULT)]);
     }
 }
 
@@ -191,10 +169,9 @@ if ($action === 'setup_db' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $testDb = openPdoWithAutoCreateDb($newCfg);
         ensureSalfaInitialized($testDb);
         if (!writeConfigFile($paths['target'], $newCfg)) {
-            // Repli dans le dossier parent de l'application si le dossier racine WAMP est en lecture seule
             writeConfigFile(dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'salfa-config.php', $newCfg);
         }
-        answer(200, ['success' => true, 'message' => 'Serveur WAMP et base MySQL configurés avec succès.']);
+        answer(200, ['success' => true, 'message' => 'Serveur WAMP et tables relationnelles MySQL configurés avec succès.']);
     } catch (Throwable $e) {
         error_log('SALFA setup_db: ' . $e->getMessage());
         answer(503, [
@@ -249,7 +226,7 @@ try {
     ensureSalfaInitialized($db);
 } catch (Throwable $e) {
     error_log('SALFA init error: ' . $e->getMessage());
-    answer(503, ['error' => 'Initialisation des tables MySQL impossible. Vérifiez les droits de l’utilisateur MySQL.']);
+    answer(503, ['error' => 'Initialisation des tables relationnelles MySQL impossible. Vérifiez les droits MySQL.']);
 }
 
 if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -285,10 +262,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !hash_equals($_SESSION['csrf'] ?? '
 }
 
 if ($action === 'snapshot' && $_SERVER['REQUEST_METHOD'] === 'GET') {
-    $q = $db->query('SELECT revision, store_json, config_json, header_json FROM salfa_state WHERE id = 1');
-    $row = $q->fetch(PDO::FETCH_ASSOC);
-    if (!$row) answer(503, ['error' => 'Base non initialisée.']);
-    $store = json_decode($row['store_json'], true);
+    $snap = loadRelationalSnapshot($db);
+    $store = $snap['store'];
     if (($_SESSION['user']['role'] ?? '') !== 'Administrateur' && is_array($store)) {
         // Le Comptable n'a accès qu'aux Permissions & Congés : masquer les paies et salaires
         $store['paies'] = [];
@@ -299,29 +274,23 @@ if ($action === 'snapshot' && $_SERVER['REQUEST_METHOD'] === 'GET') {
                 $emp['base_aj'] = 0;
                 $emp['logement_transport'] = 0;
                 $emp['rendement'] = 0;
-                $emp['resp_repres'] = 0;
                 $emp['responsabilite_representation'] = 0;
                 $emp['rib'] = '';
                 $emp['mode_paiement'] = '';
             }
             unset($emp);
         }
+        $snap['store'] = $store;
     }
-    answer(200, [
-        'revision' => (int)$row['revision'],
-        'store' => $store,
-        'config' => $row['config_json'] ? json_decode($row['config_json'], true) : null,
-        'header' => $row['header_json'] ? json_decode($row['header_json'], true) : null,
-    ]);
+    answer(200, $snap);
 }
 
-require_once __DIR__ . '/validation.php';
 if (($action === 'save' || $action === 'settings') && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $revision = $input['revision'] ?? null;
     if (!is_int($revision) || $revision < 0) answer(400, ['error' => 'Révision invalide.']);
     try {
         $db->beginTransaction();
-        $row = $db->query('SELECT revision, store_json FROM salfa_state WHERE id=1 FOR UPDATE')->fetch(PDO::FETCH_ASSOC);
+        $row = $db->query('SELECT revision FROM salfa_revision WHERE id = 1 FOR UPDATE')->fetch(PDO::FETCH_ASSOC);
         if (!$row || (int)$row['revision'] !== $revision) {
             $db->rollBack();
             answer(409, ['error' => 'Les données ont changé sur un autre poste. Rechargez la période.']);
@@ -334,27 +303,44 @@ if (($action === 'save' || $action === 'settings') && $_SERVER['REQUEST_METHOD']
             $allowed = array_merge($adminActions, $congeActions);
             if (!in_array($operation, $allowed, true)) { $db->rollBack(); answer(403, ['error' => 'Action non autorisée.']); }
             if ($role !== 'Administrateur' && !in_array($operation, $congeActions, true)) { $db->rollBack(); answer(403, ['error' => 'Action réservée à l’administrateur.']); }
+
             $new = $input['store'] ?? null;
-            $old = json_decode($row['store_json'], true);
+            $old = loadRelationalStore($db);
             if (!is_array($new) || !is_array($old)) { $db->rollBack(); answer(400, ['error' => 'Données invalides.']); }
-            // Un non-administrateur (Comptable) ne peut modifier que le registre des congés & permissions
-            $storeToSave = ($role === 'Administrateur') ? $new : array_merge($old, ['conges' => is_array($new['conges'] ?? null) ? $new['conges'] : []]);
+
+            // Un non-administrateur (Comptable) ne peut modifier que la table relationnelle salfa_conges
+            $storeToSave = ($role === 'Administrateur')
+                ? $new
+                : array_merge($old, ['conges' => is_array($new['conges'] ?? null) ? $new['conges'] : []]);
+
             if (!validStore($storeToSave) || !lockedSafe($old, $storeToSave, $operation, $role)) {
                 $db->rollBack();
                 answer(400, ['error' => 'Données invalides ou période clôturée.']);
             }
-            $storeToSave['utilisateurs'] = []; // Les comptes ne font jamais partie des données envoyées par les clients.
-            $value = json_encode($storeToSave, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-            $q = $db->prepare('UPDATE salfa_state SET store_json=?, revision=revision+1 WHERE id=1 AND revision=?');
-            $q->execute([$value, $revision]);
+
+            if ($role !== 'Administrateur' || in_array($operation, $congeActions, true)) {
+                syncCongesTable($db, is_array($storeToSave['conges'] ?? null) ? $storeToSave['conges'] : []);
+                $stRev = $db->prepare('UPDATE salfa_revision SET revision = ?, date_modification = ? WHERE id = 1');
+                $stRev->execute([$revision + 1, date('Y-m-d H:i:s')]);
+            } else {
+                syncEmployesTable($db, $storeToSave['employes']);
+                syncPaiesTable($db, $storeToSave['paies']);
+                syncCongesTable($db, is_array($storeToSave['conges'] ?? null) ? $storeToSave['conges'] : []);
+                syncComparaisonNetTable($db, $storeToSave['comparaison_net']);
+                updateRevisionMeta($db, is_array($storeToSave['meta'] ?? null) ? $storeToSave['meta'] : [], $revision + 1);
+            }
         } else {
-            if ($_SESSION['user']['role'] !== 'Administrateur') { $db->rollBack(); answer(403, ['error' => 'Réservé à l’administrateur.']); }
+            if (($_SESSION['user']['role'] ?? '') !== 'Administrateur') { $db->rollBack(); answer(403, ['error' => 'Réservé à l’administrateur.']); }
             $kind = $input['kind'] ?? '';
             $value = $input['value'] ?? null;
             if (!in_array($kind, ['header', 'config'], true) || !is_array($value)) { $db->rollBack(); answer(400, ['error' => 'Paramètres invalides.']); }
-            $column = $kind === 'header' ? 'header_json' : 'config_json';
-            $q = $db->prepare("UPDATE salfa_state SET $column=?, revision=revision+1 WHERE id=1 AND revision=?");
-            $q->execute([json_encode($value, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), $revision]);
+            if ($kind === 'config') {
+                writeConfigTables($db, $value);
+            } else {
+                writeHeaderTable($db, $value);
+            }
+            $stRev = $db->prepare('UPDATE salfa_revision SET revision = ?, date_modification = ? WHERE id = 1');
+            $stRev->execute([$revision + 1, date('Y-m-d H:i:s')]);
         }
         $db->commit();
         answer(200, ['revision' => $revision + 1]);

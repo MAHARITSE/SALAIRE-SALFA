@@ -1,19 +1,18 @@
 #!/usr/bin/env node
 /**
- * Génère le fichier SQL d'importation MySQL/MariaDB (WAMP) pour les congés & permissions
+ * Génère le fichier SQL relationnel MySQL/MariaDB (WAMP) pour les congés & permissions
  * à partir du classeur Excel « CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb ».
  *
  * Produit :
  *   1. wamp/sql/salfa_conges_excel.sql
- *      -> Script SQL autonome compatible MySQL 5.7+ / 8.x et MariaDB 10.2+ / 11.x (WampServer).
- *      -> Importe toutes les fiches d'absence (congés annuels & permissions) dans salfa_paie.salfa_state
- *         SANS écraser les bulletins de paie (paies), les comparaisons, les paramètres (config_json,
- *         header_json) ni les comptes utilisateurs (salfa_users).
- *      -> Résout dynamiquement chaque salarié par numero_matricule (et ajoute automatiquement les
- *         fiches salariés d'archive 2022–2025 éventuellement absentes de store_json).
+ *      -> Script SQL 100 % relationnel (colonnes et lignes MySQL — AUCUN JSON).
+ *      -> Supprime toute ancienne table JSON `salfa_state` si présente.
+ *      -> Crée les tables relationnelles et ajoute les utilisateurs par défaut
+ *         (`admin` / `admin123` et `comptable` / `comptable123`) dans `salfa_users`.
+ *      -> Ajoute les salariés manquants dans `salfa_employes` sans écraser les salaires/paies,
+ *         puis insère les 610 fiches d'absence dans `salfa_conges` (1 ligne = 1 fiche, 1 colonne = 1 champ).
  *   2. src/data/salfa_conges_historique.json
- *      -> Fiches d'absence des anciens salariés 2022–2025 (utilisées aussi par generer_sql_wamp.py).
- *   3. Mise à jour synchronisée de src/data/salfa_data.json (congés des salariés 2026).
+ *   3. Mise à jour synchronisée de src/data/salfa_data.json
  *
  * Usage :
  *   node scripts/generer_sql_conges_wamp.cjs [chemin_classeur.xlsb]
@@ -33,10 +32,10 @@ const OUT_HIST_CONGES_PATH = path.join(ROOT, 'src', 'data', 'salfa_conges_histor
 const OUT_SQL_DIR = path.join(ROOT, 'wamp', 'sql');
 const OUT_SQL_PATH = path.join(OUT_SQL_DIR, 'salfa_conges_excel.sql');
 
-// Taille maximale d'un morceau CONCAT SQL (~80 Ko) pour éviter toute erreur max_allowed_packet dans phpMyAdmin.
-const TAILLE_MORCEAU = 80_000;
+// Hashs bcrypt compatibles PHP password_verify()
+const HASH_ADMIN = '$2y$10$YX/zKbv4VMuSaS3ddJB5MuBWGfTgOr6aIf7L4PEsva5y2hyHw0j/G'; // admin123
+const HASH_COMPTABLE = '$2y$10$xFu0Kw7V7YsnIfrwPjOr1.C6.CfWtRq4Wyo.w/PX8cG36QN2.ezou'; // comptable123
 
-/** Charge les modules TypeScript de calcul/import des congés via esbuild en mémoire. */
 function chargerMoteurConges() {
   const compile = (entry) => {
     const res = esbuild.buildSync({
@@ -59,36 +58,34 @@ function chargerMoteurConges() {
   };
 }
 
-/** Échappe une chaîne pour un littéral SQL '...' compatible tous modes SQL ('' + \\ si nécessaire). */
-function sqlEscape(texte) {
-  return texte
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "''")
-    .replace(/\0/g, '\\0')
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r')
-    .replace(/\x1a/g, '\\Z');
+function sqlStr(val, maxLen = 0) {
+  let s = String(val ?? '');
+  if (maxLen > 0 && s.length > maxLen) s = s.slice(0, maxLen);
+  return (
+    "'" +
+    s
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "''")
+      .replace(/\0/g, '\\0')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\x1a/g, '\\Z') +
+    "'"
+  );
 }
 
-/** Génère les instructions SET @var = '...' puis CONCAT par morceaux de TAILLE_MORCEAU octets. */
-function emettreVariableMorcelee(nomVar, contenuBrut) {
-  const lignes = [];
-  const morceaux = [];
-  for (let i = 0; i < contenuBrut.length; i += TAILLE_MORCEAU) {
-    morceaux.push(contenuBrut.slice(i, i + TAILLE_MORCEAU));
-  }
-  if (morceaux.length === 0) {
-    lignes.push(`SET ${nomVar} = '';`);
-    return lignes;
-  }
-  lignes.push(`SET ${nomVar} = '${sqlEscape(morceaux[0])}';`);
-  for (let idx = 1; idx < morceaux.length; idx++) {
-    lignes.push(`SET ${nomVar} = CONCAT(${nomVar}, '${sqlEscape(morceaux[idx])}');`);
-  }
-  return lignes;
+function sqlNum(val) {
+  if (val === null || val === undefined || val === '') return 'NULL';
+  const n = Number(val);
+  if (!Number.isFinite(n)) return '0';
+  return String(Math.round(n * 10000) / 10000);
 }
 
-/** Construit la liste complète des 70 salariés SALFA (50 de 2026 + 20 archivés 2022–2025). */
+function sqlInt(val) {
+  const n = Math.trunc(Number(val) || 0);
+  return String(n);
+}
+
 function construireEmployesComplets(data2026, dataHist) {
   const tous = data2026.employes.map((e) => ({ ...e }));
   const parMat = new Map(tous.map((e) => [Number(e.numero_matricule), e]));
@@ -111,7 +108,6 @@ function construireEmployesComplets(data2026, dataHist) {
   return { tous, parMat };
 }
 
-/** Convertit les lignes extraites du classeur Excel en fiches normalisées de congé/permission. */
 function convertirLignesEnFiches(lignesSource, parMat, congesMod, existantsInitiaux = [], nextIdInitial = 0, horodatage = '2026-10-29 08:25:54') {
   const { normaliserConge, LIBELLES_CATEGORIE } = congesMod;
   const cfgImport = {
@@ -139,7 +135,6 @@ function convertirLignesEnFiches(lignesSource, parMat, congesMod, existantsIniti
     if (clesVues.has(cle)) continue;
     clesVues.add(cle);
 
-    // Règle SALFA / Code du Travail malgache : fenêtre glissante de 3 ans [annee-2 .. annee].
     const anneeMinImport = annee - (cfgImport.nbAnneesCumul - 1);
     const titreImport = l.titre_annee ? Math.max(anneeMinImport, Number(l.titre_annee)) : null;
 
@@ -175,139 +170,240 @@ function convertirLignesEnFiches(lignesSource, parMat, congesMod, existantsIniti
   return fiches;
 }
 
-/**
- * Simule fidèlement l'exécution du script SQL sur différents états de base MySQL
- * afin de garantir la validité JSON et la conformité avec wamp/api/validation.php (validStore).
- */
-function verifierSimulationEtats({ congesModele, parMat, tousEmployes, data2026, baremeAnciennete }) {
-  const validerStoreCommePhp = (store) => {
-    assert.equal(typeof store, 'object');
-    for (const k of ['employes', 'paies', 'comparaison_net', 'conges']) {
-      assert.ok(Array.isArray(store[k]), `${k} doit être un tableau JSON`);
-    }
-    const empIds = new Set();
-    const empMats = new Set();
-    for (const e of store.employes) {
-      assert.ok(Number.isInteger(e.id) && e.id > 0, `employe.id entier positif requis (${e.id})`);
-      assert.ok(!empIds.has(e.id), `employe.id dupliqué interdit (${e.id})`);
-      empIds.add(e.id);
-      empMats.add(Number(e.numero_matricule));
-      assert.ok(Object.keys(e).length <= 40, 'employe <= 40 clés');
-    }
-    const congeIds = new Set();
-    for (const c of store.conges) {
-      assert.ok(Number.isInteger(c.id) && c.id > 0, `conge.id entier positif requis (${c.id})`);
-      assert.ok(!congeIds.has(c.id), `conge.id dupliqué interdit (${c.id})`);
-      congeIds.add(c.id);
-      assert.ok(Number.isInteger(c.employe_id) && empIds.has(c.employe_id), `conge.employe_id (${c.employe_id}, mat=${c.numero_matricule}) doit exister dans store.employes`);
-      assert.ok(Object.keys(c).length <= 40, 'conge <= 40 clés');
-    }
-    return { nbEmp: empIds.size, nbConges: congeIds.size, nbMats: empMats.size };
-  };
-
-  const executerLogiqueSql = (storeInitial) => {
-    let store = JSON.parse(JSON.stringify(storeInitial));
-    if (!Array.isArray(store.employes) || store.employes.length === 0) {
-      store.employes = JSON.parse(JSON.stringify(tousEmployes));
-      store.bareme_anciennete = JSON.parse(JSON.stringify(baremeAnciennete));
-    }
-
-    let matsCsv = store.employes.map((e) => String(e.numero_matricule)).join(',');
-    let idsList = store.employes.map((e) => Number(e.id));
-    let idsCsv = idsList.map(String).join(',');
-
-    let nextEmpId = Math.max(idsList.length ? idsList[idsList.length - 1] : 0, idsList.length);
-    const matsRequis = Array.from(new Set(congesModele.map((c) => Number(c.numero_matricule)))).sort((a, b) => a - b);
-
-    for (const mat of matsRequis) {
-      const pos = matsCsv ? matsCsv.split(',').indexOf(String(mat)) + 1 : 0;
-      if (pos > 0) {
-        nextEmpId = Math.max(nextEmpId, idsList[pos - 1]);
-      }
-    }
-
-    let extraEmps = '';
-    for (const mat of matsRequis) {
-      const pos = matsCsv ? matsCsv.split(',').indexOf(String(mat)) + 1 : 0;
-      if (pos === 0) {
-        nextEmpId += 1;
-        if (idsCsv.split(',').includes(String(nextEmpId))) nextEmpId += 1000;
-        const modele = JSON.stringify({ ...parMat.get(mat), id: '__EMP_ID__' }).replace('"__EMP_ID__"', String(nextEmpId));
-        extraEmps += `,${modele}`;
-      }
-    }
-
-    if (extraEmps.length > 0) {
-      const empsActuels = JSON.stringify(store.employes);
-      const empsFusion = `${empsActuels.slice(0, -1)}${extraEmps}]`;
-      store.employes = JSON.parse(empsFusion);
-      matsCsv = store.employes.map((e) => String(e.numero_matricule)).join(',');
-      idsList = store.employes.map((e) => Number(e.id));
-    }
-
-    let congesJson = JSON.stringify(congesModele);
-    for (const mat of matsRequis) {
-      const pos = matsCsv.split(',').indexOf(String(mat)) + 1;
-      assert.ok(pos > 0, `Matricule ${mat} introuvable après fusion`);
-      const empId = idsList[pos - 1];
-      congesJson = congesJson.split(`"__MAT_${mat}__"`).join(String(empId));
-    }
-    assert.ok(!congesJson.includes('__MAT_'), 'Aucun jeton __MAT_ ne doit subsister');
-    store.conges = JSON.parse(congesJson);
-    store.meta = { ...(store.meta || {}), conges_version: 'controle-2026-10', conges_loi_3ans: 3 };
-    return store;
-  };
-
-  // Cas 1 : Base vide issue de setup.php
-  const s1 = executerLogiqueSql({
-    meta: { source_version: 'classeur-2026-10' },
-    bareme_anciennete: {},
-    employes: [],
-    paies: [],
-    comparaison_net: [],
-    conges: [],
-    utilisateurs: [],
-  });
-  const r1 = validerStoreCommePhp(s1);
-  assert.equal(r1.nbEmp, tousEmployes.length);
-  assert.equal(r1.nbConges, congesModele.length);
-
-  // Cas 2 : Base complète 2022–2026 avec paies existantes
-  const s2 = executerLogiqueSql({
-    meta: { source_version: 'classeur-2026-10' },
-    bareme_anciennete: baremeAnciennete,
-    employes: tousEmployes,
-    paies: data2026.paies.slice(0, 25),
-    comparaison_net: data2026.comparaison_net,
-    conges: [],
-    utilisateurs: [],
-  });
-  const r2 = validerStoreCommePhp(s2);
-  assert.equal(r2.nbEmp, tousEmployes.length);
-  assert.equal(s2.paies.length, 25, 'les bulletins de paie existants sont intégralement préservés');
-  assert.equal(r2.nbConges, congesModele.length);
-
-  // Cas 3 : Base initialisée par import navigateur 2026 uniquement (48 actifs aux IDs décalés + désordonnés)
-  const actifsDecales = data2026.employes
-    .filter((e) => Number(e.actif) === 1)
-    .reverse()
-    .map((e, idx) => ({ ...e, id: idx + 10 }));
-  const s3 = executerLogiqueSql({
-    meta: { source_version: 'classeur-2026-10' },
-    bareme_anciennete: baremeAnciennete,
-    employes: actifsDecales,
-    paies: [{ id: 1, employe_id: actifsDecales[0].id, mois: 'OCTOBRE', annee: 2026 }],
-    comparaison_net: [],
-    conges: [],
-    utilisateurs: [],
-  });
-  const r3 = validerStoreCommePhp(s3);
-  assert.equal(r3.nbConges, congesModele.length);
-  for (const c of s3.conges) {
-    const empTrouve = s3.employes.find((e) => e.id === c.employe_id);
-    assert.ok(empTrouve, `employe_id=${c.employe_id} résolu`);
-    assert.equal(Number(empTrouve.numero_matricule), Number(c.numero_matricule), 'correspondance matricule <-> employe_id exacte');
-  }
+function ddlTablesRelationnelles() {
+  return [
+    '-- Suppression de l\'ancienne table JSON (plus aucun stockage JSON dans MySQL)',
+    'DROP TABLE IF EXISTS `salfa_state`;',
+    '',
+    'CREATE TABLE IF NOT EXISTS `salfa_users` (',
+    '  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,',
+    '  `username` VARCHAR(80) NOT NULL UNIQUE,',
+    '  `nom_complet` VARCHAR(160) NOT NULL,',
+    '  `role` VARCHAR(32) NOT NULL,',
+    '  `actif` TINYINT NOT NULL DEFAULT 1,',
+    '  `password_hash` VARCHAR(255) NOT NULL',
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+    '',
+    'CREATE TABLE IF NOT EXISTS `salfa_revision` (',
+    '  `id` TINYINT NOT NULL PRIMARY KEY,',
+    '  `revision` BIGINT NOT NULL DEFAULT 1,',
+    "  `source_file` VARCHAR(160) NOT NULL DEFAULT 'SALAIRE SALFA 2026.xlsm',",
+    "  `entreprise` VARCHAR(160) NOT NULL DEFAULT 'SALFA TANAMBAO',",
+    "  `titre` VARCHAR(255) NOT NULL DEFAULT 'FILAZANA NY KARAMA SY NY TOA AZY ISAM-BATAN''OLONA (Bulletin de paie individuel)',",
+    '  `annee` INT NOT NULL DEFAULT 2026,',
+    "  `source_version` VARCHAR(60) NOT NULL DEFAULT 'classeur-2026-10',",
+    "  `source_historique` VARCHAR(160) NOT NULL DEFAULT 'SALAIRE SALFA 2022-2025',",
+    "  `conges_version` VARCHAR(60) NOT NULL DEFAULT 'controle-2026-10',",
+    '  `conges_loi_3ans` INT NOT NULL DEFAULT 3,',
+    "  `date_modification` VARCHAR(32) NOT NULL DEFAULT ''",
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+    '',
+    'CREATE TABLE IF NOT EXISTS `salfa_employes` (',
+    '  `id` INT NOT NULL PRIMARY KEY,',
+    '  `numero_matricule` INT NOT NULL UNIQUE,',
+    '  `nom_prenoms` VARCHAR(160) NOT NULL,',
+    "  `numero_cnaps` VARCHAR(60) NOT NULL DEFAULT '',",
+    "  `categorie` VARCHAR(32) NOT NULL DEFAULT '',",
+    "  `jobs` VARCHAR(160) NOT NULL DEFAULT '',",
+    "  `date_embauche` VARCHAR(20) NOT NULL DEFAULT '',",
+    '  `nombre_annees` INT NOT NULL DEFAULT 0,',
+    '  `enfant_a_charge` INT NOT NULL DEFAULT 0,',
+    '  `base_aj` DOUBLE NOT NULL DEFAULT 0,',
+    '  `logement_transport` DOUBLE NOT NULL DEFAULT 0,',
+    '  `rendement` DOUBLE NOT NULL DEFAULT 0,',
+    '  `responsabilite_representation` DOUBLE NOT NULL DEFAULT 0,',
+    "  `rib` VARCHAR(80) NOT NULL DEFAULT '',",
+    "  `mode_paiement` VARCHAR(32) NOT NULL DEFAULT 'ESPECES',",
+    '  `actif` TINYINT NOT NULL DEFAULT 1,',
+    "  `date_inactif` VARCHAR(20) NOT NULL DEFAULT '',",
+    '  `conge_maternite` TINYINT NOT NULL DEFAULT 0,',
+    "  `date_debut_maternite` VARCHAR(20) NOT NULL DEFAULT '',",
+    "  `date_creation` VARCHAR(32) NOT NULL DEFAULT ''",
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+    '',
+    'CREATE TABLE IF NOT EXISTS `salfa_paies` (',
+    '  `id` INT NOT NULL PRIMARY KEY,',
+    '  `employe_id` INT NOT NULL,',
+    '  `numero_matricule` INT NOT NULL,',
+    '  `annee` INT NOT NULL,',
+    '  `mois` VARCHAR(20) NOT NULL,',
+    "  `nom_prenoms` VARCHAR(160) NOT NULL DEFAULT '',",
+    "  `numero_cnaps` VARCHAR(60) NOT NULL DEFAULT '',",
+    "  `categorie` VARCHAR(32) NOT NULL DEFAULT '',",
+    "  `jobs` VARCHAR(160) NOT NULL DEFAULT '',",
+    "  `date_embauche` VARCHAR(20) NOT NULL DEFAULT '',",
+    '  `nombre_annees` INT NOT NULL DEFAULT 0,',
+    '  `enfant_a_charge` INT NOT NULL DEFAULT 0,',
+    '  `base_aj` DOUBLE NOT NULL DEFAULT 0,',
+    '  `logt_trsp` DOUBLE NOT NULL DEFAULT 0,',
+    '  `rendement` DOUBLE NOT NULL DEFAULT 0,',
+    '  `resp_repres` DOUBLE NOT NULL DEFAULT 0,',
+    '  `salaire_brut` DOUBLE NOT NULL DEFAULT 0,',
+    '  `cnaps` DOUBLE NOT NULL DEFAULT 0,',
+    '  `patronal` DOUBLE NOT NULL DEFAULT 0,',
+    '  `salaire_imposable` DOUBLE NOT NULL DEFAULT 0,',
+    '  `irsa` DOUBLE NOT NULL DEFAULT 0,',
+    '  `salaire_net` DOUBLE NOT NULL DEFAULT 0,',
+    '  `augmentation_divers` DOUBLE NOT NULL DEFAULT 0,',
+    '  `prime_de_garde` DOUBLE NOT NULL DEFAULT 0,',
+    '  `anciennete2` DOUBLE NOT NULL DEFAULT 0,',
+    '  `risque` DOUBLE NOT NULL DEFAULT 0,',
+    '  `repr_rec` DOUBLE NOT NULL DEFAULT 0,',
+    '  `accessoir` DOUBLE NOT NULL DEFAULT 0,',
+    '  `brut` DOUBLE NOT NULL DEFAULT 0,',
+    '  `avance` DOUBLE NOT NULL DEFAULT 0,',
+    '  `med` DOUBLE NOT NULL DEFAULT 0,',
+    '  `net` DOUBLE NOT NULL DEFAULT 0,',
+    '  `virement` DOUBLE NULL DEFAULT NULL,',
+    '  `especes` DOUBLE NULL DEFAULT NULL,',
+    '  `rap` TINYINT NOT NULL DEFAULT 1,',
+    "  `rib` VARCHAR(80) NOT NULL DEFAULT '',",
+    '  `verrouille` TINYINT NOT NULL DEFAULT 0,',
+    '  `conge_maternite` TINYINT NOT NULL DEFAULT 0,',
+    "  `date_debut_maternite` VARCHAR(20) NOT NULL DEFAULT '',",
+    "  `date_modification` VARCHAR(32) NOT NULL DEFAULT '',",
+    '  UNIQUE KEY `uq_paie_periode` (`employe_id`, `annee`, `mois`),',
+    '  KEY `idx_paie_annee_mois` (`annee`, `mois`)',
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+    '',
+    'CREATE TABLE IF NOT EXISTS `salfa_conges` (',
+    '  `id` INT NOT NULL PRIMARY KEY,',
+    '  `employe_id` INT NOT NULL,',
+    '  `numero_matricule` INT NOT NULL DEFAULT 0,',
+    "  `nom_prenoms` VARCHAR(160) NOT NULL DEFAULT '',",
+    "  `fonction` VARCHAR(160) NOT NULL DEFAULT '',",
+    "  `service` VARCHAR(120) NOT NULL DEFAULT '',",
+    "  `contact` VARCHAR(120) NOT NULL DEFAULT '',",
+    "  `categorie` VARCHAR(32) NOT NULL DEFAULT 'CONGE',",
+    "  `motif_code` VARCHAR(40) NOT NULL DEFAULT '',",
+    "  `motif_libelle` VARCHAR(255) NOT NULL DEFAULT '',",
+    "  `imputation` VARCHAR(32) NOT NULL DEFAULT 'CONGE',",
+    '  `annee` INT NOT NULL,',
+    "  `date_demande` VARCHAR(20) NOT NULL DEFAULT '',",
+    "  `date_debut` VARCHAR(20) NOT NULL DEFAULT '',",
+    "  `heure_debut` VARCHAR(16) NOT NULL DEFAULT '',",
+    "  `date_fin` VARCHAR(20) NOT NULL DEFAULT '',",
+    "  `date_retour` VARCHAR(20) NOT NULL DEFAULT '',",
+    "  `heure_fin` VARCHAR(16) NOT NULL DEFAULT '',",
+    '  `jours_demandes` DOUBLE NOT NULL DEFAULT 0,',
+    '  `jours_valides` DOUBLE NULL DEFAULT NULL,',
+    "  `remplacant` VARCHAR(160) NOT NULL DEFAULT '',",
+    "  `titre_periode` VARCHAR(80) NOT NULL DEFAULT '',",
+    "  `justificatif` VARCHAR(255) NOT NULL DEFAULT '',",
+    '  `observations` TEXT NOT NULL,',
+    "  `statut` VARCHAR(32) NOT NULL DEFAULT 'VALIDE',",
+    "  `visa_chef_par` VARCHAR(120) NOT NULL DEFAULT '',",
+    "  `visa_chef_le` VARCHAR(32) NOT NULL DEFAULT '',",
+    "  `visa_medecin_par` VARCHAR(120) NOT NULL DEFAULT '',",
+    "  `visa_medecin_le` VARCHAR(32) NOT NULL DEFAULT '',",
+    "  `visa_gestionnaire_par` VARCHAR(120) NOT NULL DEFAULT '',",
+    "  `visa_gestionnaire_le` VARCHAR(32) NOT NULL DEFAULT '',",
+    "  `motif_refus` VARCHAR(255) NOT NULL DEFAULT '',",
+    "  `ajustement_type` VARCHAR(32) NOT NULL DEFAULT '',",
+    "  `saisie_par` VARCHAR(80) NOT NULL DEFAULT '',",
+    "  `date_saisie` VARCHAR(32) NOT NULL DEFAULT '',",
+    "  `date_modification` VARCHAR(32) NOT NULL DEFAULT '',",
+    '  KEY `idx_conge_employe_annee` (`employe_id`, `annee`)',
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+    '',
+    'CREATE TABLE IF NOT EXISTS `salfa_comparaison_net` (',
+    '  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,',
+    '  `numero_matricule` INT NOT NULL,',
+    "  `nom_prenoms` VARCHAR(160) NOT NULL DEFAULT '',",
+    "  `categorie` VARCHAR(32) NOT NULL DEFAULT '',",
+    "  `jobs` VARCHAR(160) NOT NULL DEFAULT '',",
+    '  `net_actuel` DOUBLE NOT NULL DEFAULT 0,',
+    '  `net_avant` DOUBLE NOT NULL DEFAULT 0,',
+    '  `ecart` DOUBLE NOT NULL DEFAULT 0,',
+    '  KEY `idx_comp_matricule` (`numero_matricule`)',
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+    '',
+    'CREATE TABLE IF NOT EXISTS `salfa_config` (',
+    '  `id` TINYINT NOT NULL PRIMARY KEY,',
+    '  `configuree` TINYINT NOT NULL DEFAULT 0,',
+    '  `cnaps_salariale` DOUBLE NOT NULL DEFAULT 1.0,',
+    '  `cnaps_patronale` DOUBLE NOT NULL DEFAULT 13.0,',
+    '  `deduction_enfant` DOUBLE NOT NULL DEFAULT 2000,',
+    '  `min_irsa` DOUBLE NOT NULL DEFAULT 3000,',
+    '  `arrondi_irsa_base` INT NOT NULL DEFAULT 100,',
+    '  `arrondi_net` INT NOT NULL DEFAULT 100,',
+    '  `plafond_especes` DOUBLE NOT NULL DEFAULT 5000,',
+    '  `taux_maternite` DOUBLE NOT NULL DEFAULT 50,',
+    '  `duree_maternite_mois` INT NOT NULL DEFAULT 3,',
+    '  `jours_conge_par_an` DOUBLE NOT NULL DEFAULT 30,',
+    '  `nb_annees_cumul` INT NOT NULL DEFAULT 3,',
+    '  `plafond_cumul_conge` DOUBLE NOT NULL DEFAULT 90,',
+    '  `jours_permission_par_an` DOUBLE NOT NULL DEFAULT 10,',
+    '  `report_autorise` TINYINT NOT NULL DEFAULT 1,',
+    '  `exclure_dimanche` TINYINT NOT NULL DEFAULT 0,',
+    '  `exclure_samedi` TINYINT NOT NULL DEFAULT 0,',
+    '  `jours_feries` TEXT NOT NULL,',
+    '  `examen_sur_permission` TINYINT NOT NULL DEFAULT 0,',
+    '  `bloquer_depassement` TINYINT NOT NULL DEFAULT 0,',
+    '  `version_calendrier` INT NOT NULL DEFAULT 2',
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+    '',
+    'CREATE TABLE IF NOT EXISTS `salfa_bareme_anciennete` (',
+    '  `ordre` INT NOT NULL PRIMARY KEY,',
+    '  `annees_min` INT NOT NULL,',
+    '  `annees_max` INT NOT NULL,',
+    '  `indice` DOUBLE NOT NULL,',
+    "  `description` VARCHAR(60) NOT NULL DEFAULT ''",
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+    '',
+    'CREATE TABLE IF NOT EXISTS `salfa_bareme_irsa` (',
+    '  `ordre` INT NOT NULL PRIMARY KEY,',
+    '  `seuil_min` DOUBLE NOT NULL,',
+    '  `seuil_max` DOUBLE NULL DEFAULT NULL,',
+    '  `taux` DOUBLE NOT NULL',
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+    '',
+    'CREATE TABLE IF NOT EXISTS `salfa_entete` (',
+    '  `id` TINYINT NOT NULL PRIMARY KEY,',
+    '  `configuree` TINYINT NOT NULL DEFAULT 0,',
+    "  `mode` VARCHAR(20) NOT NULL DEFAULT 'image',",
+    "  `ligne_1` VARCHAR(255) NOT NULL DEFAULT 'FIANGONANA LOTERANA MALAGASY',",
+    "  `ligne_2` VARCHAR(255) NOT NULL DEFAULT '(EGLISE LUTHERIENNE MALGACHE - MALAGASY LUTHERAN CHURCH)',",
+    "  `ligne_3` VARCHAR(255) NOT NULL DEFAULT 'SAMPAN''ASA LOTERANA MOMBA NY FAHASALAMANA',",
+    "  `ligne_4` VARCHAR(255) NOT NULL DEFAULT 'DEPARTEMENT DE SANTE – HEALTH DEPARTMENT',",
+    "  `ligne_5` VARCHAR(255) NOT NULL DEFAULT 'DISPENSAIRE TANAMBAO - TOBY BETELA TOLIARA BP: 99 Tél:94 416 56',",
+    "  `ligne_6` VARCHAR(255) NOT NULL DEFAULT 'NIF: 5000767080    STAT: 851 125 120 120 001 36',",
+    "  `ligne_7` VARCHAR(255) NOT NULL DEFAULT 'E-mail: salfa.tulear@moov.mg',",
+    '  `image_finale` LONGTEXT NULL,',
+    '  `image_complete` LONGTEXT NULL,',
+    '  `logo_gauche` LONGTEXT NULL,',
+    '  `logo_droite` LONGTEXT NULL',
+    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+    '',
+    '-- Utilisateurs par défaut : admin / admin123 et comptable / comptable123',
+    'INSERT IGNORE INTO `salfa_users` (`id`, `username`, `nom_complet`, `role`, `actif`, `password_hash`) VALUES',
+    `  (1, 'admin', 'Administrateur Principal SALFA', 'Administrateur', 1, '${HASH_ADMIN}'),`,
+    `  (2, 'comptable', 'Comptable Clinique SALFA', 'Comptable', 1, '${HASH_COMPTABLE}');`,
+    '',
+    "INSERT IGNORE INTO `salfa_revision` (`id`, `revision`, `conges_version`, `conges_loi_3ans`) VALUES (1, 1, 'controle-2026-10', 3);",
+    "INSERT IGNORE INTO `salfa_config` (`id`, `configuree`, `jours_feries`) VALUES (1, 0, '');",
+    'INSERT IGNORE INTO `salfa_entete` (`id`, `configuree`) VALUES (1, 0);',
+    '',
+    'INSERT IGNORE INTO `salfa_bareme_anciennete` (`ordre`, `annees_min`, `annees_max`, `indice`, `description`) VALUES',
+    "  (1, 0, 1, 1.00, '0 à 1 an'),",
+    "  (2, 2, 3, 1.09, '2'),",
+    "  (3, 4, 5, 1.18, '4'),",
+    "  (4, 6, 7, 1.27, '6'),",
+    "  (5, 8, 9, 1.36, '8'),",
+    "  (6, 10, 11, 1.45, '10'),",
+    "  (7, 12, 13, 1.53, '12'),",
+    "  (8, 14, 15, 1.60, '14'),",
+    "  (9, 16, 17, 1.65, '16'),",
+    "  (10, 18, 19, 1.68, '18'),",
+    "  (11, 20, 100, 1.70, '20 et plus');",
+    '',
+    'INSERT IGNORE INTO `salfa_bareme_irsa` (`ordre`, `seuil_min`, `seuil_max`, `taux`) VALUES',
+    '  (1, 0, 350000, 0),',
+    '  (2, 350000, 400000, 5),',
+    '  (3, 400000, 500000, 10),',
+    '  (4, 500000, 600000, 15),',
+    '  (5, 600000, NULL, 20);',
+  ];
 }
 
 function main() {
@@ -326,7 +422,6 @@ function main() {
   const bufExcel = fs.readFileSync(cheminExcel);
   const analyse = importMod.analyserControleConges(bufExcel, path.basename(cheminExcel), tousEmployes);
 
-  // Sélectionner les feuilles actives non vides (exclut les archives probables comme '2025' déjà reprise dans '2026').
   let feuillesRetenues = analyse.feuilles.filter((f) => f.reconnue && !f.archiveProbable && f.nbLignes > 0).map((f) => f.nom);
   if (feuillesRetenues.length === 0) {
     feuillesRetenues = analyse.feuilles.filter((f) => f.reconnue && f.nbLignes > 0).map((f) => f.nom);
@@ -334,11 +429,9 @@ function main() {
   const setFeuilles = new Set(feuillesRetenues);
   const lignesRetenues = analyse.lignes.filter((l) => setFeuilles.has(l.feuille));
 
-  // 1) Fiches des 50 salariés 2026 (pour salfa_data.json), numérotées 1..N1
   const lignes2026 = lignesRetenues.filter((l) => l.numero_matricule && parMat2026.has(Number(l.numero_matricule)));
   const fiches2026 = convertirLignesEnFiches(lignes2026, parMat2026, congesMod, [], 0);
 
-  // 2) Fiches complémentaires des anciens salariés 2022–2025, numérotées (N1+1)..N2
   const lignesAnciens = lignesRetenues.filter(
     (l) => l.numero_matricule && !parMat2026.has(Number(l.numero_matricule)) && parMatTous.has(Number(l.numero_matricule))
   );
@@ -352,7 +445,6 @@ function main() {
   const fichesAnciensSeuls = fichesToutes.slice(fiches2026.length);
   assert.ok(fichesToutes.length > 0, 'Aucune fiche de congé reconnue dans le classeur Excel');
 
-  // Mise à jour synchronisée de src/data/salfa_data.json et src/data/salfa_conges_historique.json
   data2026.meta = {
     ...(data2026.meta || {}),
     conges_version: 'controle-2026-10',
@@ -378,234 +470,116 @@ function main() {
     'utf8'
   );
 
-  // Modèle JSON des congés avec jeton "__MAT_<M>__" pour résolution dynamique de employe_id dans MySQL/MariaDB
-  const congesModele = fichesToutes.map((c) => ({
-    ...c,
-    employe_id: `__MAT_${Number(c.numero_matricule)}__`,
-  }));
-
-  // Vérification complète par simulation avant écriture du fichier SQL
-  verifierSimulationEtats({
-    congesModele,
-    parMat: parMatTous,
-    tousEmployes,
-    data2026,
-    baremeAnciennete: data2026.bareme_anciennete || {},
-  });
-
   const matsPresents = Array.from(new Set(fichesToutes.map((c) => Number(c.numero_matricule)))).sort((a, b) => a - b);
   const nbCongesAnnuels = fichesToutes.filter((c) => c.categorie === 'CONGE').length;
   const nbPermissions = fichesToutes.filter((c) => c.categorie === 'PERMISSION').length;
   const anneesCouvertes = Array.from(new Set(fichesToutes.map((c) => Number(c.annee)))).sort((a, b) => a - b);
 
-  const storeVideJson = JSON.stringify({
-    meta: {
-      source_version: 'classeur-2026-10',
-      conges_version: 'controle-2026-10',
-      conges_loi_3ans: 3,
-    },
-    bareme_anciennete: {},
-    employes: [],
-    paies: [],
-    comparaison_net: [],
-    conges: [],
-    utilisateurs: [],
-  });
-  const tousEmployesJson = JSON.stringify(tousEmployes);
-  const baremeJson = JSON.stringify(data2026.bareme_anciennete || {});
-  const congesModeleJson = JSON.stringify(congesModele);
-
   const sql = [
     '-- ============================================================================',
     '-- SALFA TOLIARA — Gestion des Salaires & Congés (Version WAMP / MySQL)',
-    '-- Script SQL dédié : Importation des Congés & Permissions depuis Excel',
+    '-- Script SQL relationnel : Importation des Congés & Permissions depuis Excel',
     '-- ============================================================================',
     `-- Fichier source : ${path.basename(cheminExcel)} (feuille(s) : ${feuillesRetenues.join(', ')})`,
-    `-- Contenu importé :`,
-    `--   * ${fichesToutes.length} fiches d'absence approuvées (${nbCongesAnnuels} congés annuels + ${nbPermissions} permissions)`,
-    `--   * ${matsPresents.length} salariés SALFA reconnus (${fiches2026.length} fiches personnel 2026 + ${fichesAnciensSeuls.length} fiches anciens 2022–2025)`,
-    `--   * Période couverte : ${anneesCouvertes[0]} à ${anneesCouvertes[anneesCouvertes.length - 1]} (règle légale des 3 ans activée)`,
-    '--',
-    '-- Garanties de sécurité :',
-    '--   * NE SUPPRIME PAS et N\'ÉCRASE PAS vos bulletins de paie (paies), comparaisons,',
-    '--     paramètres (config_json, header_json) ni vos comptes utilisateurs (salfa_users).',
-    '--   * Résout automatiquement chaque salarié par son numéro matricule (employe_id exact)',
-    '--     et ajoute les éventuelles fiches salariés manquantes (anciens 2022–2025).',
-    '--   * Compatible MySQL 5.7+ / 8.x et MariaDB 10.2+ / 11.x sous WampServer.',
-    '--   * Découpé en blocs de 80 Ko (aucune erreur max_allowed_packet dans phpMyAdmin).',
-    '--',
-    '-- Utilisation :',
-    '--   Option A (phpMyAdmin) : Sélectionner `salfa_paie` -> onglet « Importer » -> choisir ce fichier -> Exécuter.',
-    '--   Option B (Console MySQL) : mysql -u root -p --default-character-set=utf8mb4 < salfa_conges_excel.sql',
+    `-- Structure : 100 % relationnelle en colonnes et lignes (AUCUN JSON dans MySQL)`,
+    `-- Utilisateurs par défaut inclus dans salfa_users :`,
+    `--   * admin / admin123 (Administrateur)`,
+    `--   * comptable / comptable123 (Comptable)`,
+    `-- Contenu importé dans salfa_conges :`,
+    `--   * ${fichesToutes.length} lignes (${nbCongesAnnuels} congés annuels + ${nbPermissions} permissions)`,
+    `--   * ${matsPresents.length} salariés SALFA (${anneesCouvertes[0]} à ${anneesCouvertes[anneesCouvertes.length - 1]})`,
     '-- ============================================================================',
     '',
-    'SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;',
-    "SET time_zone = '+00:00';",
+    'SET NAMES utf8mb4;',
+    "SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';",
     '',
-    'CREATE DATABASE IF NOT EXISTS `salfa_paie`',
-    '  CHARACTER SET utf8mb4',
-    '  COLLATE utf8mb4_unicode_ci;',
-    '',
+    'CREATE DATABASE IF NOT EXISTS `salfa_paie` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;',
     'USE `salfa_paie`;',
     '',
-    'CREATE TABLE IF NOT EXISTS `salfa_users` (',
-    '  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,',
-    '  `username` VARCHAR(80) NOT NULL UNIQUE,',
-    '  `nom_complet` VARCHAR(160) NOT NULL,',
-    '  `role` VARCHAR(32) NOT NULL,',
-    '  `actif` TINYINT NOT NULL DEFAULT 1,',
-    '  `password_hash` VARCHAR(255) NOT NULL',
-    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
-    '',
-    'CREATE TABLE IF NOT EXISTS `salfa_state` (',
-    '  `id` TINYINT NOT NULL PRIMARY KEY,',
-    '  `revision` BIGINT NOT NULL,',
-    '  `store_json` LONGTEXT NOT NULL,',
-    '  `config_json` LONGTEXT NULL,',
-    '  `header_json` LONGTEXT NULL',
-    ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+    ...ddlTablesRelationnelles(),
     '',
     'START TRANSACTION;',
     '',
-    '-- 1) Garantir l\'existence de la ligne d\'état id = 1 sans toucher aux données existantes',
-    `INSERT IGNORE INTO \`salfa_state\` (\`id\`, \`revision\`, \`store_json\`, \`config_json\`, \`header_json\`)`,
-    `VALUES (1, 0, '${sqlEscape(storeVideJson)}', NULL, NULL);`,
-    '',
-    '-- 2) Garantir $.meta et initialiser les 70 salariés SALFA si $.employes est encore vide',
-    'UPDATE `salfa_state`',
-    "SET `store_json` = JSON_SET(`store_json`, '$.meta', JSON_EXTRACT('{\"source_version\":\"classeur-2026-10\"}', '$'))",
-    "WHERE `id` = 1 AND JSON_EXTRACT(`store_json`, '$.meta') IS NULL;",
-    ...emettreVariableMorcelee('@salfa_all_emps', tousEmployesJson),
-    `SET @salfa_bareme = '${sqlEscape(baremeJson)}';`,
-    'UPDATE `salfa_state`',
-    'SET `store_json` = JSON_SET(',
-    '  `store_json`,',
-    "  '$.employes', JSON_EXTRACT(@salfa_all_emps, '$'),",
-    "  '$.bareme_anciennete', JSON_EXTRACT(@salfa_bareme, '$')",
-    ')',
-    "WHERE `id` = 1 AND COALESCE(JSON_LENGTH(`store_json`, '$.employes'), 0) = 0;",
-    'SET @salfa_all_emps = NULL;',
-    'SET @salfa_bareme = NULL;',
-    '',
-    '-- 3) Compléter uniquement les fiches salariés éventuellement absentes (ex. anciens salariés 2022–2025)',
-    "SET @emps_json = (SELECT JSON_EXTRACT(`store_json`, '$.employes') FROM `salfa_state` WHERE `id` = 1);",
-    "SET @mats_csv = REPLACE(REPLACE(REPLACE(COALESCE(JSON_EXTRACT(@emps_json, '$[*].numero_matricule'), '[]'), '[', ''), ']', ''), ' ', '');",
-    "SET @ids_json = COALESCE(JSON_EXTRACT(@emps_json, '$[*].id'), '[]');",
-    "SET @ids_csv = REPLACE(REPLACE(REPLACE(@ids_json, '[', ''), ']', ''), ' ', '');",
-    "SET @nb_emps = COALESCE(JSON_LENGTH(@ids_json), 0);",
-    "SET @next_emp_id = GREATEST(COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(@ids_json, CONCAT('$[', IF(@nb_emps > 0, @nb_emps - 1, 0), ']'))) AS UNSIGNED), 0), @nb_emps);",
-    "SET @extra_emps = '';",
+    '-- Ajout sans écrasement des salariés éventuellement absents de salfa_employes',
+    'SET @base_emp_id = COALESCE((SELECT MAX(`id`) FROM `salfa_employes`), 0);',
+    'INSERT IGNORE INTO `salfa_employes` (',
+    '  `id`, `numero_matricule`, `nom_prenoms`, `numero_cnaps`, `categorie`, `jobs`,',
+    '  `date_embauche`, `nombre_annees`, `enfant_a_charge`, `base_aj`, `logement_transport`,',
+    '  `rendement`, `responsabilite_representation`, `rib`, `mode_paiement`, `actif`,',
+    '  `date_inactif`, `conge_maternite`, `date_debut_maternite`, `date_creation`',
+    ') VALUES',
   ];
 
-  // S'assurer d'abord que @next_emp_id dépasse tout id déjà utilisé par les matricules connus
-  for (const mat of matsPresents) {
+  tousEmployes.forEach((e, idx) => {
+    const fin = idx === tousEmployes.length - 1 ? ';' : ',';
     sql.push(
-      `SET @pos_m = FIND_IN_SET('${mat}', @mats_csv);`,
-      `SET @next_emp_id = IF(@pos_m > 0, GREATEST(@next_emp_id, CAST(JSON_UNQUOTE(JSON_EXTRACT(@ids_json, CONCAT('$[', IF(@pos_m > 0, @pos_m - 1, 0), ']'))) AS UNSIGNED)), @next_emp_id);`
+      `  (@base_emp_id + ${idx + 1}, ${sqlInt(e.numero_matricule)}, ${sqlStr(e.nom_prenoms, 160)}, ${sqlStr(e.numero_cnaps, 60)}, ${sqlStr(e.categorie, 32)}, ${sqlStr(e.jobs, 160)}, ${sqlStr(e.date_embauche, 20)}, ${sqlInt(e.nombre_annees)}, ${sqlInt(e.enfant_a_charge)}, ${sqlNum(e.base_aj ?? 0)}, ${sqlNum(e.logement_transport ?? 0)}, ${sqlNum(e.rendement ?? 0)}, ${sqlNum(e.responsabilite_representation ?? 0)}, ${sqlStr(e.rib, 80)}, ${sqlStr(e.mode_paiement || 'ESPECES', 32)}, ${e.actif ? 1 : 0}, ${sqlStr(e.date_inactif || '', 20)}, ${e.conge_maternite ? 1 : 0}, ${sqlStr(e.date_debut_maternite || '', 20)}, ${sqlStr(e.date_creation || '', 32)})${fin}`
     );
-  }
-
-  // Ajouter les fiches salariés absentes de $.employes
-  for (const mat of matsPresents) {
-    const modeleEmp = JSON.stringify({ ...parMatTous.get(mat), id: '__EMP_ID__' });
-    sql.push(
-      `SET @manque_m = (FIND_IN_SET('${mat}', @mats_csv) = 0);`,
-      'SET @next_emp_id = @next_emp_id + IF(@manque_m, 1, 0);',
-      'SET @next_emp_id = IF(@manque_m AND FIND_IN_SET(CAST(@next_emp_id AS CHAR), @ids_csv) > 0, @next_emp_id + 1000, @next_emp_id);',
-      `SET @extra_emps = IF(@manque_m, CONCAT(@extra_emps, ',', REPLACE('${sqlEscape(modeleEmp)}', '"__EMP_ID__"', CAST(@next_emp_id AS CHAR))), @extra_emps);`
-    );
-  }
+  });
 
   sql.push(
-    'UPDATE `salfa_state`',
-    'SET `store_json` = JSON_SET(',
-    '  `store_json`,',
-    "  '$.employes', JSON_EXTRACT(CONCAT(LEFT(TRIM(@emps_json), CHAR_LENGTH(TRIM(@emps_json)) - 1), @extra_emps, ']'), '$')",
-    ')',
-    'WHERE `id` = 1 AND CHAR_LENGTH(@extra_emps) > 0;',
     '',
-    '-- 4) Recharger la table de correspondance (numero_matricule -> employe_id réel en base)',
-    "SET @emps_json = (SELECT JSON_EXTRACT(`store_json`, '$.employes') FROM `salfa_state` WHERE `id` = 1);",
-    "SET @mats_csv = REPLACE(REPLACE(REPLACE(COALESCE(JSON_EXTRACT(@emps_json, '$[*].numero_matricule'), '[]'), '[', ''), ']', ''), ' ', '');",
-    "SET @ids_json = COALESCE(JSON_EXTRACT(@emps_json, '$[*].id'), '[]');",
-    "SET @extra_emps = NULL;",
-    '',
-    '-- 5) Charger les fiches de congés & permissions par blocs de 80 Ko et associer les employe_id',
-    ...emettreVariableMorcelee('@conges_json', congesModeleJson)
+    "-- Remplacement propre des lignes issues d'un précédent import Excel (les saisies manuelles sont conservées)",
+    "DELETE FROM `salfa_conges` WHERE `saisie_par` = 'Import Excel';",
+    'SET @base_conge_id = COALESCE((SELECT MAX(`id`) FROM `salfa_conges`), 0);',
+    ''
   );
 
-  for (const mat of matsPresents) {
+  // Insertion par lots de 100 lignes dans salfa_conges (colonnes et lignes distinctes)
+  const TAILLE_LOT = 100;
+  for (let offset = 0; offset < fichesToutes.length; offset += TAILLE_LOT) {
+    const lot = fichesToutes.slice(offset, offset + TAILLE_LOT);
     sql.push(
-      `SET @pos_m = FIND_IN_SET('${mat}', @mats_csv);`,
-      `SET @emp_id_m = CAST(JSON_UNQUOTE(JSON_EXTRACT(@ids_json, CONCAT('$[', IF(@pos_m > 0, @pos_m - 1, 0), ']'))) AS UNSIGNED);`,
-      `SET @conges_json = IF(@pos_m > 0, REPLACE(@conges_json, '"__MAT_${mat}__"', CAST(@emp_id_m AS CHAR)), @conges_json);`
+      'INSERT INTO `salfa_conges` (',
+      '  `id`, `employe_id`, `numero_matricule`, `nom_prenoms`, `fonction`, `service`, `contact`,',
+      '  `categorie`, `motif_code`, `motif_libelle`, `imputation`, `annee`, `date_demande`,',
+      '  `date_debut`, `heure_debut`, `date_fin`, `date_retour`, `heure_fin`, `jours_demandes`,',
+      '  `jours_valides`, `remplacant`, `titre_periode`, `justificatif`, `observations`, `statut`,',
+      '  `visa_chef_par`, `visa_chef_le`, `visa_medecin_par`, `visa_medecin_le`,',
+      '  `visa_gestionnaire_par`, `visa_gestionnaire_le`, `motif_refus`, `ajustement_type`,',
+      '  `saisie_par`, `date_saisie`, `date_modification`',
+      ') VALUES'
     );
+    lot.forEach((c, idx) => {
+      const numOrdre = offset + idx + 1;
+      const fin = idx === lot.length - 1 ? ';' : ',';
+      sql.push(
+        `  (@base_conge_id + ${numOrdre}, ${sqlInt(c.employe_id)}, ${sqlInt(c.numero_matricule)}, ${sqlStr(c.nom_prenoms, 160)}, ${sqlStr(c.fonction, 160)}, ${sqlStr(c.service, 120)}, ${sqlStr(c.contact, 120)}, ${sqlStr(c.categorie, 32)}, ${sqlStr(c.motif_code, 40)}, ${sqlStr(c.motif_libelle, 255)}, ${sqlStr(c.imputation, 32)}, ${sqlInt(c.annee)}, ${sqlStr(c.date_demande, 20)}, ${sqlStr(c.date_debut, 20)}, ${sqlStr(c.heure_debut, 16)}, ${sqlStr(c.date_fin, 20)}, ${sqlStr(c.date_retour, 20)}, ${sqlStr(c.heure_fin, 16)}, ${sqlNum(c.jours_demandes ?? 0)}, ${sqlNum(c.jours_valides)}, ${sqlStr(c.remplacant, 160)}, ${sqlStr(c.titre_periode, 80)}, ${sqlStr(c.justificatif, 255)}, ${sqlStr(c.observations)}, ${sqlStr(c.statut || 'VALIDE', 32)}, ${sqlStr(c.visa_chef_par, 120)}, ${sqlStr(c.visa_chef_le, 32)}, ${sqlStr(c.visa_medecin_par, 120)}, ${sqlStr(c.visa_medecin_le, 32)}, ${sqlStr(c.visa_gestionnaire_par, 120)}, ${sqlStr(c.visa_gestionnaire_le, 32)}, ${sqlStr(c.motif_refus, 255)}, ${sqlStr(c.ajustement_type, 32)}, ${sqlStr(c.saisie_par || 'Import Excel', 80)}, ${sqlStr(c.date_saisie, 32)}, ${sqlStr(c.date_modification, 32)})${fin}`
+      );
+    });
+    sql.push('');
   }
 
   sql.push(
+    '-- Rattachement relationnel exact employe_id <-> salfa_employes.id via numero_matricule',
+    'UPDATE `salfa_conges` c',
+    'INNER JOIN `salfa_employes` e ON e.`numero_matricule` = c.`numero_matricule`',
+    'SET c.`employe_id` = e.`id`;',
     '',
-    '-- 6) Enregistrer les congés dans salfa_state sans toucher aux paies ni aux paramètres',
-    'UPDATE `salfa_state`',
-    'SET',
-    '  `store_json` = JSON_SET(',
-    '    `store_json`,',
-    "    '$.conges', JSON_EXTRACT(@conges_json, '$'),",
-    "    '$.meta.conges_version', 'controle-2026-10',",
-    "    '$.meta.conges_loi_3ans', 3",
-    '  ),',
-    '  `revision` = `revision` + 1',
-    'WHERE `id` = 1 AND JSON_VALID(@conges_json) = 1;',
-    '',
-    'SET @conges_json = NULL;',
-    'SET @emps_json = NULL;',
-    'SET @mats_csv = NULL;',
-    'SET @ids_json = NULL;',
-    'SET @ids_csv = NULL;',
+    'UPDATE `salfa_revision`',
+    "SET `revision` = `revision` + 1, `conges_version` = 'controle-2026-10', `conges_loi_3ans` = 3, `date_modification` = NOW()",
+    'WHERE `id` = 1;',
     '',
     'COMMIT;',
-    '',
-    '-- Vérification rapide après import (affichée dans phpMyAdmin / console MySQL) :',
-    'SELECT',
-    '  `id`,',
-    '  `revision`,',
-    '  JSON_VALID(`store_json`) AS `json_valide`,',
-    "  JSON_TYPE(JSON_EXTRACT(`store_json`, '$.conges')) AS `type_conges`,",
-    "  JSON_LENGTH(`store_json`, '$.employes') AS `nb_employes`,",
-    "  JSON_LENGTH(`store_json`, '$.paies') AS `nb_paies_conservees`,",
-    "  JSON_LENGTH(`store_json`, '$.conges') AS `nb_conges_importes`",
-    'FROM `salfa_state`',
-    'WHERE `id` = 1;',
     ''
   );
 
   fs.mkdirSync(OUT_SQL_DIR, { recursive: true });
-  const sqlFinal = sql.join('\n');
-  fs.writeFileSync(OUT_SQL_PATH, sqlFinal, 'utf8');
+  const sqlContent = sql.join('\n');
+  assert.ok(!sqlContent.includes('store_json'), 'Aucune colonne store_json ne doit figurer dans le SQL');
+  assert.ok(!sqlContent.includes('JSON_SET'), 'Aucune fonction JSON MySQL ne doit figurer dans le SQL');
+  fs.writeFileSync(OUT_SQL_PATH, sqlContent, 'utf8');
 
-  // Vérification aller-retour des morceaux SQL de @conges_json
-  const regexMorceau = /^SET @conges_json = (?:CONCAT\(@conges_json, )?'(.*)'\)?;$/;
-  let reconstruit = '';
-  for (const ligne of sql) {
-    const m = ligne.match(regexMorceau);
-    if (!m) continue;
-    const unescaped = m[1]
-      .replace(/\\Z/g, '\x1a')
-      .replace(/\\r/g, '\r')
-      .replace(/\\n/g, '\n')
-      .replace(/\\0/g, '\0')
-      .replace(/''/g, "'")
-      .replace(/\\\\/g, '\\');
-    reconstruit += unescaped;
-  }
-  assert.equal(reconstruit, congesModeleJson, 'Aller-retour SQL -> JSON de @conges_json strictement identique');
-
-  const tailleKo = (Buffer.byteLength(sqlFinal, 'utf8') / 1024).toFixed(1);
-  console.log(`Fichier SQL congés généré : ${OUT_SQL_PATH}`);
-  console.log(`  Taille : ${tailleKo} Ko`);
-  console.log(`  Feuille(s) retenue(s) : ${feuillesRetenues.join(', ')}`);
-  console.log(`  Salariés reconnus : ${matsPresents.length} (${fiches2026.length} fiches 2026 + ${fichesAnciensSeuls.length} fiches anciens 2022–2025)`);
-  console.log(`  Total fiches importées : ${fichesToutes.length} (${nbCongesAnnuels} congés annuels, ${nbPermissions} permissions)`);
-  console.log(`  Vérification simulation WAMP & aller-retour JSON : OK`);
+  const tailleKo = (Buffer.byteLength(sqlContent, 'utf8') / 1024).toFixed(1);
+  console.log(
+    [
+      `SQL relationnel WAMP congés généré : ${path.relative(ROOT, OUT_SQL_PATH)} (${tailleKo} Ko)`,
+      `  - Fiches totales   : ${fichesToutes.length} (${nbCongesAnnuels} congés, ${nbPermissions} permissions)`,
+      `  - Salariés couverts: ${matsPresents.length} (${fiches2026.length} sur personnel 2026 + ${fichesAnciensSeuls.length} sur anciens 2022–2025)`,
+      `  - Années couvertes : ${anneesCouvertes.join(', ')}`,
+      `  - Utilisateurs SQL : admin / admin123, comptable / comptable123`,
+    ].join('\n')
+  );
 }
 
 main();

@@ -72,13 +72,27 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-wamp-test-'));
   await client.remoteLogin('test', 'motdepasse');
   assert.equal(client.getStore().employes.length, 1);
 
-  // Vérification structurelle de wamp/api/index.php
+  // Vérification structurelle de wamp/api/index.php, wamp/api/schema.php et des fichiers SQL relationnels
   const php = fs.readFileSync(path.join(process.cwd(), 'wamp/api/index.php'), 'utf8');
+  const schemaPhp = fs.readFileSync(path.join(process.cwd(), 'wamp/api/schema.php'), 'utf8');
   assert.ok(php.includes('function openPdoWithAutoCreateDb'), 'auto-création DB présente dans index.php');
-  assert.ok(php.includes('function ensureSalfaInitialized'), 'auto-initialisation tables/admin présente dans index.php');
+  assert.ok(schemaPhp.includes('function ensureSalfaInitialized'), 'auto-initialisation des tables relationnelles dans schema.php');
+  assert.ok(schemaPhp.includes('CREATE TABLE IF NOT EXISTS `salfa_employes`'), 'table relationnelle salfa_employes');
+  assert.ok(schemaPhp.includes('CREATE TABLE IF NOT EXISTS `salfa_paies`'), 'table relationnelle salfa_paies');
+  assert.ok(schemaPhp.includes('CREATE TABLE IF NOT EXISTS `salfa_conges`'), 'table relationnelle salfa_conges');
+  assert.ok(schemaPhp.includes('DROP TABLE IF EXISTS `salfa_state`'), 'suppression automatique de l’ancienne table JSON salfa_state');
+  assert.ok(!php.includes('store_json') && !php.includes('config_json') && !php.includes('header_json'), 'aucune écriture JSON MySQL dans index.php');
   assert.ok(php.includes("$action === 'setup_db'"), 'endpoint setup_db présent dans index.php');
   assert.ok(php.includes("'saisirSoldeAnnee'"), 'action saisirSoldeAnnee autorisée pour Comptable dans index.php');
   assert.ok(!php.includes('Serveur non configuré. Consultez le guide WAMP.'), 'ancien message bloquant supprimé');
 
-  console.log('Mode WAMP : stockage vide, auto-config MySQL, transaction simulée, conflit et déconnexion : OK');
+  for (const sqlRel of ['wamp/sql/salfa_donnees_excel_2022-2026.sql', 'wamp/sql/salfa_conges_excel.sql']) {
+    const sqlTxt = fs.readFileSync(path.join(process.cwd(), sqlRel), 'utf8');
+    assert.ok(!sqlTxt.includes('store_json') && !sqlTxt.includes('config_json') && !sqlTxt.includes('header_json'), `${sqlRel} ne contient aucune colonne JSON`);
+    assert.ok(sqlTxt.includes('DROP TABLE IF EXISTS `salfa_state`;'), `${sqlRel} supprime l’ancienne table salfa_state`);
+    assert.ok(sqlTxt.includes('INSERT IGNORE INTO `salfa_users`') && sqlTxt.includes("'admin'") && sqlTxt.includes("'comptable'"), `${sqlRel} inclut les utilisateurs par défaut`);
+    assert.ok(sqlTxt.includes('INSERT INTO `salfa_conges`'), `${sqlRel} insère les congés en lignes et colonnes`);
+  }
+
+  console.log('Mode WAMP : tables relationnelles MySQL (zéro JSON), utilisateurs SQL par défaut, auto-config, conflit et déconnexion : OK');
 })().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => fs.rmSync(temp, { recursive: true, force: true }));

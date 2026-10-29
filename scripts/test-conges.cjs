@@ -622,21 +622,18 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal(mat1Reset.soldeActuel, 24, 'solde 2026 revenu à 24 j');
 
   // ----------------------------------------------------------------------------
-  // 7. Vérification du script SQL WAMP des congés (wamp/sql/salfa_conges_excel.sql)
+  // 7. Vérification du script SQL relationnel WAMP des congés (wamp/sql/salfa_conges_excel.sql)
   // ----------------------------------------------------------------------------
   const sqlConges = fs.readFileSync('wamp/sql/salfa_conges_excel.sql', 'utf8');
   assert.ok(sqlConges.includes('CREATE DATABASE IF NOT EXISTS `salfa_paie`'), 'création base salfa_paie');
+  assert.ok(sqlConges.includes('USE `salfa_paie`;'), 'sélection base salfa_paie');
   assert.ok(sqlConges.includes('START TRANSACTION;') && sqlConges.includes('COMMIT;'), 'transaction atomique');
-  assert.ok(!/\bDROP\s+(TABLE|DATABASE)\b/i.test(sqlConges), 'aucun DROP destructif (droits minimaux WAMP)');
-  assert.ok(!/\bDELETE\s+FROM\b/i.test(sqlConges), 'aucun DELETE (conservation des données)');
-  let jsonReconstruit = '';
-  for (const ligneSql of sqlConges.split('\n')) {
-    const mSql = ligneSql.match(/^SET @conges_json = (?:CONCAT\(@conges_json, )?'(.*)'\)?;$/);
-    if (mSql) jsonReconstruit += mSql[1].replace(/''/g, "'").replace(/\\\\/g, '\\');
-  }
-  const congesDuSql = JSON.parse(jsonReconstruit);
-  assert.equal(congesDuSql.length, 610, '610 fiches (527 salariés 2026 + 83 anciens 2022–2025) dans salfa_conges_excel.sql');
-  assert.ok(congesDuSql.every((c) => /^__MAT_\d+__$/.test(c.employe_id)), 'jetons dynamiques __MAT_<M>__ prêts pour résolution MySQL');
+  assert.ok(!sqlConges.includes('store_json') && !sqlConges.includes('@conges_json') && !sqlConges.includes('JSON_SET'), 'aucun stockage JSON dans le SQL');
+  assert.ok(sqlConges.includes('DROP TABLE IF EXISTS `salfa_state`;'), 'suppression de l’ancienne table JSON salfa_state');
+  assert.ok(!/DELETE\s+FROM\s+`?salfa_paies`?/i.test(sqlConges), 'aucune suppression des bulletins de paie salfa_paies');
+  assert.ok(sqlConges.includes('INSERT IGNORE INTO `salfa_users`') && sqlConges.includes("'admin'") && sqlConges.includes("'comptable'"), 'utilisateurs par défaut inclus dans le SQL');
+  const lignesInsertConges = sqlConges.match(/^\s*\(@base_conge_id \+ \d+,/gm) || [];
+  assert.equal(lignesInsertConges.length, 610, '610 lignes relationnelles insérées dans salfa_conges');
 
   console.log('Congés & Permissions : tests OK');
 })().catch((e) => {

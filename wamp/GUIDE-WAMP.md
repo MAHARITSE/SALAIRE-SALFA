@@ -106,71 +106,65 @@ Deux scripts SQL prêts à l'emploi sont fournis dans **`wamp/sql/`** :
 
 ### 2.1 Import complet (Salaires 2022–2026 + Congés & Permissions)
 
-Le fichier **`wamp/sql/salfa_donnees_excel_2022-2026.sql`** contient les données
-des classeurs Excel `SALAIRE SALFA 2022.xlsx` à `SALAIRE SALFA 2026.xlsm`
-(états mensuels : années complètes 2022, 2023, 2024 ; janvier à mai 2025 —
-le classeur 2025 ne contient que ces feuilles ; janvier à octobre 2026), plus
-le contrôle des congés, au format réellement lu par l'API WAMP (ligne unique
-`salfa_state`, colonne `store_json`). Soit **2 390 lignes de paie** (2022 : 558,
-2023 : 576, 2024 : 556, 2025 : 230, 2026 : 470), **610 fiches d'absence/congés**
-(590 congés annuels et 20 permissions) et **70 salariés** : les
-50 salariés de 2026 plus 20 salariés uniquement présents dans les anciens
-classeurs, ajoutés en *Inactif* (archive, fiche de leur dernier mois connu).
-Un doublon du classeur 2023 (septembre, matricule 39, ligne recopiée) a été
-écarté. Il est régénérable après une nouvelle extraction des classeurs avec
+Le fichier **`wamp/sql/salfa_donnees_excel_2022-2026.sql`** crée et alimente
+toutes les **tables relationnelles MySQL** en colonnes et lignes (aucun stockage
+JSON dans MySQL) à partir des classeurs Excel `SALAIRE SALFA 2022.xlsx` à
+`SALAIRE SALFA 2026.xlsm` et `CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb` :
+
+- **`salfa_users`** : comptes par défaut inclus (`admin` / `admin123` en
+  *Administrateur*, `comptable` / `comptable123` en *Comptable*, via `INSERT IGNORE`).
+- **`salfa_employes`** : **70 salariés** (50 salariés 2026 + 20 archivés 2022–2025).
+- **`salfa_paies`** : **2 390 bulletins mensuels** (2022 : 558, 2023 : 576,
+  2024 : 556, 2025 : 230, 2026 : 470).
+- **`salfa_conges`** : **610 fiches d'absence** (590 congés annuels + 20 permissions).
+- **`salfa_comparaison_net`** : **48 lignes** de comparaison des salaires nets.
+- **`salfa_config`**, **`salfa_bareme_anciennete`**, **`salfa_bareme_irsa`**,
+  **`salfa_entete`**, **`salfa_revision`** : paramètres et barèmes en colonnes et lignes.
+- Supprime automatiquement l'ancienne table JSON `salfa_state` si elle existait.
+
+Il est régénérable après une nouvelle extraction des classeurs avec
 `node scripts/generer_sql_conges_wamp.cjs && python3 scripts/generer_sql_wamp.py`.
 
 Import, au choix :
 
 - **phpMyAdmin :** démarrer WampServer → ouvrir phpMyAdmin → sélectionner la
   base `salfa_paie` → onglet **Importer** → choisir
-  `wamp\sql\salfa_donnees_excel_2022-2026.sql` → **Exécuter**. Les deux dernières
-  requêtes du fichier vérifient le résultat : `json_valide = 1`, puis
-  `employes = 70`, `paies = 2390`, `conges = 610`.
+  `wamp\sql\salfa_donnees_excel_2022-2026.sql` → **Exécuter**.
 - **Ligne de commande (sur le serveur) :**
-  `mysql -u salfa_app -p salfa_paie < wamp\sql\salfa_donnees_excel_2022-2026.sql`
-  (le mot de passe MySQL est demandé, il n'est pas écrit dans la commande).
-
-Ordre avec `setup.php` : l'import peut se faire **avant ou après** `setup.php`.
-`setup.php` n'écrase jamais les données importées ; l'import SQL complet, lui,
-**remplace** les données de paie existantes, remet la révision à `0` (les
-postes connectés doivent recharger la page) et réinitialise les paramètres
-communs et l'en-tête des bulletins aux valeurs par défaut. **Sauvegardez la
-base avant tout import sur une base déjà utilisée.** Les comptes utilisateurs
-(`salfa_users`) ne sont ni créés ni modifiés par ce fichier, et **aucun mot de
-passe n'y figure** : créez les comptes avec `setup.php` puis
-`CREER-COMPTE.php` (§ 1, étapes 5 et 6). Ne copiez jamais ce fichier SQL dans
-`C:\wamp64\www` : il contient des données de paie confidentielles.
+  `mysql -u root -p salfa_paie < wamp\sql\salfa_donnees_excel_2022-2026.sql`
 
 ### 2.2 Import dédié des Congés & Permissions seuls (`salfa_conges_excel.sql`)
 
-Si votre base `salfa_paie` contient déjà vos bulletins de paie, vos paramètres
-ou vos en-têtes personnalisés et que vous souhaitez **uniquement importer ou
-mettre à jour les congés & permissions** issus de
+Si votre base `salfa_paie` contient déjà vos bulletins de paie (`salfa_paies`),
+vos paramètres ou vos en-têtes personnalisés et que vous souhaitez **uniquement
+importer ou mettre à jour les congés & permissions** issus de
 `CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb`, utilisez le fichier dédié :
 
-- **`wamp/sql/salfa_conges_excel.sql`** (**610 fiches d'absence** : 590 congés
-  annuels + 20 permissions sur **58 salariés SALFA**, période 2021–2026, règle
-  légale des 3 ans activée).
+- **`wamp/sql/salfa_conges_excel.sql`** (**610 fiches d'absence** dans la table
+  relationnelle `salfa_conges` : 590 congés annuels + 20 permissions sur
+  **58 salariés SALFA**, période 2021–2026, règle légale des 3 ans activée).
 
 Garanties de ce fichier :
 
-- **Ne supprime ni n'écrase jamais** vos bulletins de paie (`paies`), vos
-  comparaisons, vos paramètres (`config_json`), votre en-tête de bulletin
-  (`header_json`) ni vos comptes utilisateurs (`salfa_users`).
+- **100 % relationnel (colonnes et lignes)** : aucun stockage JSON dans MySQL ;
+  supprime également toute ancienne table `salfa_state` si présente.
+- **Inclut les utilisateurs par défaut** dans `salfa_users` (`admin` / `admin123`
+  et `comptable` / `comptable123` via `INSERT IGNORE`).
+- **Ne supprime ni n'écrase jamais** vos bulletins de paie (`salfa_paies`), vos
+  comparaisons (`salfa_comparaison_net`), vos paramètres (`salfa_config`), votre
+  en-tête de bulletin (`salfa_entete`) ni vos comptes utilisateurs existants.
 - Associe automatiquement chaque congé au bon salarié via son **numéro
-  matricule** (`employe_id` réel en base) et ajoute uniquement les éventuelles
+  matricule** (`INNER JOIN salfa_employes`) et ajoute uniquement les éventuelles
   fiches salariés manquantes (ex. anciens salariés 2022–2025).
-- Incrémente automatiquement `revision` afin que les postes connectés rechargent
-  les congés mis à jour.
+- Incrémente automatiquement `salfa_revision.revision` afin que les postes
+  connectés rechargent les congés mis à jour.
 
 Import, au choix :
 
 - **phpMyAdmin :** sélectionner la base `salfa_paie` → onglet **Importer** →
-  choisir `wamp\sql\salfa_conges_excel.sql` → **Exécuter** (vérification finale
-  affichée : `json_valide = 1`, `type_conges = ARRAY`, `nb_conges_importes = 610`).
+  choisir `wamp\sql\salfa_conges_excel.sql` → **Exécuter**.
 - **Ligne de commande :**
-  `mysql -u salfa_app -p --default-character-set=utf8mb4 salfa_paie < wamp\sql\salfa_conges_excel.sql`
+  `mysql -u root -p --default-character-set=utf8mb4 salfa_paie < wamp\sql\salfa_conges_excel.sql`
 
 Pour régénérer ce fichier SQL après une mise à jour du classeur Excel des congés :
 
