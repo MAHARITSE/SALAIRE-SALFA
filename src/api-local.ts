@@ -47,9 +47,6 @@ function exigerAdmin(): void {
   }
 }
 
-const DEMO_ADMIN_HASH = '5a9e592c4c66b0fbabc6246cb059e6852c72652da3cf1dc485a721a3e4db1a97';
-const DEMO_COMPTABLE_HASH = '8acd1a4e11b1720b3b80be7db7f3e1340bb093a16f4553f2001b0bdaf9459fc6';
-
 export async function apiLogin(username: string, password: string): Promise<UserSession | null> {
   const store = getStore();
   const hash = await hashPassword(password);
@@ -79,24 +76,22 @@ export async function checkHealth(): Promise<boolean> {
 // ------------------------------------------------------------------------------
 // GESTION DES UTILISATEURS & MOTS DE PASSE (réservée à l'Administrateur)
 // ------------------------------------------------------------------------------
+/**
+ * Liste publique des comptes actifs, SANS aucun mot de passe ni indice de
+ * connexion : aucun mot de passe (même de démonstration) ne doit être exposé
+ * côté page de connexion ou dans le navigateur.
+ */
 export async function fetchComptesConnexion(): Promise<CompteConnexionPublic[]> {
   const store = getStore();
   return (store.utilisateurs || [])
     .filter((u: any) => Number(u.actif) === 1)
     .map((u: any) => {
       const uname = String(u.username || '').trim();
-      let motDePasseDemo: string | undefined;
-      if (uname.toLowerCase() === 'admin' && u.password_hash === DEMO_ADMIN_HASH) {
-        motDePasseDemo = 'admin123';
-      } else if (uname.toLowerCase() === 'comptable' && u.password_hash === DEMO_COMPTABLE_HASH) {
-        motDePasseDemo = 'comptable123';
-      }
       return {
         id: Number(u.id),
         username: uname,
         nom_complet: String(u.nom_complet || uname),
         role: u.role === 'Administrateur' ? ('Administrateur' as const) : ('Comptable' as const),
-        motDePasseDemo,
       };
     });
 }

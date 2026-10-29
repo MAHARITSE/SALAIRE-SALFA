@@ -15,4 +15,5 @@ if errorlevel 1 (echo Copie du site impossible. & pause & exit /b 1)
 xcopy /E /I /Y "wamp\api\*" "C:\wamp64\www\salfa\api\" >nul
 if errorlevel 1 (echo Copie de l'API impossible. & pause & exit /b 1)
 echo Site copie. Configuration MySQL et initialisation encore necessaires : voir wamp\GUIDE-WAMP.md.
+echo Option : importer les donnees Excel dans MySQL avec wamp\sql\salfa_donnees_excel_2022-2026.sql (phpMyAdmin, ne jamais copier ce fichier dans www).
 pause
