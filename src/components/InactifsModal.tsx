@@ -6,6 +6,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Employe } from '../types';
 import { fetchEmployes, toggleActifEmploye, updateEmploye } from '../api';
 import { EmployeModalForm } from './EmployeModalForm';
+import { correspondRecherche, normaliserRecherche } from '../local/recherche';
 import { X, UserX, Search, UserCheck, Edit3, CalendarX2 } from 'lucide-react';
 
 interface InactifsModalProps {
@@ -48,15 +49,10 @@ export const InactifsModal: React.FC<InactifsModalProps> = ({ onClose, onChanged
   }, [charger]);
 
   const filtres = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = normaliserRecherche(search);
     if (!q) return inactifs;
-    return inactifs.filter(
-      (e) =>
-        String(e.numero_matricule).includes(q) ||
-        String(e.nom_prenoms || '').toLowerCase().includes(q) ||
-        String(e.jobs || '').toLowerCase().includes(q) ||
-        String(e.categorie || '').toLowerCase().includes(q) ||
-        String(e.date_inactif || '').includes(q)
+    return inactifs.filter((e) =>
+      correspondRecherche(q, e.numero_matricule, e.nom_prenoms, e.jobs, e.categorie, e.date_inactif)
     );
   }, [inactifs, search]);
 
@@ -119,9 +115,9 @@ export const InactifsModal: React.FC<InactifsModalProps> = ({ onClose, onChanged
             <input
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => setSearch(e.target.value.toLocaleUpperCase('fr-FR'))}
               placeholder="Rechercher par matricule, nom, fonction ou date..."
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white text-xs sm:text-sm focus:ring-2 focus:ring-salfa-sky outline-none"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white text-xs sm:text-sm uppercase focus:ring-2 focus:ring-salfa-sky outline-none"
             />
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400 shrink-0">

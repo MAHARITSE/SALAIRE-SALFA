@@ -26,6 +26,20 @@ assert.equal(cfg.plafondCumulConge, 30, 'plafond annuel indépendant de 30 jours
 assert.equal(cfg.reportAutorise, false, 'aucun report cumulé entre années');
 assert.equal(cfg.bloquerDepassement, true, 'dépassement bloqué à 30 jours par an');
 assert.equal(cfg.joursPermissionParAn, 10, 'permission : 10 andro isan-taona');
+const congeActuelTest = C.normaliserConge({
+  id: 901, employe_id: 1, categorie: 'CONGE', imputation: 'CONGE', statut: 'VALIDE',
+  date_debut: '2026-10-29', date_fin: '2026-10-30', date_retour: '2026-10-31', jours_demandes: 2,
+});
+assert.equal(C.estEnCongeLe(congeActuelTest, '2026-10-29'), true, 'premier jour de congé inclus');
+assert.equal(C.estEnCongeLe(congeActuelTest, '2026-10-30'), true, 'dernier jour de congé inclus');
+assert.equal(C.estEnCongeLe(congeActuelTest, '2026-10-31'), false, 'date de reprise exclue du congé');
+assert.equal(C.estEnCongeLe({ ...congeActuelTest, statut: 'SOUMIS' }, '2026-10-30'), false, 'une demande non validée ne figure pas parmi les salariés en congé');
+assert.equal(C.estEnCongeLe({ ...congeActuelTest, categorie: 'PERMISSION' }, '2026-10-30'), false, 'les permissions ne sont pas comptées comme congés annuels');
+
+const recherche = bundle('src/local/recherche.ts', 'recherche');
+assert.equal(recherche.normaliserRecherche('François  RAZAFI—TENDRY'), 'FRANCOIS RAZAFI TENDRY', 'recherche sans accents ni ponctuation');
+assert.equal(recherche.correspondRecherche('JOELSON TSIAMBANY', 'TSIAMBANY   Joelson'), true, 'recherche par mots dans n’importe quel ordre');
+assert.equal(recherche.correspondRecherche('TSIAMBANY INCONNU', 'TSIAMBANY Joelson'), false, 'tous les mots demandés doivent correspondre');
 
 // Le référentiel reprend la fiche d'absence, ligne par ligne.
 const table = {
@@ -102,6 +116,30 @@ const conges = [
   fiche(2, 2025, '2025-01-06', 20, { statut: 'REFUSE', motif_refus: 'Service saturé' }),
   // Salarié 3 : rien saisi, chaque année est plafonnée indépendamment à 30 j.
 ];
+
+const titulaireCumul = [{ id: 900, numero_matricule: 900, nom_prenoms: 'TEST CUMUL', date_embauche: '2020-01-01', actif: 1 }];
+const titresCumules = [2024, 2025, 2026].map((annee, index) => C.normaliserConge({
+  id: 910 + index, employe_id: 900, numero_matricule: 900, annee,
+  categorie: 'AJUSTEMENT', imputation: 'AUCUNE', ajustement_type: 'OUVERTURE', statut: 'VALIDE',
+  date_debut: `${annee}-01-01`, date_demande: `${annee}-01-01`, jours_demandes: [25, 30, 30][index],
+}));
+const congeChevauchant = C.normaliserConge({
+  id: 913, employe_id: 900, numero_matricule: 900, annee: 2026,
+  categorie: 'CONGE', imputation: 'CONGE', statut: 'VALIDE',
+  date_debut: '2026-10-29', date_fin: '2026-11-03', date_retour: '2026-11-04',
+  date_demande: '2026-10-01', jours_demandes: 6,
+});
+const syntheseAvantConge = C.calculerSyntheseCongesPeriode(titulaireCumul, titresCumules, cfg, 2026, 'OCTOBRE').get(900);
+assert.equal(syntheseAvantConge.conge_restant, 85, 'le bulletin cumule les 25 + 30 + 30 jours des titres non prescrits');
+assert.equal(syntheseAvantConge.conge_reste_titre, 30, 'le solde du titre courant reste affiché séparément');
+const syntheseOctobreConge = C.calculerSyntheseCongesPeriode(titulaireCumul, [...titresCumules, congeChevauchant], cfg, 2026, 'OCTOBRE').get(900);
+assert.equal(syntheseOctobreConge.conge_pris_annee, 3, 'seuls les jours de congé échus avant la fin octobre sont comptés');
+assert.equal(syntheseOctobreConge.conge_restant, 82, 'le cumul restant déduit les jours déjà pris au titre courant');
+assert.equal(syntheseOctobreConge.conge_reste_titre, 27, 'le titre courant reflète les jours consommés en octobre');
+const syntheseNovembreConge = C.calculerSyntheseCongesPeriode(titulaireCumul, [...titresCumules, congeChevauchant], cfg, 2026, 'NOVEMBRE').get(900);
+assert.equal(syntheseNovembreConge.conge_pris_annee, 6, 'le cumul annuel inclut tout le congé chevauchant en novembre');
+assert.equal(syntheseNovembreConge.conge_restant, 79, 'le solde cumulé est actualisé après la fin du congé');
+assert.equal(syntheseNovembreConge.conge_reste_titre, 24, 'le solde du titre actif est actualisé en novembre');
 
 const etat = C.construireEtat(employes, conges, cfg, { annee: 2027, nbAnnees: 4 });
 assert.deepEqual(etat.annees, [2024, 2025, 2026, 2027], 'fenêtre de quatre colonnes d’années');
@@ -194,6 +232,14 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   const api = bundle('src/api-local.ts', 'api');
 
   const tousEmployes = await api.fetchEmployes(true);
+  const rechercheNomInverse = await api.fetchEmployes(false, 'JOELSON   tsiambany');
+  assert.ok(rechercheNomInverse.some((e) => Number(e.numero_matricule) === 1), 'recherche salarié insensible à la casse, aux espaces et à l’ordre des noms');
+  const rechercheFichesMotif = await api.fetchConges({ recherche: 'SOLDE restant importe', inclureRefuses: true });
+  assert.ok(rechercheFichesMotif.length > 0, 'recherche congés par motif accentué');
+  const etatRechercheNom = await api.fetchEtatConges(2026, { recherche: 'Tsiambany Joelson' });
+  assert.ok(etatRechercheNom.parcours.some((p) => Number(p.numero_matricule) === 1), 'recherche de l’état par nom/prénom');
+  const etatRechercheMotif = await api.fetchEtatConges(2026, { recherche: 'solde restant importe' });
+  assert.ok(etatRechercheMotif.parcours.length > 0, 'l’état inclut les salariés dont une fiche correspond au motif recherché');
   // Le classeur 2026 est un instantané de soldes restants, indépendant pour chaque année.
   const sitInitiale = await api.fetchSituationConges(2026, false);
   const mat1Solde = sitInitiale.find((s) => s.numero_matricule === 1);
@@ -221,13 +267,14 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   const ex1 = await api.creerConge({
     employe_id: employe.id, categorie: 'CONGE', annee: 2026,
     date_demande: '2026-06-01', date_debut: '2026-06-05', date_fin: '2026-06-05',
-    imputation: 'CONGE', titre_periode: 'Titre 2025', statut: 'SOUMIS',
+    imputation: 'CONGE', titre_periode: 'Titre 2025', statut: 'SOUMIS', remplacant: 'jean rasoa',
   }, meta);
   assert.equal(ex1.success, true);
   let [ficheEx] = await api.fetchConges({ annee: 2026, employeId: employe.id });
   assert.equal(ficheEx.jours_demandes, 1, '05/06/2026 au 05/06/2026 = 1 congé');
   assert.equal(ficheEx.date_fin, '2026-06-05');
   assert.equal(ficheEx.date_retour, '2026-06-06', 'prise de service le lendemain 06/06/2026');
+  assert.equal(ficheEx.remplacant, 'JEAN RASOA', 'nom du remplaçant enregistré en majuscules');
 
   await api.modifierConge(ficheEx.id, { date_debut: '2026-06-05', date_fin: '2026-06-06' }, meta);
   [ficheEx] = await api.fetchConges({ annee: 2026, employeId: employe.id });
@@ -493,12 +540,13 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   const paiesJuin = await api.fetchPaiesMois(2026, 'JUIN');
   const mat47Juin = paiesJuin.employes.find((p) => p.numero_matricule === 47);
   assert.equal(mat47Juin.conge_pris_mois, 0);
-  assert.equal(mat47Juin.conge_restant, 30, 'Mat 47 : solde 2026 repris à 30 j');
+  assert.equal(mat47Juin.conge_restant, 85, 'Mat 47 : solde cumulé 2024-2026 repris à 85 j');
+  assert.equal(mat47Juin.conge_reste_titre, 30, 'Mat 47 : le solde du titre actif reste à 30 j');
 
   const paiesJuil = await api.fetchPaiesMois(2026, 'JUILLET');
   const mat47Juil = paiesJuil.employes.find((p) => p.numero_matricule === 47);
   assert.equal(mat47Juil.conge_pris_mois, 0);
-  assert.equal(mat47Juil.conge_restant, 30);
+  assert.equal(mat47Juil.conge_restant, 85);
 
   const paiesOct = await api.fetchPaiesMois(2026, 'OCTOBRE');
   const mat1Oct = paiesOct.employes.find((p) => p.numero_matricule === 1);
@@ -507,7 +555,7 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal(mat1Oct.conge_restant, 26);
   assert.equal(mat1Oct.conge_titre_actif, 2026);
   assert.equal(mat1Oct.conge_reste_titre, 26);
-  assert.equal(mat47Oct.conge_restant, 30);
+  assert.equal(mat47Oct.conge_restant, 85);
   assert.equal(mat47Oct.conge_titre_actif, 2026);
   assert.equal(mat47Oct.conge_reste_titre, 30);
   assert.ok(paiesOct.totaux.total_conge_restant > 0, 'Total des congés restants calculé sur l’état de paie');
@@ -602,7 +650,9 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2026, 4, meta, 'SOLDE_FINAL')).success, true, 'saisie solde final 2026 <= 30 j acceptée');
   mat1_2026 = (await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1);
   assert.equal(mat1_2026.bilans[2026].fin, 4, 'solde final 2026 fixé exactement à 4 j');
-  assert.equal((await api.fetchPaiesMois(2026, 'OCTOBRE')).employes.find((p) => p.numero_matricule === 1).conge_restant, 4, 'bulletin synchronisé à 4 j');
+  const mat1PaieOctobre = (await api.fetchPaiesMois(2026, 'OCTOBRE')).employes.find((p) => p.numero_matricule === 1);
+  assert.equal(mat1PaieOctobre.conge_restant, 64, 'bulletin : 30 j en 2024 + 30 j en 2025 + 4 j en 2026');
+  assert.equal(mat1PaieOctobre.conge_reste_titre, 4, 'bulletin : solde du titre actif = 4 j');
   assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2026, null, meta)).success, true, 'réinitialisation 2026 acceptée');
 
   // 4) Saisie 2024 sur un salarié embauché en 2025 (aucun blocage dans [0..30]) + reset

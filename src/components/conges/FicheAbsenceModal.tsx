@@ -16,6 +16,7 @@ import { downloadFicheAbsencePDF } from '../../pdf/congesPdf';
 import { BulletinHeaderModal } from '../BulletinHeaderModal';
 import { setRemoteCongeHeader } from '../../bulletin/header';
 import { WAMP } from '../../runtime';
+import { correspondRecherche, normaliserRecherche } from '../../local/recherche';
 import { X, Save, Printer, Eye, PenLine, CalendarClock, Info, CheckCircle2, Download, Settings2 } from 'lucide-react';
 
 export interface BrouillonConge extends Partial<CongeAbsence> {
@@ -81,6 +82,7 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
       ajustement_type: 'DROIT',
       ...initial,
     };
+    base.remplacant = String(base.remplacant || '').toLocaleUpperCase('fr-FR');
     if (base.categorie === 'CONGE') {
       if (!base.heure_debut) base.heure_debut = '07:45';
       if (!base.heure_fin) base.heure_fin = '07:45';
@@ -165,15 +167,11 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
     [b.categorie]
   );
   const solde: SoldeSaisie | null = b.employe_id ? soldes[Number(b.employe_id)] || null : null;
-  const q = recherche.trim().toLowerCase();
+  const q = normaliserRecherche(recherche);
   const candidats = useMemo(() => {
     const liste = employes.filter((e) => Number(e.actif) === 1 || (b.id && Number(e.id) === Number(b.employe_id)));
     const filtres = q
-      ? liste.filter((e) =>
-          String(e.nom_prenoms || '').toLowerCase().includes(q) ||
-          String(e.numero_matricule || '').includes(q) ||
-          String(e.jobs || '').toLowerCase().includes(q)
-        )
+      ? liste.filter((e) => correspondRecherche(q, e.nom_prenoms, e.numero_matricule, e.jobs, e.categorie))
       : liste;
     return filtres.slice(0, 40);
   }, [employes, q, b.employe_id, b.id]);
@@ -384,9 +382,9 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
             <div>
               <label className={etiquette}>Salarié (Anarana &amp; Fanampin’anarana)</label>
               <input
-                className={`${champ} mb-1.5`}
+                className={`${champ} mb-1.5 uppercase`}
                 value={recherche}
-                onChange={(e) => setRecherche(e.target.value)}
+                onChange={(e) => setRecherche(e.target.value.toLocaleUpperCase('fr-FR'))}
                 placeholder="Rechercher un nom, un matricule, une fonction…"
               />
               <div className="max-h-40 overflow-y-auto thin-scrollbar border border-slate-200 dark:border-slate-700 rounded-lg divide-y dark:divide-slate-700">
@@ -537,7 +535,7 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
               </div>
               <div>
                 <label className={etiquette}>Olona hisolo (personne remplaçante)</label>
-                <input className={champ} value={b.remplacant || ''} onChange={(e) => set('remplacant', e.target.value)} placeholder="Nom du collègue désigné" />
+                <input className={`${champ} uppercase`} value={b.remplacant || ''} onChange={(e) => set('remplacant', e.target.value.toLocaleUpperCase('fr-FR'))} placeholder="Nom du collègue désigné" />
               </div>
               <div>
                 <label className={etiquette}>Titre / Année ({cfg.nbAnneesCumul} dernières années)</label>

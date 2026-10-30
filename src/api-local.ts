@@ -10,6 +10,7 @@ import { getStore, saveStore, storeEstSynchronise, nextEmployeId, nextPaieId, ne
 import { calculerPaieEmploye, calculerAnciennete, estEnCongeMaternite } from './local/calcul';
 import { hashPassword } from './local/hash';
 import { loadConfig } from './local/config';
+import { correspondRecherche, normaliserRecherche } from './local/recherche';
 import { ImportWorkbookResult, ImportedEmploye, ImportedPaie, MOIS_FR } from './local/importExcel';
 import {
   CongeAbsence, CongesConfig, CategorieAbsence, ImputationConges, StatutConges,
@@ -311,13 +312,10 @@ export async function fetchEmployes(actifsOnly: boolean = false, search: string 
   if (actifsOnly) {
     employes = employes.filter((e: any) => Number(e.actif) === 1);
   }
-  if (search) {
-    const q = search.trim().toLowerCase();
+  const q = normaliserRecherche(search);
+  if (q) {
     employes = employes.filter((e: any) =>
-      String(e.nom_prenoms || '').toLowerCase().includes(q) ||
-      String(e.jobs || '').toLowerCase().includes(q) ||
-      String(e.categorie || '').toLowerCase().includes(q) ||
-      String(e.numero_matricule || '').includes(q)
+      correspondRecherche(q, e.nom_prenoms, e.jobs, e.categorie, e.numero_matricule)
     );
   }
 
@@ -403,7 +401,7 @@ export async function createEmploye(employe: Partial<Employe>): Promise<boolean>
   const newEmp: any = {
     id: nextEmployeId(),
     numero_matricule: mat,
-    nom_prenoms: String(employe.nom_prenoms || '').trim(),
+    nom_prenoms: String(employe.nom_prenoms || '').trim().toLocaleUpperCase('fr-FR'),
     numero_cnaps: String(employe.numero_cnaps || '').trim(),
     categorie: String(employe.categorie || '').trim(),
     jobs: String(employe.jobs || '').trim(),
@@ -458,7 +456,7 @@ export async function updateEmploye(
   const updated = {
     ...oldEmp,
     numero_matricule: mat,
-    nom_prenoms: String(employe.nom_prenoms ?? oldEmp.nom_prenoms ?? '').trim(),
+    nom_prenoms: String(employe.nom_prenoms ?? oldEmp.nom_prenoms ?? '').trim().toLocaleUpperCase('fr-FR'),
     numero_cnaps: String(employe.numero_cnaps ?? oldEmp.numero_cnaps ?? '').trim(),
     categorie: String(employe.categorie ?? oldEmp.categorie ?? '').trim(),
     jobs: String(employe.jobs ?? oldEmp.jobs ?? '').trim(),
@@ -1898,7 +1896,7 @@ function fusionnerEmploye(base: any, src: ImportedEmploye, ecraserValeurs = true
     if (!(v > 0)) continue;
     if (ecraserValeurs || !(Number(out[k] || 0) > 0)) out[k] = v;
   }
-  out.nom_prenoms = out.nom_prenoms || src.nom_prenoms;
+  out.nom_prenoms = String(out.nom_prenoms || src.nom_prenoms || '').trim().toLocaleUpperCase('fr-FR');
   return out;
 }
 
@@ -1906,7 +1904,7 @@ function nouveauEmploye(src: ImportedEmploye, actif: 0 | 1 = 1): any {
   return {
     id: nextEmployeId(),
     numero_matricule: Number(src.numero_matricule),
-    nom_prenoms: src.nom_prenoms || `SALARIÉ ${src.numero_matricule}`,
+    nom_prenoms: String(src.nom_prenoms || `SALARIÉ ${src.numero_matricule}`).trim().toLocaleUpperCase('fr-FR'),
     numero_cnaps: src.numero_cnaps || '',
     categorie: src.categorie || '',
     jobs: src.jobs || '',
@@ -2309,15 +2307,30 @@ export async function fetchConges(filtres: CongeFiltres = {}): Promise<CongeAbse
   if (filtres.categorie && filtres.categorie !== 'TOUTES') liste = liste.filter((c) => c.categorie === filtres.categorie);
   if (filtres.statut && filtres.statut !== 'TOUS') liste = liste.filter((c) => c.statut === filtres.statut);
   else if (!filtres.inclureRefuses && !filtres.statut) liste = liste.filter((c) => estPrisEnCompte(c));
-  const q = String(filtres.recherche || '').trim().toLowerCase();
+  const q = normaliserRecherche(filtres.recherche);
   if (q) {
-    liste = liste.filter((c) =>
-      String(c.nom_prenoms || '').toLowerCase().includes(q) ||
-      String(c.fonction || '').toLowerCase().includes(q) ||
-      String(c.motif_libelle || '').toLowerCase().includes(q) ||
-      String(c.numero_matricule || '').includes(q) ||
-      String(c.remplacant || '').toLowerCase().includes(q)
-    );
+    const employes = getStore().employes || [];
+    const employesParId = new Map<number, any>(employes.map((e: any): [number, any] => [Number(e.id), e]));
+    const employesParMatricule = new Map<number, any>(employes.map((e: any): [number, any] => [Number(e.numero_matricule), e]));
+    liste = liste.filter((c) => {
+      const employe = employesParId.get(Number(c.employe_id)) || employesParMatricule.get(Number(c.numero_matricule));
+      return correspondRecherche(
+        q,
+        c.nom_prenoms,
+        c.fonction,
+        c.motif_libelle,
+        c.motif_code,
+        c.categorie,
+        c.numero_matricule,
+        c.remplacant,
+        c.titre_periode,
+        c.ajustement_type,
+        c.annee,
+        employe?.nom_prenoms,
+        employe?.jobs,
+        employe?.categorie
+      );
+    });
   }
   return liste.sort((x, y) =>
     String(y.date_debut || '').localeCompare(String(x.date_debut || '')) ||
@@ -2345,16 +2358,33 @@ export async function fetchEtatConges(
   if (options.inclureInactifs === false) {
     employes = employes.filter((e: any) => !estEmployeInactif(e));
   }
-  const q = String(options.recherche || '').trim().toLowerCase();
+  const conges = congesBruts();
+  const q = normaliserRecherche(options.recherche);
   if (q) {
+    const fichesCorrespondantes = conges.filter((c) =>
+      correspondRecherche(
+        q,
+        c.nom_prenoms,
+        c.fonction,
+        c.motif_libelle,
+        c.motif_code,
+        c.categorie,
+        c.numero_matricule,
+        c.remplacant,
+        c.titre_periode,
+        c.ajustement_type,
+        c.annee
+      )
+    );
+    const employeIdsCorrespondants = new Set(fichesCorrespondantes.map((c) => Number(c.employe_id)));
+    const matriculesCorrespondants = new Set(fichesCorrespondantes.map((c) => Number(c.numero_matricule)));
     employes = employes.filter((e: any) =>
-      String(e.nom_prenoms || '').toLowerCase().includes(q) ||
-      String(e.jobs || '').toLowerCase().includes(q) ||
-      String(e.categorie || '').toLowerCase().includes(q) ||
-      String(e.numero_matricule || '').includes(q)
+      correspondRecherche(q, e.nom_prenoms, e.jobs, e.categorie, e.numero_matricule) ||
+      employeIdsCorrespondants.has(Number(e.id)) ||
+      matriculesCorrespondants.has(Number(e.numero_matricule))
     );
   }
-  return construireEtat(employes, congesBruts(), cfg, {
+  return construireEtat(employes, conges, cfg, {
     annee: Number(annee) || new Date().getFullYear(),
     nbAnnees: Number(options.nbAnnees) || cfg.nbAnneesCumul,
     inclureRefuses: options.inclureRefuses === true,
@@ -2481,7 +2511,7 @@ async function prepareConge(
     id: idCourant || nextCongeId(),
     employe_id: Number(emp.id),
     numero_matricule: Number(emp.numero_matricule) || 0,
-    nom_prenoms: nettoyerTexte(emp.nom_prenoms, 120),
+    nom_prenoms: nettoyerTexte(emp.nom_prenoms, 120).toLocaleUpperCase('fr-FR'),
     fonction: nettoyerTexte(emp.jobs || emp.categorie || '', 80),
     service: nettoyerTexte(draft.service, 120),
     contact: nettoyerTexte(draft.contact, 160),
@@ -2498,7 +2528,7 @@ async function prepareConge(
     heure_fin: nettoyerHeure(draft.heure_fin) || (categorie === 'CONGE' ? '07:45' : ''),
     jours_demandes: jours,
     jours_valides: joursValides,
-    remplacant: nettoyerTexte(draft.remplacant, 120),
+    remplacant: nettoyerTexte(draft.remplacant, 120).toLocaleUpperCase('fr-FR'),
     titre_periode: nettoyerTexte(draft.titre_periode, 60),
     justificatif: nettoyerTexte(draft.justificatif, 160),
     observations: nettoyerTexte(draft.observations, 500),
@@ -2830,7 +2860,7 @@ export async function saisirOuverturePremiereAnnee(
     id: idConserve,
     employe_id: Number(emp.id),
     numero_matricule: Number(emp.numero_matricule) || 0,
-    nom_prenoms: nettoyerTexte(emp.nom_prenoms, 120),
+    nom_prenoms: nettoyerTexte(emp.nom_prenoms, 120).toLocaleUpperCase('fr-FR'),
     fonction: nettoyerTexte(emp.jobs || emp.categorie || '', 80),
     categorie: 'AJUSTEMENT',
     ajustement_type: 'OUVERTURE',

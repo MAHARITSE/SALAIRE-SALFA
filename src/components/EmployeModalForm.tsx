@@ -87,7 +87,7 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
   const todayIso = () => new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     numero_matricule: employe?.numero_matricule || '',
-    nom_prenoms: employe?.nom_prenoms || '',
+    nom_prenoms: String(employe?.nom_prenoms || '').toLocaleUpperCase('fr-FR'),
     numero_cnaps: employe?.numero_cnaps || '',
     categorie: employe?.categorie || '',
     jobs: employe?.jobs || '',
@@ -171,7 +171,7 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
       const dataToSend: Partial<Employe> = {
         ...form,
         numero_matricule: Number(form.numero_matricule),
-        nom_prenoms: String(form.nom_prenoms || '').trim(),
+        nom_prenoms: String(form.nom_prenoms || '').trim().toLocaleUpperCase('fr-FR'),
         numero_cnaps: String(form.numero_cnaps || '').trim(),
         categorie: String(form.categorie || '').trim(),
         jobs: String(form.jobs || '').trim(),
@@ -247,9 +247,16 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
                   list={f.isCategorie ? 'salfa-categories-datalist' : undefined}
                   placeholder={f.isCategorie ? 'Ex: 2B, 3A, HC ou nouvelle catégorie…' : undefined}
                   value={(form as any)[f.key]}
-                  onChange={(e) => setForm({ ...form, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value })}
+                  onChange={(e) => setForm({
+                    ...form,
+                    [f.key]: f.type === 'number'
+                      ? Number(e.target.value)
+                      : f.key === 'nom_prenoms'
+                        ? e.target.value.toLocaleUpperCase('fr-FR')
+                        : e.target.value,
+                  })}
                   required={!!f.required}
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm"
+                  className={`w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm ${f.key === 'nom_prenoms' ? 'uppercase' : ''}`}
                 />
                 {f.isCategorie && (
                   <>
