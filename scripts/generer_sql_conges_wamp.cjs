@@ -1,21 +1,16 @@
 #!/usr/bin/env node
 /**
- * Génère le fichier SQL relationnel MySQL/MariaDB (WAMP) pour les congés & permissions
- * à partir du classeur Excel « CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb ».
+ * Génère le SQL WAMP des soldes de congés depuis le dernier classeur Excel SALFA.
+ * Le classeur actuel est un relevé de soldes restants par salarié et par année
+ * (2024–2026); ses cases vides sont importées comme 0 jour. Les anciens classeurs
+ * détaillés (.xlsb) restent acceptés en argument explicite.
  *
  * Produit :
- *   1. wamp/sql/salfa_conges_excel.sql
- *      -> Script SQL 100 % relationnel (colonnes et lignes MySQL — AUCUN JSON).
- *      -> Supprime toute ancienne table JSON `salfa_state` si présente.
- *      -> Crée les tables relationnelles et ajoute les utilisateurs par défaut
- *         (`admin` / `admin123` et `comptable` / `comptable123`) dans `salfa_users`.
- *      -> Ajoute les salariés manquants dans `salfa_employes` sans écraser les salaires/paies,
- *         puis insère les 610 fiches d'absence dans `salfa_conges` (1 ligne = 1 fiche, 1 colonne = 1 champ).
- *   2. src/data/salfa_conges_historique.json
- *   3. Mise à jour synchronisée de src/data/salfa_data.json
+ *   1. wamp/sql/salfa_conges_excel.sql (SQL relationnel MySQL/MariaDB)
+ *   2. src/data/salfa_data.json (soldes annuels utilisés comme ouvertures exactes)
+ *   3. Préserve src/data/salfa_conges_historique.json pour les anciens salariés
  *
- * Usage :
- *   node scripts/generer_sql_conges_wamp.cjs [chemin_classeur.xlsb]
+ * Usage : node scripts/generer_sql_conges_wamp.cjs [chemin_classeur.xlsx|xlsb]
  */
 
 const assert = require('node:assert/strict');
@@ -23,14 +18,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const Module = require('node:module');
 const esbuild = require('esbuild');
+const { lireSnapshotConges } = require('./controle_conges_snapshot.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
-const DEFAULT_EXCEL = path.join(ROOT, 'CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb');
+const DEFAULT_EXCEL = path.join(ROOT, 'CONTROLE CONGE A JOUR SALFA 2026.xlsx');
 const DATA_2026_PATH = path.join(ROOT, 'src', 'data', 'salfa_data.json');
 const DATA_HIST_PATH = path.join(ROOT, 'src', 'data', 'salfa_historique.json');
 const OUT_HIST_CONGES_PATH = path.join(ROOT, 'src', 'data', 'salfa_conges_historique.json');
 const OUT_SQL_DIR = path.join(ROOT, 'wamp', 'sql');
 const OUT_SQL_PATH = path.join(OUT_SQL_DIR, 'salfa_conges_excel.sql');
+const CONGES_VERSION = 'controle-solde-2026-10-30';
+const HORODATAGE_IMPORT = '2026-10-30 12:25:14';
 
 // Hashs bcrypt compatibles PHP password_verify()
 const HASH_ADMIN = '$2y$10$YX/zKbv4VMuSaS3ddJB5MuBWGfTgOr6aIf7L4PEsva5y2hyHw0j/G'; // admin123
@@ -170,6 +168,68 @@ function convertirLignesEnFiches(lignesSource, parMat, congesMod, existantsIniti
   return fiches;
 }
 
+function horodatageSnapshot(snapshot) {
+  if (snapshot.dateModification instanceof Date && Number.isFinite(snapshot.dateModification.getTime())) {
+    return snapshot.dateModification.toISOString().slice(0, 19).replace('T', ' ');
+  }
+  return HORODATAGE_IMPORT;
+}
+
+function convertirSoldesEnFiches(snapshot, congesMod, horodatage) {
+  const fiches = [];
+  let id = 0;
+  for (const ligne of snapshot.lignes) {
+    const emp = ligne.employe;
+    for (const solde of ligne.soldes) {
+      id += 1;
+      fiches.push(congesMod.normaliserConge({
+        id,
+        employe_id: Number(emp.id),
+        numero_matricule: Number(emp.numero_matricule) || 0,
+        nom_prenoms: emp.nom_prenoms,
+        fonction: emp.jobs || '',
+        categorie: 'AJUSTEMENT',
+        ajustement_type: 'OUVERTURE',
+        imputation: 'AUCUNE',
+        annee: solde.annee,
+        date_demande: `${solde.annee}-01-01`,
+        date_debut: `${solde.annee}-01-01`,
+        jours_demandes: solde.jours,
+        jours_valides: null,
+        titre_periode: `Titre ${solde.annee}`,
+        motif_libelle: `Solde restant importé — Titre ${solde.annee}`,
+        observations: `Solde restant repris de ${snapshot.fichier}; les cases vides du classeur sont importées à 0 jour.`,
+        statut: 'VALIDE',
+        saisie_par: 'Import Excel',
+        date_saisie: horodatage,
+        date_modification: horodatage,
+      }));
+    }
+  }
+  return fiches;
+}
+
+function chargerCongesHistoriques(parMatTous, matriculesCourants, congesMod, premierId) {
+  if (!fs.existsSync(OUT_HIST_CONGES_PATH)) return [];
+  const doc = JSON.parse(fs.readFileSync(OUT_HIST_CONGES_PATH, 'utf8'));
+  let id = premierId;
+  const fiches = [];
+  for (const brut of doc.conges || []) {
+    const mat = Number(brut.numero_matricule) || 0;
+    if (!mat || matriculesCourants.has(mat)) continue;
+    const emp = parMatTous.get(mat);
+    if (!emp) throw new Error(`Salarié historique matricule ${mat} absent du référentiel employé.`);
+    id += 1;
+    fiches.push(congesMod.normaliserConge({
+      ...brut,
+      id,
+      employe_id: Number(emp.id),
+      numero_matricule: mat,
+    }));
+  }
+  return fiches;
+}
+
 function ddlTablesRelationnelles() {
   return [
     '-- Suppression de l\'ancienne table JSON (plus aucun stockage JSON dans MySQL)',
@@ -193,7 +253,7 @@ function ddlTablesRelationnelles() {
     '  `annee` INT NOT NULL DEFAULT 2026,',
     "  `source_version` VARCHAR(60) NOT NULL DEFAULT 'classeur-2026-10',",
     "  `source_historique` VARCHAR(160) NOT NULL DEFAULT 'SALAIRE SALFA 2022-2025',",
-    "  `conges_version` VARCHAR(60) NOT NULL DEFAULT 'controle-2026-10',",
+    "  `conges_version` VARCHAR(60) NOT NULL DEFAULT '" + CONGES_VERSION + "',",
     '  `conges_loi_3ans` INT NOT NULL DEFAULT 3,',
     "  `date_modification` VARCHAR(32) NOT NULL DEFAULT ''",
     ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
@@ -385,7 +445,7 @@ function ddlTablesRelationnelles() {
     `  (1, 'admin', 'Administrateur Principal SALFA', 'Administrateur', 1, '${HASH_ADMIN}'),`,
     `  (2, 'comptable', 'Comptable Clinique SALFA', 'Comptable', 1, '${HASH_COMPTABLE}');`,
     '',
-    "INSERT IGNORE INTO `salfa_revision` (`id`, `revision`, `conges_version`, `conges_loi_3ans`) VALUES (1, 1, 'controle-2026-10', 3);",
+    "INSERT IGNORE INTO `salfa_revision` (`id`, `revision`, `conges_version`, `conges_loi_3ans`) VALUES (1, 1, '" + CONGES_VERSION + "', 3);",
     "INSERT IGNORE INTO `salfa_config` (`id`, `configuree`, `jours_feries`) VALUES (1, 0, '');",
     'INSERT IGNORE INTO `salfa_entete` (`id`, `configuree`) VALUES (1, 0), (2, 0);',
     '',
@@ -420,79 +480,126 @@ function main() {
   const data2026 = JSON.parse(fs.readFileSync(DATA_2026_PATH, 'utf8'));
   const dataHist = JSON.parse(fs.readFileSync(DATA_HIST_PATH, 'utf8'));
   const { congesMod, importMod } = chargerMoteurConges();
-
   const { tous: tousEmployes, parMat: parMatTous } = construireEmployesComplets(data2026, dataHist);
   const parMat2026 = new Map(data2026.employes.map((e) => [Number(e.numero_matricule), e]));
-
+  const matriculesCourants = new Set(parMat2026.keys());
   const bufExcel = fs.readFileSync(cheminExcel);
-  const analyse = importMod.analyserControleConges(bufExcel, path.basename(cheminExcel), tousEmployes);
+  const nomFichier = path.basename(cheminExcel);
 
-  let feuillesRetenues = analyse.feuilles.filter((f) => f.reconnue && !f.archiveProbable && f.nbLignes > 0).map((f) => f.nom);
-  if (feuillesRetenues.length === 0) {
-    feuillesRetenues = analyse.feuilles.filter((f) => f.reconnue && f.nbLignes > 0).map((f) => f.nom);
-  }
-  const setFeuilles = new Set(feuillesRetenues);
-  const lignesRetenues = analyse.lignes.filter((l) => setFeuilles.has(l.feuille));
+  // Le classeur 2026 actuel est un instantané de soldes annuels, pas un journal
+  // des demandes. Les cases vides sont des soldes nuls, selon la confirmation du gestionnaire.
+  const snapshot = lireSnapshotConges(bufExcel, nomFichier, tousEmployes, congesMod.retrouverEmploye);
+  let feuillesRetenues = [];
+  let fiches2026 = [];
+  let fichesAnciensSeuls = [];
+  let fichesToutes = [];
+  let versionConges = CONGES_VERSION;
+  let nbSalariesSnapshot = 0;
 
-  const lignes2026 = lignesRetenues.filter((l) => l.numero_matricule && parMat2026.has(Number(l.numero_matricule)));
-  const fiches2026 = convertirLignesEnFiches(lignes2026, parMat2026, congesMod, [], 0);
+  if (snapshot) {
+    feuillesRetenues = [snapshot.feuille];
+    const horodatage = horodatageSnapshot(snapshot);
+    fiches2026 = convertirSoldesEnFiches(snapshot, congesMod, horodatage);
+    assert.equal(
+      fiches2026.length,
+      snapshot.lignes.length * snapshot.annees.length,
+      'Chaque salarié doit avoir une ligne de solde pour chaque année (cases vides incluses).'
+    );
+    fichesAnciensSeuls = chargerCongesHistoriques(
+      parMatTous,
+      matriculesCourants,
+      congesMod,
+      fiches2026.length
+    );
+    fichesToutes = [...fiches2026, ...fichesAnciensSeuls];
+    nbSalariesSnapshot = snapshot.lignes.length;
 
-  const lignesAnciens = lignesRetenues.filter(
-    (l) => l.numero_matricule && !parMat2026.has(Number(l.numero_matricule)) && parMatTous.has(Number(l.numero_matricule))
-  );
-  const fichesToutes = convertirLignesEnFiches(
-    lignesAnciens,
-    parMatTous,
-    congesMod,
-    fiches2026.map((c) => ({ ...c, employe_id: Number(parMatTous.get(Number(c.numero_matricule)).id) })),
-    fiches2026.length
-  );
-  const fichesAnciensSeuls = fichesToutes.slice(fiches2026.length);
-  assert.ok(fichesToutes.length > 0, 'Aucune fiche de congé reconnue dans le classeur Excel');
+    data2026.meta = {
+      ...(data2026.meta || {}),
+      conges_version: CONGES_VERSION,
+      conges_source_file: nomFichier,
+      conges_mode_import: 'SOLDE_RESTANT_PAR_ANNEE',
+      conges_loi_3ans: 3,
+    };
+    data2026.conges = fiches2026;
+    fs.writeFileSync(DATA_2026_PATH, JSON.stringify(data2026, null, 2) + '\n', 'utf8');
+    // Ne pas remplacer le fichier des anciennes fiches: le relevé annuel ne contient
+    // aucune donnée concernant les anciens salariés absents du classeur 2026.
+  } else {
+    // Compatibilité avec l'ancien classeur détaillé .xlsb / format des demandes datées.
+    const analyse = importMod.analyserControleConges(bufExcel, nomFichier, tousEmployes);
+    feuillesRetenues = analyse.feuilles
+      .filter((f) => f.reconnue && !f.archiveProbable && f.nbLignes > 0)
+      .map((f) => f.nom);
+    if (feuillesRetenues.length === 0) {
+      feuillesRetenues = analyse.feuilles.filter((f) => f.reconnue && f.nbLignes > 0).map((f) => f.nom);
+    }
+    const setFeuilles = new Set(feuillesRetenues);
+    const lignesRetenues = analyse.lignes.filter((l) => setFeuilles.has(l.feuille));
+    const lignes2026 = lignesRetenues.filter((l) => l.numero_matricule && parMat2026.has(Number(l.numero_matricule)));
+    fiches2026 = convertirLignesEnFiches(lignes2026, parMat2026, congesMod, [], 0);
+    const lignesAnciens = lignesRetenues.filter(
+      (l) => l.numero_matricule && !parMat2026.has(Number(l.numero_matricule)) && parMatTous.has(Number(l.numero_matricule))
+    );
+    fichesToutes = convertirLignesEnFiches(
+      lignesAnciens,
+      parMatTous,
+      congesMod,
+      fiches2026.map((c) => ({ ...c, employe_id: Number(parMatTous.get(Number(c.numero_matricule)).id) })),
+      fiches2026.length
+    );
+    fichesAnciensSeuls = fichesToutes.slice(fiches2026.length);
+    versionConges = 'controle-2026-10-legacy';
+    assert.ok(fichesToutes.length > 0, 'Aucune fiche de congé reconnue dans le classeur Excel');
 
-  data2026.meta = {
-    ...(data2026.meta || {}),
-    conges_version: 'controle-2026-10',
-    conges_loi_3ans: 3,
-  };
-  data2026.conges = fiches2026;
-  fs.writeFileSync(DATA_2026_PATH, JSON.stringify(data2026, null, 2) + '\n', 'utf8');
-  fs.writeFileSync(
-    OUT_HIST_CONGES_PATH,
-    JSON.stringify(
-      {
-        meta: {
-          source_excel: path.basename(cheminExcel),
-          feuilles: feuillesRetenues,
-          conges_version: 'controle-2026-10',
-          nb_conges_anciens: fichesAnciensSeuls.length,
+    data2026.meta = {
+      ...(data2026.meta || {}),
+      conges_version: versionConges,
+      conges_source_file: nomFichier,
+      conges_mode_import: 'FICHES_ABSENCE_DETAILLEES',
+      conges_loi_3ans: 3,
+    };
+    data2026.conges = fiches2026;
+    fs.writeFileSync(DATA_2026_PATH, JSON.stringify(data2026, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(
+      OUT_HIST_CONGES_PATH,
+      JSON.stringify(
+        {
+          meta: {
+            source_excel: nomFichier,
+            feuilles: feuillesRetenues,
+            conges_version: versionConges,
+            nb_conges_anciens: fichesAnciensSeuls.length,
+          },
+          conges: fichesAnciensSeuls,
         },
-        conges: fichesAnciensSeuls,
-      },
-      null,
-      2
-    ) + '\n',
-    'utf8'
-  );
+        null,
+        2
+      ) + '\n',
+      'utf8'
+    );
+  }
 
   const matsPresents = Array.from(new Set(fichesToutes.map((c) => Number(c.numero_matricule)))).sort((a, b) => a - b);
   const nbCongesAnnuels = fichesToutes.filter((c) => c.categorie === 'CONGE').length;
   const nbPermissions = fichesToutes.filter((c) => c.categorie === 'PERMISSION').length;
+  const nbSoldesAnnuels = fichesToutes.filter((c) => c.categorie === 'AJUSTEMENT' && c.ajustement_type === 'OUVERTURE').length;
   const anneesCouvertes = Array.from(new Set(fichesToutes.map((c) => Number(c.annee)))).sort((a, b) => a - b);
 
   const sql = [
     '-- ============================================================================',
     '-- SALFA TOLIARA — Gestion des Salaires & Congés (Version WAMP / MySQL)',
-    '-- Script SQL relationnel : Importation des Congés & Permissions depuis Excel',
+    '-- Script SQL relationnel : importation des soldes et de l’historique de congés',
     '-- ============================================================================',
-    `-- Fichier source : ${path.basename(cheminExcel)} (feuille(s) : ${feuillesRetenues.join(', ')})`,
+    `-- Fichier source : ${nomFichier} (feuille(s) : ${feuillesRetenues.join(', ')})`,
+    `-- Version contrôle : ${versionConges}`,
     `-- Structure : 100 % relationnelle en colonnes et lignes (AUCUN JSON dans MySQL)`,
     `-- Utilisateurs par défaut inclus dans salfa_users :`,
     `--   * admin / admin123 (Administrateur)`,
     `--   * comptable / comptable123 (Comptable)`,
     `-- Contenu importé dans salfa_conges :`,
-    `--   * ${fichesToutes.length} lignes (${nbCongesAnnuels} congés annuels + ${nbPermissions} permissions)`,
-    `--   * ${matsPresents.length} salariés SALFA (${anneesCouvertes[0]} à ${anneesCouvertes[anneesCouvertes.length - 1]})`,
+    `--   * ${fichesToutes.length} lignes : ${nbSoldesAnnuels} soldes annuels (cases vides = 0) + ${nbCongesAnnuels} fiches de congé + ${nbPermissions} permissions historiques`,
+    `--   * ${snapshot ? `${nbSalariesSnapshot} salariés avec soldes` : `${fiches2026.length} fiches actuelles`} + ${Math.max(0, matsPresents.length - nbSalariesSnapshot)} salariés d’archive; années ${anneesCouvertes[0]}–${anneesCouvertes[anneesCouvertes.length - 1]}`,
     '-- ============================================================================',
     '',
     'SET NAMES utf8mb4;',
@@ -562,7 +669,7 @@ function main() {
     'SET c.`employe_id` = e.`id`;',
     '',
     'UPDATE `salfa_revision`',
-    "SET `revision` = `revision` + 1, `conges_version` = 'controle-2026-10', `conges_loi_3ans` = 3, `date_modification` = NOW()",
+    "SET `revision` = `revision` + 1, `conges_version` = '" + versionConges + "', `conges_loi_3ans` = 3, `date_modification` = NOW()",
     'WHERE `id` = 1;',
     '',
     'COMMIT;',
@@ -579,8 +686,9 @@ function main() {
   console.log(
     [
       `SQL relationnel WAMP congés généré : ${path.relative(ROOT, OUT_SQL_PATH)} (${tailleKo} Ko)`,
-      `  - Fiches totales   : ${fichesToutes.length} (${nbCongesAnnuels} congés, ${nbPermissions} permissions)`,
-      `  - Salariés couverts: ${matsPresents.length} (${fiches2026.length} sur personnel 2026 + ${fichesAnciensSeuls.length} sur anciens 2022–2025)`,
+      `  - Soldes annuels  : ${nbSoldesAnnuels} lignes (${nbSalariesSnapshot} salariés × ${snapshot ? snapshot.annees.length : 0} années, cases vides = 0)`,
+      `  - Historique      : ${nbCongesAnnuels} congés + ${nbPermissions} permissions (${fichesAnciensSeuls.length} fiches)`,
+      `  - Salariés couverts: ${matsPresents.length} matricules`,
       `  - Années couvertes : ${anneesCouvertes.join(', ')}`,
       `  - Utilisateurs SQL : admin / admin123, comptable / comptable123`,
     ].join('\n')

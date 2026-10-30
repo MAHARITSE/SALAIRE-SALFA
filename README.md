@@ -252,11 +252,11 @@ reprend fidèlement :
   *Fitsipika Anatiny* : permissions de 10 j/an, congés de 30 j/an plafonnés à 90 j,
   examens médicaux sur justificatif médical, soldes *sisa ambiny* / *Titre-Année* /
   *sisa tavela*, et circuit de visas *Ny mpangataka → Chef de Service → Médecin Chef → Gestionnaire*) ;
-- le **`CONTRÔLE DES CONGÉS ET PERMISSIONS`** (`CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb`) :
-  consommation chronologique par **Titre / Année**, état multi-années consultable à l'écran,
-  imprimable en A4 paysage, téléchargeable en **PDF** et exportable en **Excel (`.xlsx`)**,
-  import direct d'un contrôle **`.xlsb` / `.xlsx`** dans l'interface, ainsi qu'un script SQL
-  dédié pour MySQL / WampServer (**`wamp/sql/salfa_conges_excel.sql`**, régénérable via
-  `npm run sql:conges`) permettant d'importer les 610 fiches de congés et permissions dans
-  `salfa_paie` sans écraser les bulletins de paie existants.
+- le **`CONTROLE CONGE A JOUR SALFA 2026.xlsx`** contient les soldes restants par salarié
+  pour **2024, 2025 et 2026** (43 salariés; les cellules vides valent 0). Le SQL WAMP
+  (**`wamp/sql/salfa_conges_excel.sql`**, régénérable via `npm run sql:conges`) importe
+  ces 129 soldes comme ajustements d'ouverture et conserve 83 fiches historiques pour
+  d'anciens salariés. Le classeur 2026 ne contient pas les dates des congés; l'ancien
+  classeur détaillé `.xlsb` reste accepté par le lecteur historique. L'import SQL dédié
+  ne supprime pas les bulletins de paie existants.
 
