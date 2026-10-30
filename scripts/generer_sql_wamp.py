@@ -260,7 +260,6 @@ def main() -> None:
         "  `net` DOUBLE NOT NULL DEFAULT 0,",
         "  `virement` DOUBLE NULL DEFAULT NULL,",
         "  `especes` DOUBLE NULL DEFAULT NULL,",
-        "  `rap` TINYINT NOT NULL DEFAULT 1,",
         "  `rib` VARCHAR(80) NOT NULL DEFAULT '',",
         "  `verrouille` TINYINT NOT NULL DEFAULT 0,",
         "  `conge_maternite` TINYINT NOT NULL DEFAULT 0,",
@@ -380,6 +379,11 @@ def main() -> None:
         "  `logo_droite` LONGTEXT NULL",
         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
         "",
+        "CREATE TABLE IF NOT EXISTS `salfa_annees` (",
+        "  `annee` INT NOT NULL PRIMARY KEY,",
+        "  `date_creation` VARCHAR(32) NOT NULL DEFAULT ''",
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+        "",
         "-- ============================================================================",
         "-- 1. Utilisateurs par défaut (INSERT IGNORE : conserve les comptes déjà créés)",
         "-- ============================================================================",
@@ -470,13 +474,12 @@ def main() -> None:
             "  `logt_trsp`, `rendement`, `resp_repres`, `salaire_brut`, `cnaps`, `patronal`,",
             "  `salaire_imposable`, `irsa`, `salaire_net`, `augmentation_divers`, `prime_de_garde`,",
             "  `anciennete2`, `risque`, `repr_rec`, `accessoir`, `brut`, `avance`, `med`, `net`,",
-            "  `virement`, `especes`, `rap`, `rib`, `verrouille`, `conge_maternite`,",
+            "  `virement`, `especes`, `rib`, `verrouille`, `conge_maternite`,",
             "  `date_debut_maternite`, `date_modification`",
             ") VALUES",
         ])
         for idx, p in enumerate(lot):
             fin = ";" if idx == len(lot) - 1 else ","
-            rap_val = 0 if p.get("rap") == 0 else 1
             lignes.append(
                 f"  ({sql_int(p['id'])}, {sql_int(p['employe_id'])}, {sql_int(p['numero_matricule'])}, "
                 f"{sql_int(p['annee'])}, {sql_str(str(p.get('mois', '')).upper(), 20)}, {sql_str(p.get('nom_prenoms', ''), 160)}, "
@@ -489,7 +492,7 @@ def main() -> None:
                 f"{sql_num(p.get('anciennete2', 0))}, {sql_num(p.get('risque', 0))}, {sql_num(p.get('repr_rec', 0))}, "
                 f"{sql_num(p.get('accessoir', 0))}, {sql_num(p.get('brut', 0))}, {sql_num(p.get('avance', 0))}, "
                 f"{sql_num(p.get('med', 0))}, {sql_num(p.get('net', 0))}, {sql_num(p.get('virement'))}, "
-                f"{sql_num(p.get('especes'))}, {rap_val}, {sql_str(p.get('rib', ''), 80)}, "
+                f"{sql_num(p.get('especes'))}, {sql_str(p.get('rib', ''), 80)}, "
                 f"{1 if p.get('verrouille') else 0}, {1 if p.get('conge_maternite') else 0}, "
                 f"{sql_str(p.get('date_debut_maternite', ''), 20)}, {sql_str(p.get('date_modification', ''), 32)}){fin}"
             )

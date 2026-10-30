@@ -65,7 +65,7 @@ const RUBRIQUES_CLES: { key: ChampSalfa; court: string }[] = [
   { key: 'nom_prenoms', court: 'Nom & Prénoms' },
   { key: 'categorie', court: 'CAT' },
   { key: 'jobs', court: 'Fonction' },
-  { key: 'base_aj', court: 'BASE AJ' },
+  { key: 'base_aj', court: 'Base' },
   { key: 'logt_trsp', court: 'Logt/Trsp' },
   { key: 'rendement', court: 'Rendement' },
   { key: 'resp_repres', court: 'Resp.' },
@@ -958,7 +958,7 @@ export const ImportExcelModal: React.FC<Props> = ({
                               <th className="py-2 px-2">Nom et Prénoms</th>
                               <th className="py-2 px-2 text-center">CAT</th>
                               <th className="py-2 px-2">Fonction</th>
-                              <th className="py-2 px-2 text-right">BASE AJ</th>
+                              <th className="py-2 px-2 text-right normal-case">Base</th>
                               <th className="py-2 px-2 text-right">Sal. Brut</th>
                               <th className="py-2 px-2 text-right">CNaPS</th>
                               <th className="py-2 px-2 text-right">IRSA</th>
@@ -1012,7 +1012,7 @@ export const ImportExcelModal: React.FC<Props> = ({
                               <th className="py-2 px-2">Fonction (JOBS)</th>
                               <th className="py-2 px-2">Embauche</th>
                               <th className="py-2 px-2 text-center">Ans</th>
-                              <th className="py-2 px-2 text-right">BASE AJ</th>
+                              <th className="py-2 px-2 text-right normal-case">Base</th>
                               <th className="py-2 px-2 text-right">Logt/Trsp</th>
                               <th className="py-2 px-2 text-right">Rend.</th>
                               <th className="py-2 px-2 text-right">Resp.</th>

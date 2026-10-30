@@ -108,7 +108,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
 
   // Colonnes (UI seulement)
   const [colonnes, setColonnes] = useState([
-    { id: 'base_aj', nom: 'BASE AJ (Salaire de base)', type: 'Gain de base', permanent: true },
+    { id: 'base_aj', nom: 'Base (Salaire de base)', type: 'Gain de base', permanent: true },
     { id: 'logt_trsp', nom: 'Indemnité Logement & Transport', type: 'Gain de base', permanent: true },
     { id: 'rendement', nom: 'Prime de Rendement', type: 'Gain de base', permanent: true },
     { id: 'resp_repres', nom: 'RESP REPRES', type: 'Gain de base', permanent: true },
@@ -332,7 +332,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
             <div className="space-y-5">
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-[11px] sm:text-xs text-amber-900 dark:text-amber-200 flex gap-2">
                 <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                <span><b>Édition autorisée :</b> tous les calculs (IRSA, CNaPS, maternité, ancienneté, arrondis, RAP) sont éditables ici. Les modifications sont stockées en <code>localStorage</code> et s'appliquent immédiatement aux nouveaux bulletins. Le bouton <b>Réinitialiser</b> restaure la loi malgache par défaut.</span>
+                <span><b>Édition autorisée :</b> tous les calculs (IRSA, CNaPS, maternité, ancienneté, arrondis) sont éditables ici. Les modifications sont stockées en <code>localStorage</code> et s'appliquent immédiatement aux nouveaux bulletins. Le bouton <b>Réinitialiser</b> restaure la loi malgache par défaut.</span>
               </div>
 
               {/* Maternité */}
@@ -349,7 +349,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                 </div>
                 <div className="text-[11px] sm:text-xs text-slate-700 dark:text-slate-300 bg-white/80 dark:bg-slate-800/80 p-3 rounded-lg border border-pink-200 dark:border-pink-800">
                   <div className="font-bold text-pink-900 dark:text-pink-300 mb-1 flex items-center gap-1.5"><Calculator className="w-4 h-4" />Formule :</div>
-                  <code className="block bg-slate-100 dark:bg-slate-700 p-2 rounded font-mono text-salfa-dark dark:text-slate-200 text-[11px] sm:text-xs overflow-x-auto">Salaire Brut = (BASE AJ + Logt Trsp + Rendement + RESP) × {tauxMaternite}% si maternité sinon 100%</code>
+                  <code className="block bg-slate-100 dark:bg-slate-700 p-2 rounded font-mono text-salfa-dark dark:text-slate-200 text-[11px] sm:text-xs overflow-x-auto">Salaire Brut = (Base + Logt Trsp + Rendement + RESP) × {tauxMaternite}% si maternité sinon 100%</code>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -379,15 +379,15 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                   <div><label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Minimum IRSA</label><input type="number" value={minIrsa} onChange={(e) => setMinIrsa(Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" /></div>
                   <div><label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Arrondi base imposable (Ar)</label><input type="number" value={arrondiIrsaBase} onChange={(e) => setArrondiIrsaBase(Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" /><span className="text-[10px] text-slate-500">0 = pas d'arrondi, 100 = centaine inf.</span></div>
                   <div><label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Arrondi NET à payer (Ar)</label><input type="number" value={arrondiNet} onChange={(e) => setArrondiNet(Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" /><span className="text-[10px] text-slate-500">100 par défaut (100 Ar inf.)</span></div>
-                  <div><label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Plafond espèces RAP + RIB (Ar)</label><input type="number" value={plafondEspeces} onChange={(e) => setPlafondEspeces(Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" /><span className="text-[10px] text-slate-500">Ex: 5000 si virement partiel</span></div>
+                  <div><label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Plafond espèces avec RIB (Ar)</label><input type="number" value={plafondEspeces} onChange={(e) => setPlafondEspeces(Number(e.target.value))} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" /><span className="text-[10px] text-slate-500">Ex: 5000 si virement partiel</span></div>
                 </div>
 
                 <div className="p-3 rounded-lg bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 text-[11px] sm:text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                  <div><span className="font-bold text-salfa-teal dark:text-sky-300">Formule brute :</span> <code className="font-mono">salaire_brut = (BASE AJ + Logt + Rnd + RESP) × coeff_maternité</code></div>
+                  <div><span className="font-bold text-salfa-teal dark:text-sky-300">Formule brute :</span> <code className="font-mono">salaire_brut = (Base + Logt + Rnd + RESP) × coeff_maternité</code></div>
                   <div><span className="font-bold text-salfa-teal dark:text-sky-300">CNaPS :</span> <code className="font-mono">cnaps = brut × {cnapsSalariale}% — imposable = brut - cnaps</code></div>
                   <div><span className="font-bold text-salfa-teal dark:text-sky-300">IRSA :</span> <code className="font-mono">irsa = Σ((min(max,base)-min) × taux) - enfants×{deductionEnfant} puis max({minIrsa}, ...)</code></div>
                   <div><span className="font-bold text-salfa-teal dark:text-sky-300">NET :</span> <code className="font-mono">net = floor((net_base + accessoires - avance - med)/{arrondiNet})*{arrondiNet}</code></div>
-                  <div><span className="font-bold text-salfa-teal dark:text-sky-300">RAP :</span> <code className="font-mono">si RIB≥5 alors espèces = min({plafondEspeces}, net), virement = net - espèces sinon espèces = net</code></div>
+                  <div><span className="font-bold text-salfa-teal dark:text-sky-300">Règlement :</span> <code className="font-mono">si RIB≥5 alors espèces = min({plafondEspeces}, net), virement = net - espèces sinon espèces = net</code></div>
                 </div>
               </div>
             </div>
@@ -472,8 +472,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
             <div className="space-y-5">
               <div className="bg-amber-50/70 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 sm:p-5">
                 <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white uppercase mb-2 flex items-center gap-2"><Award className="w-5 h-5 text-amber-600 dark:text-amber-300" />Barème d'ancienneté — Éditable</h4>
-                <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300">L'indice est appliqué sur la BASE AJ (salaire de base) selon le nombre d'années d'ancienneté. La base revalorisée est informative (évaluation). Modifiez les tranches puis enregistrez.</p>
-                <div className="mt-3 p-2.5 rounded bg-white dark:bg-slate-800 border dark:border-slate-700 text-[11px] font-mono"><span className="font-bold">Formule :</span> base_revalorisée = BASE_AJ × indice(années) — indice trouvé dans la tranche [min,max]</div>
+                <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300">L'indice est appliqué sur la Base (salaire de base) selon le nombre d'années d'ancienneté. La base revalorisée est informative (évaluation). Modifiez les tranches puis enregistrez.</p>
+                <div className="mt-3 p-2.5 rounded bg-white dark:bg-slate-800 border dark:border-slate-700 text-[11px] font-mono"><span className="font-bold">Formule :</span> base_revalorisée = Base × indice(années) — indice trouvé dans la tranche [min,max]</div>
               </div>
 
               <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 overflow-hidden">
@@ -504,13 +504,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
               <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-5">
                 <h5 className="text-xs sm:text-sm font-extrabold mb-3 flex items-center gap-2"><Award className="w-4 h-4 text-amber-600" />Simulateur ancienneté</h5>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                  <div><label className="block text-[11px] font-bold uppercase mb-1 dark:text-slate-300">BASE AJ (Ar)</label><input type="number" value={baseEssai} onChange={(e) => setBaseEssai(Number(e.target.value) || 0)} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" /></div>
+                  <div><label className="block text-[11px] font-bold mb-1 dark:text-slate-300">Base (Ar)</label><input type="number" value={baseEssai} onChange={(e) => setBaseEssai(Number(e.target.value) || 0)} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" /></div>
                   <div><label className="block text-[11px] font-bold uppercase mb-1 dark:text-slate-300">Années ancienneté</label><input type="number" min={0} value={anneesEssai} onChange={(e) => setAnneesEssai(Number(e.target.value) || 0)} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" /></div>
                   <div className="flex flex-col justify-end"><div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2.5 text-xs">Indice trouvé : <b className="font-mono text-base">{indicePreview.toFixed(2)}×</b><br />Base revalorisée : <b className="font-mono">{Math.round(baseEssai * indicePreview).toLocaleString('fr-FR')} Ar</b></div></div>
                 </div>
                 <div className="overflow-x-auto thin-scrollbar">
                   <table className="w-full text-[11px] border-collapse">
-                    <thead className="bg-slate-100 dark:bg-slate-700 font-bold"><tr><th className="px-3 py-1.5 text-left">Années</th><th className="px-3 py-1.5 text-center">Indice</th><th className="px-3 py-1.5 text-right">BASE AJ × indice</th></tr></thead>
+                    <thead className="bg-slate-100 dark:bg-slate-700 font-bold"><tr><th className="px-3 py-1.5 text-left">Années</th><th className="px-3 py-1.5 text-center">Indice</th><th className="px-3 py-1.5 text-right">Base × indice</th></tr></thead>
                     <tbody className="divide-y dark:divide-slate-700">
                       {Array.from({ length: 26 }, (_, i) => i).map(an => {
                         const ind = obtenirIndiceAncienneteAvecBareme(an, cfgLive.baremeAnciennete);

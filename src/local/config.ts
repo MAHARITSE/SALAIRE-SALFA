@@ -34,9 +34,9 @@ export interface PaieConfig {
   // Maternité
   tauxMaternite: number;    // part de la base brute versée (ex: 50 %)
   dureeMaterniteMois: number; // durée du congé maternité (ex: 3 mois)
-  // Règles NET / RAP
+  // Règles NET & répartition Virement / Espèces
   arrondiNet: number;       // arrondi du net à payer (ex: 100 => 100 Ar inférieur)
-  plafondEspeces: number;   // plafond espèces quand RIB présent et RAP actif (ex: 5000)
+  plafondEspeces: number;   // plafond espèces quand RIB présent (ex: 5000)
   // Ancienneté
   baremeAnciennete: BaremeAncienneteConfig[];
   // Congés, permissions et examens médicaux (module Congés & Permissions)
