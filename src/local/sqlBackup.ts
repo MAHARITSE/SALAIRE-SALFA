@@ -370,6 +370,21 @@ CREATE TABLE IF NOT EXISTS \`salfa_annees\` (
   \`date_creation\` VARCHAR(32) NOT NULL DEFAULT ''
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`;
 
+function schemaTablesDdl(congesOnly: boolean): string {
+  if (!congesOnly) return SCHEMA_TABLES_DDL;
+  const tablesConges = new Set(['salfa_users', 'salfa_employes', 'salfa_conges']);
+  const definitions = SCHEMA_TABLES_DDL
+    .split(/(?=CREATE TABLE IF NOT EXISTS `)/)
+    .filter((part) => {
+      const table = part.match(/^CREATE TABLE IF NOT EXISTS `([^`]+)`/);
+      return Boolean(table && tablesConges.has(table[1]));
+    });
+  if (definitions.length !== tablesConges.size) {
+    throw new Error('Schéma SQL Congés incomplet : utilisateurs, salariés et congés sont requis.');
+  }
+  return definitions.join('\n');
+}
+
 function chunkArray<T>(items: T[], size = 150): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -379,7 +394,7 @@ function chunkArray<T>(items: T[], size = 150): T[][] {
 }
 
 /**
- * Construit un dump SQL relationnel complet (10 tables normalisées, zéro colonne JSON).
+ * Construit un dump relationnel complet ou limité aux tables Congés, salariés et utilisateurs.
  */
 export function buildRelationalSqlBackup(params: {
   store: JsonStore;
@@ -427,7 +442,7 @@ export function buildRelationalSqlBackup(params: {
   lines.push('');
   lines.push('START TRANSACTION;');
   lines.push('');
-  lines.push(SCHEMA_TABLES_DDL);
+  lines.push(schemaTablesDdl(Boolean(params.congesOnly)));
   lines.push('');
 
   // 1. Utilisateurs par défaut (INSERT IGNORE pour ne jamais écraser un mot de passe modifié en base)

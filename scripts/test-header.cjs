@@ -163,13 +163,11 @@ try {
   assert.ok(srcBul.includes('<BulletinCutLine />') && srcBul.includes('bulletin-cut-line') && srcBul.includes('bulletin-cut-scissors'), 'trait de découpe présent entre les 2 bulletins dans BulletinsTab');
   assert.ok(css.includes('.bulletin-cut-rule') && css.includes('dashed #334155'), 'trait de découpe pointillé stylisé pour l’impression A4');
 
-  // Vérification du choix « déduire ou non médicament et avance » lors de l'impression / PDF d'un état individuel
-  assert.ok(
-    srcBul.includes('ChoixRetenuesIndividuelModal') &&
-      srcBul.includes('deduireAvance') &&
-      srcBul.includes('deduireMed') &&
-      srcBul.includes('Ne pas déduire Avance ni Médicament'),
-    'BulletinsTab propose le choix de déduire ou non Avance et Médicament à l’impression d’un état individuel'
+  // Le bulletin individuel ne propose plus d'option pour supprimer Avance ou Médicament.
+  assert.doesNotMatch(
+    srcBul,
+    /ChoixRetenuesIndividuelModal|deduireAvance|deduireMed|Ne pas déduire Avance ni Médicament/,
+    'BulletinsTab conserve les retenues standards sans proposer de choix alternatif'
   );
   const paieAvMed = { ...mat1, avance: 120000, med: 35000 };
   const callsSans = [];

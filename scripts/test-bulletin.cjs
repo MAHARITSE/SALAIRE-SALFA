@@ -20,11 +20,39 @@ try {
     formatEmbaucheBulletin,
     formatCnapsBulletin,
     formatCongesRestantsBulletin,
+    NB_EXEMPLAIRES_BULLETIN,
+    paginerPaiesDecharge,
+    selectionnerPaiesDecharge,
   } = bundle('src/bulletin/model.ts', 'model');
   const seed = require('../src/data/salfa_data.json');
   const bulletinTab = fs.readFileSync('src/components/tabs/BulletinsTab.tsx', 'utf8');
   assert.doesNotMatch(bulletinTab, /ChoixRetenuesIndividuel|deduireAvance|deduireMed|Sans Avance ni Médicament/, 'l’état individuel ne propose plus de choix pour ces retenues');
+  const ordreLivre = [
+    bulletinTab.indexOf('className="bulletin-booklet-cover"'),
+    bulletinTab.indexOf('className="bulletin-print-sheet"'),
+    bulletinTab.indexOf('className="bulletin-booklet-blank"'),
+    bulletinTab.indexOf('className="bulletin-decharge-page"'),
+  ];
+  assert.ok(ordreLivre.every((index, i) => index >= 0 && (i === 0 || index > ordreLivre[i - 1])), 'le livret place couverture, bulletins, page blanche et décharge dans cet ordre');
+  assert.equal(NB_EXEMPLAIRES_BULLETIN, 2, 'le nombre d’exemplaires est partagé entre les parcours impression et PDF');
+  assert.match(bulletinTab, /PDF 2 ex\./);
+  assert.match(bulletinTab, /Imprimer 2 ex\./);
+  assert.match(bulletinTab, /const \[previewDouble, setPreviewDouble\] = useState\(true\)/, 'l’aperçu s’ouvre par défaut sur les deux exemplaires comme la sortie imprimée');
+  assert.equal((bulletinTab.match(/<BulletinCopies/g) || []).length, 2, 'aperçu et impression utilisent le même rendu des exemplaires');
   const p = seed.paies.find(p => p.annee === 2026 && p.mois === 'OCTOBRE' && p.numero_matricule === 47);
+  const eligiblesDecharge = selectionnerPaiesDecharge([
+    { ...p, id: 101, numero_matricule: 12, especes: 5000 },
+    { ...p, id: 102, numero_matricule: 18, especes: 5000.01 },
+    { ...p, id: 103, numero_matricule: 3, especes: 7500 },
+    { ...p, id: 104, numero_matricule: 2, especes: null },
+  ]);
+  assert.deepEqual(eligiblesDecharge.map(paie => paie.numero_matricule), [3, 18], 'la décharge trie les paiements espèces strictement supérieurs à 5 000 Ar');
+  const pagesDecharge = paginerPaiesDecharge(Array.from({ length: 25 }, (_, i) => ({
+    ...p, id: 200 + i, numero_matricule: 25 - i, especes: 6000,
+  })));
+  assert.deepEqual(pagesDecharge.map(page => page.length), [24, 1], 'la décharge se répartit en pages de 24 lignes avec en-tête de page réutilisable');
+  assert.equal(pagesDecharge[0][0].numero_matricule, 1, 'les pages de décharge restent triées par matricule');
+  assert.deepEqual(paginerPaiesDecharge([]), [[]], 'une page de décharge est créée même sans paiement espèces éligible');
   const b = construireBulletin(p);
   const xls = XLSX.readFile('SALAIRE SALFA 2026.xlsm');
   const ws = xls.Sheets.BULLETIN;
