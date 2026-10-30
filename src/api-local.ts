@@ -1269,6 +1269,66 @@ export async function fetchPeriodes(): Promise<{ annee: number; mois: string; nb
   );
 }
 
+/**
+ * Liste uniquement les années effectivement utilisées dans la base de données
+ * (bulletins de paie / congés + années ajoutées explicitement via le bouton « + Année »).
+ */
+export async function fetchAnneesBase(domaine: 'paie' | 'conges' = 'paie'): Promise<number[]> {
+  if (domaine === 'paie') exigerAdmin();
+  const store = getStore();
+  const set = new Set<number>();
+  const pushYear = (v: unknown) => {
+    const y = Number(v);
+    if (Number.isInteger(y) && y >= 1990 && y <= 2100) set.add(y);
+  };
+
+  for (const y of store.annees || []) pushYear(y);
+
+  if (domaine === 'conges') {
+    for (const c of store.conges || []) pushYear((c as any).annee);
+    for (const y of store.meta?.annees_importees || []) pushYear(y);
+  } else {
+    for (const p of store.paies || []) pushYear((p as any).annee);
+    for (const y of store.meta?.annees_importees || []) pushYear(y);
+  }
+
+  if (set.size === 0) {
+    pushYear(store.meta?.annee || new Date().getFullYear());
+  }
+
+  return Array.from(set).sort((a, b) => a - b);
+}
+
+/**
+ * Ajoute explicitement une nouvelle année dans la base de données afin qu'elle
+ * apparaisse immédiatement dans le sélecteur « Période » (et persiste dans MySQL / localStorage).
+ */
+export async function ajouterAnneeBase(
+  annee: number
+): Promise<{ success: boolean; annee?: number; annees?: number[]; message?: string }> {
+  const store = getStore();
+  if (!storeEstSynchronise()) {
+    return { success: false, message: 'Les données ont changé dans un autre onglet. Rechargez la page.' };
+  }
+  const y = Math.round(Number(annee));
+  if (!Number.isFinite(y) || !Number.isInteger(y) || y < 1990 || y > 2100) {
+    return { success: false, message: 'Veuillez saisir une année valide (entre 1990 et 2100).' };
+  }
+  const existantes = Array.isArray(store.annees) ? store.annees.slice() : [];
+  const nextSet = new Set<number>(
+    existantes
+      .map((v: any) => Number(v))
+      .filter((v: number) => Number.isInteger(v) && v >= 1990 && v <= 2100)
+  );
+  nextSet.add(y);
+  store.annees = Array.from(nextSet).sort((a, b) => a - b);
+  if (!saveStore()) {
+    store.annees = existantes;
+    return { success: false, message: "L'enregistrement de l'année a échoué." };
+  }
+  return { success: true, annee: y, annees: store.annees.slice() };
+}
+
 export interface SaisieLot {
   paieId: number;
   avance?: number;

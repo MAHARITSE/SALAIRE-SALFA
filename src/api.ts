@@ -36,6 +36,11 @@ export const fetchEmployePaies: typeof local.fetchEmployePaies = (...args) => WA
 export const fetchPaiesMois: typeof local.fetchPaiesMois = (...args) => WAMP ? remoteRead(() => local.fetchPaiesMois(...args)) : local.fetchPaiesMois(...args);
 export const fetchComparaison: typeof local.fetchComparaison = (...args) => WAMP ? remoteRead(() => local.fetchComparaison(...args)) : local.fetchComparaison(...args);
 export const fetchPeriodes: typeof local.fetchPeriodes = (...args) => WAMP ? remoteRead(() => local.fetchPeriodes(...args)) : local.fetchPeriodes(...args);
+export const fetchAnneesBase: typeof local.fetchAnneesBase = (...args) => WAMP ? remoteRead(() => local.fetchAnneesBase(...args)) : local.fetchAnneesBase(...args);
+export const ajouterAnneeBase: typeof local.ajouterAnneeBase = (...args) =>
+  WAMP
+    ? remoteWrite('ajouterAnnee', () => local.ajouterAnneeBase(...args), { success: false, message: 'Sauvegarde non confirmée.' })
+    : local.ajouterAnneeBase(...args);
 export const createEmploye: typeof local.createEmploye = (...args) => WAMP ? remoteWrite('createEmploye', () => local.createEmploye(...args), false) : local.createEmploye(...args);
 export const updateEmploye: typeof local.updateEmploye = (...args) => WAMP ? remoteWrite('updateEmploye', () => local.updateEmploye(...args), false) : local.updateEmploye(...args);
 export const toggleActifEmploye: typeof local.toggleActifEmploye = (...args) => WAMP ? remoteWrite('toggleActifEmploye', () => local.toggleActifEmploye(...args), false) : local.toggleActifEmploye(...args);

@@ -79,6 +79,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-roles-'));
       () => m.deverrouillerMois(2026, 'OCTOBRE', 'Comptable'),
       () => m.fetchComparaison(2026, 'OCTOBRE', 'SEPTEMBRE', false),
       () => m.fetchPeriodes(),
+      () => m.fetchAnneesBase('paie'),
       () => m.enregistrerSaisieLot(2026, 'OCTOBRE', []),
       () => m.importerClasseur({ employes: [], paies: [], feuillesReconnues: [], feuillesIgnorees: [], periodes: [], avertissements: [] }, { mode: 'fusion', importPaies: false, ecraserPaies: false }),
       () => m.fetchUtilisateurs(),
@@ -93,6 +94,8 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-roles-'));
     }
 
     // Toutes les fonctionnalités de Permissions & Congés restent accessibles au Comptable
+    const anneesCongesComptable = await m.fetchAnneesBase('conges');
+    assert.ok(anneesCongesComptable.includes(2026) && !anneesCongesComptable.includes(2000), 'fetchAnneesBase(conges) retourne uniquement les années utilisées dans la base');
     const situation = await m.fetchSituationConges(2026, false);
     assert.ok(situation.length >= 46);
     const etat = await m.fetchEtatConges(2026);
@@ -232,10 +235,25 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-roles-'));
     assert.equal(apresReact.actif, 1);
     assert.equal(apresReact.date_inactif, '');
 
+    // Vérification Années de la base + Ajout d'année + Barre des 12 mois sans l'année
+    const anneesPaieInit = await m.fetchAnneesBase('paie');
+    assert.deepEqual(anneesPaieInit, [2026], 'Seules les années présentes dans la base de paie sont proposées par défaut');
+    assert.equal((await m.ajouterAnneeBase(1800)).success, false, 'Année hors bornes refusée');
+    const resAjout2027 = await m.ajouterAnneeBase(2027);
+    assert.equal(resAjout2027.success, true, 'Ajout de l’année 2027 accepté');
+    assert.deepEqual(await m.fetchAnneesBase('paie'), [2026, 2027], 'L’année 2027 ajoutée apparaît immédiatement dans les années de la base');
+
     // Vérification de non-régression UI
     const srcTab = fs.readFileSync(path.join(process.cwd(), 'src/components/tabs/SalariesSaisieTab.tsx'), 'utf8');
     assert.equal(srcTab.includes('Vue synthèse'), false, 'Le bouton Vue synthèse doit être supprimé');
     assert.equal(srcTab.includes('Salariés sans bulletin sur'), false, 'La section Salariés sans bulletin doit être supprimée');
+    const blocMois = srcTab.slice(srcTab.indexOf('Mois initialisés :'), srcTab.indexOf('EtatImpression'));
+    assert.equal(blocMois.includes('{p.mois} {p.annee}'), false, 'Mois initialisés ne doit plus afficher l’année sur chaque bouton');
+    assert.equal(blocMois.includes('periodes.map'), false, 'Mois initialisés ne boucle plus sur toutes les années mélangées');
+    assert.equal(blocMois.includes('MOIS_LISTE.map((m) =>'), true, 'Mois initialisés affiche uniquement les 12 mois de l’année filtrés sur Période');
+    const srcYear = fs.readFileSync(path.join(process.cwd(), 'src/components/YearSelect.tsx'), 'utf8');
+    assert.equal(srcYear.includes('fetchAnneesBase'), true, 'YearSelect charge uniquement les années utilisées dans la base');
+    assert.equal(srcYear.includes('ajouterAnneeBase'), true, 'YearSelect intègre le bouton d’ajout d’année');
     const srcForm = fs.readFileSync(path.join(process.cwd(), 'src/components/EmployeModalForm.tsx'), 'utf8');
     assert.equal(srcForm.includes('Rendre cette personne inactive'), true);
     assert.equal(srcForm.includes('Date de mise en inactif'), true);

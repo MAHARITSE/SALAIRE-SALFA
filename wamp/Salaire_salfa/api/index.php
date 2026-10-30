@@ -298,7 +298,7 @@ if (($action === 'save' || $action === 'settings') && $_SERVER['REQUEST_METHOD']
         if ($action === 'save') {
             $operation = (string)($input['action'] ?? '');
             $role = (string)($_SESSION['user']['role'] ?? '');
-            $congeActions = ['creerConge', 'modifierConge', 'deciderConge', 'supprimerConge', 'saisirOuverturePremiereAnnee', 'saisirSoldeAnnee', 'importerConges'];
+            $congeActions = ['creerConge', 'modifierConge', 'deciderConge', 'supprimerConge', 'saisirOuverturePremiereAnnee', 'saisirSoldeAnnee', 'importerConges', 'ajouterAnnee'];
             $adminActions = ['createEmploye', 'updateEmploye', 'toggleActifEmploye', 'initPaieEmploye', 'initMoisPaie', 'savePaieSaisie', 'savePaieReglement', 'cloturerMois', 'deverrouillerMois', 'importerClasseur', 'enregistrerSaisieLot'];
             $allowed = array_merge($adminActions, $congeActions);
             if (!in_array($operation, $allowed, true)) { $db->rollBack(); answer(403, ['error' => 'Action non autorisée.']); }
@@ -308,17 +308,24 @@ if (($action === 'save' || $action === 'settings') && $_SERVER['REQUEST_METHOD']
             $old = loadRelationalStore($db);
             if (!is_array($new) || !is_array($old)) { $db->rollBack(); answer(400, ['error' => 'Données invalides.']); }
 
-            // Un non-administrateur (Comptable) ne peut modifier que la table relationnelle salfa_conges
+            // Un non-administrateur (Comptable) ne peut modifier que la table relationnelle salfa_conges (et salfa_annees lors d'un ajout d'année)
             $storeToSave = ($role === 'Administrateur')
                 ? $new
-                : array_merge($old, ['conges' => is_array($new['conges'] ?? null) ? $new['conges'] : []]);
+                : array_merge($old, [
+                    'conges' => is_array($new['conges'] ?? null) ? $new['conges'] : [],
+                    'annees' => is_array($new['annees'] ?? null) ? $new['annees'] : ($old['annees'] ?? []),
+                ]);
 
             if (!validStore($storeToSave) || !lockedSafe($old, $storeToSave, $operation, $role)) {
                 $db->rollBack();
                 answer(400, ['error' => 'Données invalides ou période clôturée.']);
             }
 
-            if ($role !== 'Administrateur' || in_array($operation, $congeActions, true)) {
+            if ($operation === 'ajouterAnnee') {
+                syncAnneesTable($db, is_array($storeToSave['annees'] ?? null) ? $storeToSave['annees'] : []);
+                $stRev = $db->prepare('UPDATE salfa_revision SET revision = ?, date_modification = ? WHERE id = 1');
+                $stRev->execute([$revision + 1, date('Y-m-d H:i:s')]);
+            } elseif ($role !== 'Administrateur' || in_array($operation, $congeActions, true)) {
                 syncCongesTable($db, is_array($storeToSave['conges'] ?? null) ? $storeToSave['conges'] : []);
                 $stRev = $db->prepare('UPDATE salfa_revision SET revision = ?, date_modification = ? WHERE id = 1');
                 $stRev->execute([$revision + 1, date('Y-m-d H:i:s')]);
@@ -327,6 +334,7 @@ if (($action === 'save' || $action === 'settings') && $_SERVER['REQUEST_METHOD']
                 syncPaiesTable($db, $storeToSave['paies']);
                 syncCongesTable($db, is_array($storeToSave['conges'] ?? null) ? $storeToSave['conges'] : []);
                 syncComparaisonNetTable($db, $storeToSave['comparaison_net']);
+                syncAnneesTable($db, is_array($storeToSave['annees'] ?? null) ? $storeToSave['annees'] : []);
                 updateRevisionMeta($db, is_array($storeToSave['meta'] ?? null) ? $storeToSave['meta'] : [], $revision + 1);
             }
         } else {

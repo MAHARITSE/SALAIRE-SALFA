@@ -125,6 +125,8 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-wamp-test-'));
   assert.ok(schemaPhp.includes('CREATE TABLE IF NOT EXISTS `salfa_employes`'), 'table relationnelle salfa_employes');
   assert.ok(schemaPhp.includes('CREATE TABLE IF NOT EXISTS `salfa_paies`'), 'table relationnelle salfa_paies');
   assert.ok(schemaPhp.includes('CREATE TABLE IF NOT EXISTS `salfa_conges`'), 'table relationnelle salfa_conges');
+  assert.ok(schemaPhp.includes('CREATE TABLE IF NOT EXISTS `salfa_annees`'), 'table relationnelle salfa_annees pour les années ajoutées');
+  assert.ok(php.includes("'ajouterAnnee'"), 'action ajouterAnnee prise en charge dans index.php');
   assert.ok(schemaPhp.includes('DROP TABLE IF EXISTS `salfa_state`'), 'suppression automatique de l’ancienne table JSON salfa_state');
   assert.ok(!php.includes('store_json') && !php.includes('config_json') && !php.includes('header_json'), 'aucune écriture JSON MySQL dans index.php');
   assert.ok(php.includes("$action === 'setup_db'"), 'endpoint setup_db présent dans index.php');
@@ -224,10 +226,14 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-wamp-test-'));
   const afterResetCfg = localMod.resetConfig();
   assert.equal(afterResetCfg.iconeApp, testIcon, 'resetConfig des barèmes préserve l’icône personnalisée');
 
-  // Test sauvegarde SQL manuelle (Administration -> Sauvegarde SQL) en mode local
+  // Test ajout d'année + sauvegarde SQL manuelle (Administration -> Sauvegarde SQL) en mode local
+  const addYearLocal = await localMod.localApi.ajouterAnneeBase(2027);
+  assert.equal(addYearLocal.success, true, 'ajout année 2027 en mode local');
   const manualSql = await localMod.localApi.exporterSauvegardeSqlLocale({ telecharger: false, motif: 'test-admin' });
   assert.equal(manualSql.success, true);
   assert.ok(manualSql.sql.includes('CREATE TABLE IF NOT EXISTS `salfa_employes`'), 'dump SQL relationnel complet');
+  assert.ok(manualSql.sql.includes('CREATE TABLE IF NOT EXISTS `salfa_annees`'), 'table relationnelle salfa_annees incluse dans le dump SQL');
+  assert.ok(manualSql.sql.includes('INSERT INTO `salfa_annees`') && manualSql.sql.includes('(2027,'), 'année 2027 exportée en ligne/colonne dans salfa_annees');
   assert.ok(manualSql.sql.includes('DROP TABLE IF EXISTS `salfa_state`;'), 'dump SQL supprime salfa_state');
   assert.ok(!manualSql.sql.includes('store_json') && !manualSql.sql.includes('config_json'), 'zéro JSON dans le dump SQL');
   assert.ok(manualSql.sql.includes('INSERT IGNORE INTO `salfa_users`'), 'utilisateurs par défaut inclus dans le dump SQL');

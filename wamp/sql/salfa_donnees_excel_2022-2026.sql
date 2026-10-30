@@ -219,6 +219,11 @@ CREATE TABLE IF NOT EXISTS `salfa_entete` (
   `logo_droite` LONGTEXT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `salfa_annees` (
+  `annee` INT NOT NULL PRIMARY KEY,
+  `date_creation` VARCHAR(32) NOT NULL DEFAULT ''
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ============================================================================
 -- 1. Utilisateurs par défaut (INSERT IGNORE : conserve les comptes déjà créés)
 -- ============================================================================

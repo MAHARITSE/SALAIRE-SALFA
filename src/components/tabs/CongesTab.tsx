@@ -313,7 +313,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
           <div className="flex items-center gap-2">
             <CalendarClock className="w-4 h-4 text-salfa-teal dark:text-sky-300" />
             <span className="text-[11px] sm:text-xs font-bold uppercase text-slate-700 dark:text-slate-300">Exercice :</span>
-            <YearSelect annee={annee} setAnnee={setAnnee} />
+            <YearSelect annee={annee} setAnnee={setAnnee} domaine="conges" />
           </div>
           <div className="flex bg-slate-100 dark:bg-slate-700 p-0.5 rounded-lg">
             {([['suivi', 'Suivi & visas'], ['etat', 'État de contrôle']] as const).map(([cle, label]) => (
