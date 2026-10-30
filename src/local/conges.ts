@@ -609,6 +609,22 @@ export function estValide(c: CongeAbsence): boolean {
   return c.statut === 'VALIDE';
 }
 
+/** Vrai si un congé annuel validé couvre la date donnée (bornes Du … au … incluses). */
+export function estEnCongeLe(c: CongeAbsence, dateIso: string): boolean {
+  return Boolean(
+    c &&
+    c.categorie === 'CONGE' &&
+    c.imputation === 'CONGE' &&
+    estValide(c) &&
+    Number(c.jours_valides ?? c.jours_demandes ?? 0) > 0 &&
+    /^\d{4}-\d{2}-\d{2}$/.test(dateIso) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(c.date_debut) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(c.date_fin) &&
+    c.date_debut <= dateIso &&
+    dateIso <= c.date_fin
+  );
+}
+
 /** Jours effectivement imputés (validés) d'une demande. */
 export function joursImputes(c: CongeAbsence): number {
   if (!estValide(c)) return 0;
@@ -1599,6 +1615,12 @@ const MOIS_INDEX_FR = [
   'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE',
 ];
 
+function sommeDroitsRestantsParTitre(solde?: SoldeSaisie): number {
+  if (!solde || solde.inactif) return 0;
+  const total = Object.values(solde.droitsParTitre || {}).reduce((somme, jours) => somme + (Number(jours) || 0), 0);
+  return Number(total.toFixed(2));
+}
+
 function bornesMoisIso(annee: number, mois?: string): { debutMois: string; finMois: string } | null {
   if (!mois) return null;
   const idx = MOIS_INDEX_FR.indexOf(String(mois).trim().toUpperCase());
@@ -1614,7 +1636,7 @@ function bornesMoisIso(annee: number, mois?: string): { debutMois: string; finMo
 /**
  * Calcule la synthèse des congés & permissions de chaque salarié pour un mois de paie
  * donné (jours pris sur le mois, cumul pris dans l'année jusqu'à la fin du mois, et
- * solde de congés restants selon la règle des 3 dernières années).
+ * solde cumulé des titres de congé non prescrits à la fin du mois).
  */
 export function calculerSyntheseCongesPeriode(
   employes: any[],
@@ -1633,6 +1655,25 @@ export function calculerSyntheseCongesPeriode(
     exclureSamedi: cfg.exclureSamedi,
     feries: listeJoursFeries(cfg),
   };
+  const soldesAuMoisByEmp = new Map<number, SoldeSaisie>();
+  if (bornes) {
+    const congesAuMois = congesNormalises.flatMap((c) => {
+      if (c.categorie === 'AJUSTEMENT') return [c];
+      const debut = c.date_debut || c.date_demande || `${Number(c.annee) || annee}-01-01`;
+      if (debut > bornes.finMois) return [];
+      if (!estValide(c) || c.imputation !== 'CONGE') return [c];
+
+      const total = joursImputes(c);
+      const fin = c.date_fin || (total > 0 ? calculerDateFin(debut, total, cfg) : debut);
+      if (total <= 0 || !fin || fin <= bornes.finMois) return [c];
+
+      // Une absence qui chevauche la fin du mois n'a consommé que ses jours ouvrables échus.
+      const joursEchus = Math.min(total, compterJoursOuvrables(debut, bornes.finMois, optsOuvrables));
+      return [{ ...c, jours_valides: Number(joursEchus.toFixed(2)) }];
+    });
+    const soldesAuMois = calculerSoldes(employes, congesAuMois, cfg, annee, { nbAnnees });
+    for (const solde of soldesAuMois) soldesAuMoisByEmp.set(solde.employe_id, solde);
+  }
 
   const congesAnnee = congesNormalises.filter(
     (c) => Number(c.annee) === Number(annee) && estValide(c) && c.categorie !== 'AJUSTEMENT'
@@ -1649,19 +1690,17 @@ export function calculerSyntheseCongesPeriode(
   for (const emp of employes) {
     const empId = Number(emp.id);
     const s = soldeByEmp.get(empId);
-    const ouverture = s ? s.ouverture : 0;
     const permDroit = s ? s.permDroit : 0;
-    const anneeEmb = anneeDebut(emp.date_embauche);
 
     if (!bornes) {
-      const restant = s ? s.restant : 0;
+      const restantTitre = s ? s.resteTitreActif : 0;
       resultat.set(empId, {
         employe_id: empId,
         conge_pris_mois: 0,
         conge_pris_annee: s ? s.pris : 0,
-        conge_restant: restant,
+        conge_restant: sommeDroitsRestantsParTitre(s),
         conge_titre_actif: annee,
-        conge_reste_titre: restant,
+        conge_reste_titre: restantTitre,
         permission_pris_mois: 0,
         permission_restante: s ? s.permRestant : 0,
       });
@@ -1706,14 +1745,9 @@ export function calculerSyntheseCongesPeriode(
     }
 
     const inactif = estEmployeInactif(emp);
-    const debordEntrant = s ? (s.debordementEntrant || 0) : 0;
-    const debordSortant = s ? (s.debordementSortant || 0) : 0;
-    const ouvertureEffective = ouverture - debordEntrant;
-    const congeImputeSurColonne =
-      debordSortant > 0
-        ? Math.min(congeJusquaMois, Math.max(0, ouvertureEffective))
-        : congeJusquaMois;
-    const congeRestant = inactif ? 0 : Number((ouvertureEffective - congeImputeSurColonne).toFixed(2));
+    const soldeAuMois = soldesAuMoisByEmp.get(empId) || s;
+    const congeRestant = sommeDroitsRestantsParTitre(soldeAuMois);
+    const congeRestantTitre = inactif ? 0 : Number((soldeAuMois?.resteTitreActif || 0).toFixed(2));
     const permRestante = inactif ? 0 : Number((permDroit - permJusquaMois).toFixed(2));
 
     resultat.set(empId, {
@@ -1722,7 +1756,7 @@ export function calculerSyntheseCongesPeriode(
       conge_pris_annee: Number(congeJusquaMois.toFixed(2)),
       conge_restant: congeRestant,
       conge_titre_actif: annee,
-      conge_reste_titre: congeRestant,
+      conge_reste_titre: congeRestantTitre,
       permission_pris_mois: Number(permMois.toFixed(2)),
       permission_restante: permRestante,
     });

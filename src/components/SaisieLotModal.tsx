@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { enregistrerSaisieLot, SaisieLot } from '../api';
 import { Employe, PaieMensuelle } from '../types';
+import { correspondRecherche, normaliserRecherche } from '../local/recherche';
 
 export type TypeSaisieRetenue = 'avance' | 'med';
 
@@ -29,9 +30,6 @@ interface DraftItem {
 
 const fmt = (n: number) =>
   n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const normalize = (s: string) =>
-  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
 function parseMontant(text: string): number | undefined | null {
   const value = text.trim().replace(/\s/g, '');
@@ -90,10 +88,10 @@ export const SaisieLotModal: React.FC<Props> = ({
     return result.sort((a, b) => Number(a.mat) - Number(b.mat));
   }, [paies, employes]);
 
-  const searchTerm = normalize(query);
+  const searchTerm = normaliserRecherche(query);
   const matches = searchTerm
     ? candidats
-        .filter((e) => normalize(`${e.mat} ${e.nom} ${e.jobs || ''}`).includes(searchTerm))
+        .filter((e) => correspondRecherche(searchTerm, e.mat, e.nom, e.jobs))
         .slice(0, 30)
     : [];
 
@@ -119,7 +117,7 @@ export const SaisieLotModal: React.FC<Props> = ({
 
   const choisir = (p: PaieMensuelle) => {
     setSelected(p);
-    setQuery(`${p.numero_matricule} — ${p.nom_prenoms}`);
+    setQuery(`${p.numero_matricule} — ${p.nom_prenoms}`.toLocaleUpperCase('fr-FR'));
     setOpen(false);
     setError('');
     const existing = lignes.find((l) => l.paieId === p.id);
@@ -322,12 +320,12 @@ export const SaisieLotModal: React.FC<Props> = ({
                     if (!selected && searchTerm) setOpen(true);
                   }}
                   onChange={(e) => {
-                    const text = e.target.value;
+                    const text = e.target.value.toLocaleUpperCase('fr-FR');
                     setQuery(text);
                     setSelected(null);
                     setMontant('');
                     setHighlight(0);
-                    setOpen(Boolean(normalize(text)));
+                    setOpen(Boolean(normaliserRecherche(text)));
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'ArrowDown' && open && matches.length) {
@@ -346,7 +344,7 @@ export const SaisieLotModal: React.FC<Props> = ({
                     }
                   }}
                   placeholder="Tapez un matricule ou un nom…"
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-salfa-teal"
+                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-salfa-teal"
                 />
               </div>
               {open && (

@@ -16,9 +16,10 @@ import {
 import {
   CongeAbsence, CongesConfig, SoldeSaisie, EtatConges, MOTIFS_ABSENCE, LIBELLES_CATEGORIE,
   LIBELLES_STATUT, StatutConges, fmtJours, actionsAutorisees, trouverMotif, aBesoinMedecin,
-  joursAffiches, decomposerTitreActif, anneesSuccessives,
+  joursAffiches, decomposerTitreActif, anneesSuccessives, construireEtat, estEnCongeLe,
 } from '../../local/conges';
 import { loadConfig } from '../../local/config';
+import { correspondRecherche, normaliserRecherche } from '../../local/recherche';
 import { FicheAbsenceModal, BrouillonConge } from '../conges/FicheAbsenceModal';
 import { FicheAbsence, RecapFiche, dateFr, periodeAbsenceFr, dateRetourFiche } from '../conges/FicheAbsence';
 import { EtatCongesEcran, EtatCongesImpression, exporterEtatCongesExcel } from '../conges/EtatConges';
@@ -37,6 +38,9 @@ const MOIS_LISTE = ['JANVIER','FEVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','A
 type FiltreListe = 'A_TRAITER' | 'VALIDEES' | 'REFUSEES' | 'TOUTES';
 
 const encadre = (v: number): string => fmtJours(v);
+
+const dateLocaleIso = (date = new Date()): string =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 const COULEUR_STATUT: Record<StatutConges, string> = {
   SOUMIS: 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-800',
@@ -66,6 +70,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
   const [inclureRefuses, setInclureRefuses] = useState(false);
   const [inclureInactifs, setInclureInactifs] = useState(false);
   const anneesLoi = useMemo(() => anneesSuccessives(annee, config.nbAnneesCumul), [annee, config.nbAnneesCumul]);
+  const [dateDuJour, setDateDuJour] = useState(dateLocaleIso);
   const [chargement, setChargement] = useState(true);
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; texte: string } | null>(null);
   const [modal, setModal] = useState<{ ouvert: boolean; initial: BrouillonConge | null }>({ ouvert: false, initial: null });
@@ -78,10 +83,10 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
     setChargement(true);
     try {
       const [emps, situation, liste, etatData] = await Promise.all([
-        fetchEmployes(false, recherche),
+        fetchEmployes(false),
         fetchSituationConges(annee, !inclureInactifs),
-        fetchConges({ recherche, inclureRefuses: true }),
-        fetchEtatConges(annee, { nbAnnees, recherche, inclureRefuses, inclureInactifs }),
+        fetchConges({ inclureRefuses: true }),
+        fetchEtatConges(annee, { nbAnnees, inclureRefuses, inclureInactifs }),
       ]);
       setEmployes(emps);
       setSoldes(Object.fromEntries(situation.map((s) => [s.employe_id, s])));
@@ -91,7 +96,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
     } finally {
       setChargement(false);
     }
-  }, [annee, recherche, nbAnnees, inclureRefuses, inclureInactifs]);
+  }, [annee, nbAnnees, inclureRefuses, inclureInactifs]);
 
   useEffect(() => { charger(); }, [charger]);
   useEffect(() => {
@@ -99,35 +104,107 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
     window.addEventListener('afterprint', apres);
     return () => window.removeEventListener('afterprint', apres);
   }, []);
+  useEffect(() => {
+    const actualiserDate = () => {
+      const date = dateLocaleIso();
+      setDateDuJour((precedente) => (precedente === date ? precedente : date));
+    };
+    const intervalle = window.setInterval(actualiserDate, 60_000);
+    return () => window.clearInterval(intervalle);
+  }, []);
 
   const meta = { utilisateur: user?.username || 'comptable', role: user?.role || 'Comptable' };
 
   // ------------------------------------------------------------------- les listes
+  const rechercheNormalisee = normaliserRecherche(recherche);
+  const congesFiltresRecherche = useMemo(() => {
+    if (!rechercheNormalisee) return conges;
+    const employesParId = new Map<number, any>(employes.map((e): [number, any] => [Number(e.id), e]));
+    const employesParMatricule = new Map<number, any>(employes.map((e): [number, any] => [Number(e.numero_matricule), e]));
+    return conges.filter((c) => {
+      const employe = employesParId.get(Number(c.employe_id)) || employesParMatricule.get(Number(c.numero_matricule));
+      return correspondRecherche(
+        rechercheNormalisee,
+        c.nom_prenoms,
+        c.fonction,
+        c.motif_libelle,
+        c.motif_code,
+        c.categorie,
+        c.numero_matricule,
+        c.remplacant,
+        c.titre_periode,
+        c.ajustement_type,
+        c.annee,
+        employe?.nom_prenoms,
+        employe?.jobs,
+        employe?.categorie
+      );
+    });
+  }, [conges, employes, rechercheNormalisee]);
+  const etatFiltre = useMemo(() => {
+    if (!etat || !rechercheNormalisee) return etat;
+    const employesDansEtat = new Set(etat.parcours.map((p) => Number(p.employe_id)));
+    const employeIdsAvecFicheCorrespondante = new Set(congesFiltresRecherche.map((c) => Number(c.employe_id)));
+    const matriculesAvecFicheCorrespondante = new Set(congesFiltresRecherche.map((c) => Number(c.numero_matricule)));
+    const employesCorrespondants = employes.filter((e) =>
+      employesDansEtat.has(Number(e.id)) && (
+        correspondRecherche(rechercheNormalisee, e.nom_prenoms, e.numero_matricule, e.jobs, e.categorie) ||
+        employeIdsAvecFicheCorrespondante.has(Number(e.id)) ||
+        matriculesAvecFicheCorrespondante.has(Number(e.numero_matricule))
+      )
+    );
+    return construireEtat(employesCorrespondants, conges, config, {
+      annee,
+      nbAnnees,
+      inclureRefuses,
+    });
+  }, [etat, rechercheNormalisee, congesFiltresRecherche, employes, conges, config, annee, nbAnnees, inclureRefuses]);
   const enAttente = useMemo(
-    () => conges.filter((c) => c.statut === 'SOUMIS' || c.statut === 'AVIS_CHF' || c.statut === 'AVIS_MEDECIN'),
-    [conges]
+    () => congesFiltresRecherche.filter((c) => c.statut === 'SOUMIS' || c.statut === 'AVIS_CHF' || c.statut === 'AVIS_MEDECIN'),
+    [congesFiltresRecherche]
   );
+  const congesEnCours = useMemo(() => {
+    const employesParId = new Map<number, any>(employes.map((e): [number, any] => [Number(e.id), e]));
+    const employesParMatricule = new Map<number, any>(employes.map((e): [number, any] => [Number(e.numero_matricule), e]));
+    return congesFiltresRecherche
+      .filter((c) => estEnCongeLe(c, dateDuJour))
+      .map((fiche) => ({
+        fiche,
+        employe: employesParId.get(Number(fiche.employe_id)) || employesParMatricule.get(Number(fiche.numero_matricule)) || null,
+      }))
+      .sort((a, b) =>
+        String(a.fiche.date_fin).localeCompare(String(b.fiche.date_fin)) ||
+        String(a.employe?.nom_prenoms || a.fiche.nom_prenoms).localeCompare(String(b.employe?.nom_prenoms || b.fiche.nom_prenoms), 'fr')
+      );
+  }, [congesFiltresRecherche, employes, dateDuJour]);
   const listeFiltree = useMemo(() => {
-    let liste = conges;
+    let liste = congesFiltresRecherche;
     if (filtre === 'A_TRAITER') liste = liste.filter((c) => c.statut !== 'VALIDE' && c.statut !== 'REFUSE');
     else if (filtre === 'VALIDEES') liste = liste.filter((c) => c.statut === 'VALIDE');
     else if (filtre === 'REFUSEES') liste = liste.filter((c) => c.statut === 'REFUSE');
     return liste.filter((c) => Number(c.annee) === Number(annee) || (filtre === 'A_TRAITER' && c.statut !== 'VALIDE'));
-  }, [conges, filtre, annee]);
+  }, [congesFiltresRecherche, filtre, annee]);
 
   const soldesListe = useMemo(() => {
-    const q = recherche.trim().toLowerCase();
+    const q = rechercheNormalisee;
+    const employeIdsAvecFicheCorrespondante = new Set(congesFiltresRecherche.map((c) => Number(c.employe_id)));
+    const matriculesAvecFicheCorrespondante = new Set(congesFiltresRecherche.map((c) => Number(c.numero_matricule)));
     return employes
       .map((e) => ({ employe: e, solde: soldes[Number(e.id)] }))
       .filter(({ employe, solde }) => solde && (Number(employe.actif) === 1 || inclureInactifs))
-      .filter(({ employe }) => !q || String(employe.nom_prenoms || '').toLowerCase().includes(q) || String(employe.numero_matricule || '').includes(q) || String(employe.jobs || '').toLowerCase().includes(q))
+      .filter(({ employe }) =>
+        !q ||
+        correspondRecherche(q, employe.nom_prenoms, employe.numero_matricule, employe.jobs, employe.categorie) ||
+        employeIdsAvecFicheCorrespondante.has(Number(employe.id)) ||
+        matriculesAvecFicheCorrespondante.has(Number(employe.numero_matricule))
+      )
       .sort((a, b) =>
         (Number(b.employe.actif) - Number(a.employe.actif)) ||
         (b.solde!.attente - a.solde!.attente) ||
         (a.solde!.restant - b.solde!.restant) ||
         (Number(a.employe.numero_matricule) || 0) - (Number(b.employe.numero_matricule) || 0)
       );
-  }, [employes, soldes, recherche, inclureInactifs]);
+  }, [employes, soldes, congesFiltresRecherche, rechercheNormalisee, inclureInactifs]);
 
   // --------------------------------------------------------------------- actions
   const signaler = (res: { success: boolean; message?: string; avertissement?: string }, succes: string) => {
@@ -329,7 +406,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             ))}
           </div>
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200">
-            <FileText className="w-3.5 h-3.5" />{conges.length} fiche(s) · {totalAttente} à traiter
+            <FileText className="w-3.5 h-3.5" />{congesFiltresRecherche.length} fiche(s) · {totalAttente} à traiter
           </span>
           {depassements > 0 && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
@@ -346,13 +423,13 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             <button onClick={() => setImportOuvert(true)} className="order-3 min-h-9 flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
               <Upload className="w-4 h-4" />Importer contrôle
             </button>
-            <button onClick={() => etat && downloadEtatCongesPDF(etat, annee)} disabled={!etat} className="order-4 min-h-9 flex-1 sm:flex-initial bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
+            <button onClick={() => etatFiltre && downloadEtatCongesPDF(etatFiltre, annee)} disabled={!etatFiltre} className="order-4 min-h-9 flex-1 sm:flex-initial bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
               <Download className="w-4 h-4" />PDF État
             </button>
             <button onClick={imprimerEtat} className="order-5 min-h-9 flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
               <Printer className="w-4 h-4" />Imprimer
             </button>
-            <button onClick={() => etat && exporterEtatCongesExcel(etat, annee)} disabled={!etat} className="order-6 min-h-9 flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
+            <button onClick={() => etatFiltre && exporterEtatCongesExcel(etatFiltre, annee)} disabled={!etatFiltre} className="order-6 min-h-9 flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
               <FileSpreadsheet className="w-4 h-4" />Excel
             </button>
           </div>
@@ -363,9 +440,9 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               value={recherche}
-              onChange={(e) => setRecherche(e.target.value)}
+              onChange={(e) => setRecherche(e.target.value.toLocaleUpperCase('fr-FR'))}
               placeholder="Rechercher un matricule, un nom, une fonction, un motif…"
-              className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-salfa-teal"
+              className="w-full pl-9 pr-3 py-2 text-sm uppercase rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-salfa-teal"
             />
           </div>
           <select value={filtre} onChange={(e) => setFiltre(e.target.value as FiltreListe)} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2 py-2 text-xs font-bold">
@@ -505,6 +582,51 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
                   <Printer className="w-3.5 h-3.5" />Imprimer les {enAttente.length} fiches à faire signer
                 </button>
                 <span className="text-[10px] text-slate-500">Une fiche par page, à distribuer aux chefs de service.</span>
+              </div>
+            )}
+          </section>
+
+          {/* --------------------------------------------------- salariés actuellement en congé */}
+          <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="px-3 sm:px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2">
+              <CalendarClock className="w-4 h-4 text-sky-600 dark:text-sky-300" />
+              <h3 className="text-xs sm:text-sm font-bold uppercase text-slate-700 dark:text-slate-200">Personnes actuellement en congé</h3>
+              <span className="text-[10px] text-slate-500">Au {dateFr(dateDuJour)}</span>
+              <span className="ml-auto text-[11px] text-slate-500">({congesEnCours.length})</span>
+            </div>
+            {chargement ? (
+              <div className="p-5 text-center text-sm text-slate-500">Chargement des congés…</div>
+            ) : congesEnCours.length === 0 ? (
+              <div className="p-5 text-center text-sm text-slate-500">Aucun salarié n’est actuellement en congé à cette date.</div>
+            ) : (
+              <div className="table-responsive thin-scrollbar">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 uppercase text-[9px]">
+                    <tr>
+                      <th className="px-2 py-2 text-center">Mat.</th>
+                      <th className="px-2 py-2">Salarié</th>
+                      <th className="px-2 py-2 text-center">Début du congé</th>
+                      <th className="px-2 py-2 text-center">Fin du congé</th>
+                      <th className="px-2 py-2 text-center">Date de prise de service</th>
+                      <th className="px-2 py-2">Motif</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                    {congesEnCours.map(({ fiche, employe }) => (
+                      <tr key={`conge-en-cours-${fiche.id}`} className="hover:bg-sky-50/40 dark:hover:bg-sky-900/10">
+                        <td className="px-2 py-2 text-center font-bold">{employe?.numero_matricule || fiche.numero_matricule}</td>
+                        <td className="px-2 py-2">
+                          <div className="font-bold text-slate-800 dark:text-slate-100">{employe?.nom_prenoms || fiche.nom_prenoms}</div>
+                          <div className="text-[10px] text-slate-500">{employe?.jobs || fiche.fonction || '—'}</div>
+                        </td>
+                        <td className="px-2 py-2 text-center whitespace-nowrap font-mono">{dateFr(fiche.date_debut)}</td>
+                        <td className="px-2 py-2 text-center whitespace-nowrap font-mono font-semibold">{dateFr(fiche.date_fin)}</td>
+                        <td className="px-2 py-2 text-center whitespace-nowrap font-mono font-bold text-salfa-teal dark:text-sky-300">{dateFr(dateRetourFiche(fiche))}</td>
+                        <td className="px-2 py-2">{fiche.motif_libelle || LIBELLES_CATEGORIE.CONGE}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </section>
@@ -703,17 +825,17 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             <div className="text-[11px] sm:text-sm font-extrabold uppercase text-salfa-dark dark:text-white">SALFA TANAMBAO — DISPENSAIRE TOBY BETELA TOLIARA</div>
             <div className="text-sm sm:text-lg font-extrabold text-salfa-dark dark:text-white">CONTRÔLE DES CONGÉS ET PERMISSIONS</div>
             <div className="text-xs sm:text-sm font-extrabold text-salfa-teal dark:text-sky-300 uppercase tracking-wide">
-              Année {annee} · {etat?.parcours.length || 0} salarié(s) · {etat?.totaux.nbDemandes || 0} demande(s)
+              Année {annee} · {etatFiltre?.parcours.length || 0} salarié(s) · {etatFiltre?.totaux.nbDemandes || 0} demande(s)
             </div>
-            {etat && etat.annees.length > 0 && (
+            {etatFiltre && etatFiltre.annees.length > 0 && (
               <div className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400">
-                Contrôle total de saisie activé sur toutes les colonnes <b>{etat.annees.join(', ')}</b> : modifiez librement le solde d’ouverture ou le solde final de chaque année, les <b>jours demandés</b> en ligne, ou cliquez sur <b>+ {etat.annees.join(' / + ')}</b> pour ajouter une absence. (Vider une case jaune rétablit le calcul automatique.)
+                Contrôle total de saisie activé sur toutes les colonnes <b>{etatFiltre.annees.join(', ')}</b> : modifiez librement le solde d’ouverture ou le solde final de chaque année, les <b>jours demandés</b> en ligne, ou cliquez sur <b>+ {etatFiltre.annees.join(' / + ')}</b> pour ajouter une absence. (Vider une case jaune rétablit le calcul automatique.)
               </div>
             )}
           </div>
-          {etat && (
+          {etatFiltre && (
             <EtatCongesEcran
-              etat={etat}
+              etat={etatFiltre}
               onOuvrir={(id) => { const c = conges.find((x) => Number(x.id) === id); if (c) setModal({ ouvert: true, initial: c }); }}
               onSaisirOuverture={saisirOuverture}
               onModifierJours={modifierJoursDepuisTableau}
@@ -722,7 +844,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
           )}
           <div className="mt-2 flex flex-wrap justify-between gap-2 text-[9px] sm:text-[10px] text-slate-500 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 pt-2">
             <span>
-              Contrôle total de saisie : colonnes {etat?.annees.join(', ')} modifiables (ouverture et solde final), jours demandés éditables dans le tableau, clic sur une date ou un motif pour ouvrir la fiche complète.
+              Contrôle total de saisie : colonnes {etatFiltre?.annees.join(', ')} modifiables (ouverture et solde final), jours demandés éditables dans le tableau, clic sur une date ou un motif pour ouvrir la fiche complète.
             </span>
             <span>Édité le {new Date().toLocaleDateString('fr-FR')} — CLINIQUE SALFA TANAMBAO · Gestion des Congés & Permissions</span>
           </div>
@@ -772,7 +894,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
       )}
 
       {/* --------------------------------------------------- documents d'impression */}
-      {etat && <EtatCongesImpression etat={etat} annee={annee} />}
+      {etatFiltre && <EtatCongesImpression etat={etatFiltre} annee={annee} />}
       {ficheImpr.length > 0 && (
         <div className="fiche-print">
           {ficheImpr.map((c) => (

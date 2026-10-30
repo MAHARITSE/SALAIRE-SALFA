@@ -28,6 +28,7 @@ import {
   fetchEmployes,
   fetchPeriodes,
 } from '../api';
+import { correspondRecherche, normaliserRecherche } from '../local/recherche';
 
 interface Props {
   onClose: () => void;
@@ -336,31 +337,19 @@ export const ImportExcelModal: React.FC<Props> = ({
 
   const paiesApercu = useMemo(() => {
     if (!analyse) return [];
-    const q = rechercheApercu.trim().toLowerCase();
+    const q = normaliserRecherche(rechercheApercu);
     return analyse.paies.filter((p) => {
       if (filtrePeriode !== 'TOUTES' && `${p.mois} ${p.annee}` !== filtrePeriode) return false;
-      if (!q) return true;
-      return (
-        String(p.numero_matricule).includes(q) ||
-        p.nom_prenoms.toLowerCase().includes(q) ||
-        (p.jobs || '').toLowerCase().includes(q) ||
-        (p.categorie || '').toLowerCase().includes(q)
-      );
+      return correspondRecherche(q, p.numero_matricule, p.nom_prenoms, p.jobs, p.categorie);
     });
   }, [analyse, filtrePeriode, rechercheApercu]);
 
   const employesApercu = useMemo(() => {
     if (!analyse) return [];
-    const q = rechercheApercu.trim().toLowerCase();
-    return analyse.employes.filter((e) => {
-      if (!q) return true;
-      return (
-        String(e.numero_matricule).includes(q) ||
-        e.nom_prenoms.toLowerCase().includes(q) ||
-        (e.jobs || '').toLowerCase().includes(q) ||
-        (e.categorie || '').toLowerCase().includes(q)
-      );
-    });
+    const q = normaliserRecherche(rechercheApercu);
+    return analyse.employes.filter((e) =>
+      correspondRecherche(q, e.numero_matricule, e.nom_prenoms, e.jobs, e.categorie)
+    );
   }, [analyse, rechercheApercu]);
 
   const coherencePct = useMemo(() => {
@@ -941,9 +930,9 @@ export const ImportExcelModal: React.FC<Props> = ({
                     <input
                       type="text"
                       value={rechercheApercu}
-                      onChange={(e) => setRechercheApercu(e.target.value)}
+                      onChange={(e) => setRechercheApercu(e.target.value.toLocaleUpperCase('fr-FR'))}
                       placeholder="Filtrer par matricule, nom, fonction…"
-                      className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-1.5 text-xs w-full sm:w-64"
+                      className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-1.5 text-xs uppercase w-full sm:w-64"
                     />
                   </div>
 

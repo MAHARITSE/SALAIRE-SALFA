@@ -19,6 +19,7 @@ import {
   ApercuFusionEmployes,
   ResultatFusionEmployes,
 } from '../api';
+import { correspondRecherche, normaliserRecherche } from '../local/recherche';
 
 interface FusionEmployesModalProps {
   employes: Employe[];
@@ -109,17 +110,11 @@ export const FusionEmployesModal: React.FC<FusionEmployesModalProps> = ({
   }, [cibleId, sourceId]);
 
   const employesTries = useMemo(() => {
-    const q = filtreEmployes.trim().toLowerCase();
+    const q = normaliserRecherche(filtreEmployes);
     return [...employes]
-      .filter((e) => {
-        if (!q) return true;
-        return (
-          String(e.numero_matricule).includes(q) ||
-          String(e.nom_prenoms || '').toLowerCase().includes(q) ||
-          String(e.numero_cnaps || '').toLowerCase().includes(q) ||
-          String(e.jobs || '').toLowerCase().includes(q)
-        );
-      })
+      .filter((e) =>
+        correspondRecherche(q, e.numero_matricule, e.nom_prenoms, e.numero_cnaps, e.jobs, e.categorie)
+      )
       .sort((a, b) => Number(a.numero_matricule) - Number(b.numero_matricule));
   }, [employes, filtreEmployes]);
 
@@ -237,9 +232,9 @@ export const FusionEmployesModal: React.FC<FusionEmployesModalProps> = ({
             <input
               type="text"
               value={filtreEmployes}
-              onChange={(e) => setFiltreEmployes(e.target.value)}
+              onChange={(e) => setFiltreEmployes(e.target.value.toLocaleUpperCase('fr-FR'))}
               placeholder="Filtrer la liste déroulante par matricule, nom ou N° CNaPS…"
-              className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/60 dark:text-white text-xs outline-none focus:ring-2 focus:ring-salfa-sky"
+              className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/60 dark:text-white text-xs uppercase outline-none focus:ring-2 focus:ring-salfa-sky"
             />
           </div>
 

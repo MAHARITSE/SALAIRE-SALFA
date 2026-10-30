@@ -290,7 +290,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-roles-'));
     // Créer le doublon Mat 61 (même nom & même CNaPS 992413003084, sans RIB, avec AOUT 2024 clôturé + NOVEMBRE 2026 en doublon)
     const okCreate61 = await m.createEmploye({
       numero_matricule: 6100,
-      nom_prenoms: emp54.nom_prenoms,
+      nom_prenoms: emp54.nom_prenoms.toLocaleLowerCase('fr-FR'),
       numero_cnaps: emp54.numero_cnaps,
       categorie: emp54.categorie,
       jobs: emp54.jobs,
@@ -306,6 +306,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-roles-'));
     assert.equal(okCreate61, true, 'Création du doublon test réussie');
     const emp61 = (await m.fetchEmployes(false)).find((e) => Number(e.numero_matricule) === 6100);
     assert.ok(emp61);
+    assert.equal(emp61.nom_prenoms, emp54.nom_prenoms.toLocaleUpperCase('fr-FR'), 'le nom saisi est enregistré en majuscules');
 
     // Ajouter sur le doublon : un bulletin historique exclusif (AOUT 2024 clôturé) + un bulletin en collision (NOVEMBRE 2026 ouvert) + un congé 2024
     await m.initPaieEmploye(emp61.id, 2024, 'AOUT');
@@ -406,7 +407,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-roles-'));
       empModTest.id,
       {
         ...empModTest,
-        nom_prenoms: 'LUCIENNE RAZAFITENDRY MODIFIEE',
+        nom_prenoms: 'lucienne razafitendry modifiee',
         categorie: 'CAT-TEST-5A',
         jobs: 'INFIRMIERE MAJOR',
         numero_cnaps: '999888777001',

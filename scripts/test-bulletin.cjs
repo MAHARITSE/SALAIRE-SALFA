@@ -22,6 +22,8 @@ try {
     formatCongesRestantsBulletin,
   } = bundle('src/bulletin/model.ts', 'model');
   const seed = require('../src/data/salfa_data.json');
+  const bulletinTab = fs.readFileSync('src/components/tabs/BulletinsTab.tsx', 'utf8');
+  assert.doesNotMatch(bulletinTab, /ChoixRetenuesIndividuel|deduireAvance|deduireMed|Sans Avance ni Médicament/, 'l’état individuel ne propose plus de choix pour ces retenues');
   const p = seed.paies.find(p => p.annee === 2026 && p.mois === 'OCTOBRE' && p.numero_matricule === 47);
   const b = construireBulletin(p);
   const xls = XLSX.readFile('SALAIRE SALFA 2026.xlsm');
@@ -83,8 +85,8 @@ try {
   (async () => {
     const avant = await api.fetchPaiesMois(2026, 'OCTOBRE');
     assert.equal(avant.employes.length, 48);
-    // Le relevé source fournit un solde restant de 30 j pour Mat 47 en 2026.
-    assert.equal(avant.employes.find(p => p.numero_matricule === 47).conge_restant, 30);
+    // Mat 47 conserve 25 + 30 + 30 jours sur ses titres non prescrits (2024–2026).
+    assert.equal(avant.employes.find(p => p.numero_matricule === 47).conge_restant, 85);
     assert.equal((await api.fetchPaiesMois(2027, 'OCTOBRE')).employes.length, 0);
     const emp = (await api.fetchEmployes(true)).find(e => e.numero_matricule === 47);
     await api.initPaieEmploye(emp.id, 2027, 'OCTOBRE');

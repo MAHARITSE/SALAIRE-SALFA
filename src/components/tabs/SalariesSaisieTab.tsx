@@ -20,6 +20,7 @@ import {
   ResultatFusionEmployes,
 } from '../../api';
 import { triggerSqlDownload } from '../../local/sqlBackup';
+import { correspondRecherche, normaliserRecherche } from '../../local/recherche';
 import {
   Plus,
   Search,
@@ -525,16 +526,10 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   };
 
   // Filtrage recherche
-  const q = search.trim().toLowerCase();
-  const rows = paies.filter((p) => {
-    if (!q) return true;
-    return (
-      String(p.numero_matricule).includes(q) ||
-      p.nom_prenoms.toLowerCase().includes(q) ||
-      (p.jobs || '').toLowerCase().includes(q) ||
-      (p.categorie || '').toLowerCase().includes(q)
-    );
-  });
+  const q = normaliserRecherche(search);
+  const rows = paies.filter((p) =>
+    correspondRecherche(q, p.numero_matricule, p.nom_prenoms, p.jobs, p.categorie)
+  );
 
   // Salariés actifs qui n'ont pas encore de ligne de paie ce mois-ci
   const paieEmpIds = new Set(paies.map((p) => p.employe_id));
@@ -589,14 +584,9 @@ export const SalariesSaisieTab: React.FC<Props> = ({
       const chargements = await Promise.all(cibles.map((m) => fetchPaiesMois(annee, m)));
       const liste: EtatMoisImprimable[] = [];
       cibles.forEach((m, i) => {
-        const lignesMois = (chargements[i].employes || []).filter((p) => {
-          if (!q) return true;
-          return (
-            String(p.numero_matricule).includes(q) ||
-            p.nom_prenoms.toLowerCase().includes(q) ||
-            (p.jobs || '').toLowerCase().includes(q)
-          );
-        });
+        const lignesMois = (chargements[i].employes || []).filter((p) =>
+          correspondRecherche(q, p.numero_matricule, p.nom_prenoms, p.jobs, p.categorie)
+        );
         if (lignesMois.length > 0) {
           liste.push({ mois: m, annee, lignes: lignesMois, totals: calcTotals(lignesMois) });
         }
@@ -898,8 +888,8 @@ export const SalariesSaisieTab: React.FC<Props> = ({
             type="text"
             placeholder="Rechercher par matricule, nom, fonction, catégorie..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white text-sm focus:ring-2 focus:ring-salfa-sky outline-none"
+            onChange={(e) => setSearch(e.target.value.toLocaleUpperCase('fr-FR'))}
+            className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white text-sm uppercase focus:ring-2 focus:ring-salfa-sky outline-none"
           />
         </div>
 
