@@ -147,6 +147,7 @@
 
 /* Bulletin individuel : reproduction fidèle de la feuille BULLETIN du classeur (image modèle). */
 .bulletin-print { display: none; }
+.bulletin-booklet-cover, .bulletin-booklet-blank, .bulletin-decharge-page { display: none; }
 .bulletin-card {
   color: #000 !important;
   background: #fff !important;
@@ -311,17 +312,102 @@
   border-color: #475569 !important;
 }
 
+@page bulletin-cover { size: A4 landscape; margin: 0; }
 @page bulletin-paie { size: A4 landscape; margin: 5mm 8mm 5mm 30mm; }
+@page bulletin-blank { size: A4 landscape; margin: 0; }
+@page bulletin-decharge { size: A4 portrait; margin: 10mm; }
 @media print {
   html:has(.bulletin-print), body:has(.bulletin-print),
   body:has(.bulletin-print) #root, body:has(.bulletin-print) #root > div,
   body:has(.bulletin-print) main, body:has(.bulletin-print) main > div, .bulletin-root {
-    page: bulletin-paie;
     display: block !important; overflow: visible !important; width: auto !important; max-width: none !important;
     min-height: 0 !important; height: auto !important; padding: 0 !important; margin: 0 !important; border: 0 !important;
   }
-  .bulletin-print { page: bulletin-paie; display: block !important; margin: 0 !important; padding: 0 !important; }
+  .bulletin-print { display: block !important; margin: 0 !important; padding: 0 !important; }
+  .bulletin-booklet-cover {
+    page: bulletin-cover;
+    display: block !important;
+    box-sizing: border-box;
+    width: 297mm;
+    height: 210mm;
+    padding: 8mm 18mm;
+    color: #000 !important;
+    background: #fff !important;
+    break-after: page;
+    page-break-after: always;
+  }
+  .bulletin-booklet-cover img {
+    display: block;
+    width: 140mm;
+    height: 34mm;
+    object-fit: contain;
+    object-position: left top;
+  }
+  .bulletin-booklet-cover-title { margin-top: 35mm; }
+  .bulletin-booklet-cover-title h1 {
+    margin: 0 0 4mm;
+    font: bold 25pt/1.15 Arial, sans-serif;
+    color: #000 !important;
+  }
+  .bulletin-booklet-cover-title p {
+    margin: 0;
+    font: bold 23pt/1.15 Arial, sans-serif;
+    color: #000 !important;
+  }
+  .bulletin-booklet-blank {
+    page: bulletin-blank;
+    display: block !important;
+    box-sizing: border-box;
+    width: 297mm;
+    height: 210mm;
+    background: #fff !important;
+    break-before: page;
+    page-break-before: always;
+    break-after: page;
+    page-break-after: always;
+  }
+  .bulletin-decharge-page {
+    page: bulletin-decharge;
+    display: block !important;
+    width: 100%;
+    color: #000 !important;
+    background: #fff !important;
+    font: 9pt/1.2 Arial, sans-serif;
+    break-after: page;
+    page-break-after: always;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+  .bulletin-decharge-page:last-child { break-after: auto; page-break-after: auto; }
+  .bulletin-decharge-page h1 {
+    margin: 0 0 2.5mm;
+    padding: 0 0 1.2mm;
+    border-bottom: 0.25mm solid #333;
+    text-align: center;
+    font: bold 11pt/1.2 Arial, sans-serif;
+    color: #000 !important;
+  }
+  .bulletin-decharge-table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    color: #000 !important;
+    font: 9pt/1.15 Arial, sans-serif;
+  }
+  .bulletin-decharge-table thead { display: table-header-group; }
+  .bulletin-decharge-table th, .bulletin-decharge-table td {
+    border: 0.25mm solid #333 !important;
+    padding: 1.2mm 1.5mm;
+    color: #000 !important;
+  }
+  .bulletin-decharge-table th { height: 8mm; text-align: center; font-weight: 700; }
+  .bulletin-decharge-table td { height: 9.5mm; }
+  .bulletin-decharge-table th:first-child, .bulletin-decharge-table td:first-child { width: 13mm; text-align: center; }
+  .bulletin-decharge-table th:nth-child(2), .bulletin-decharge-table td:nth-child(2) { width: 122mm; }
+  .bulletin-decharge-table th:last-child, .bulletin-decharge-table td:last-child { width: 55mm; }
+  .bulletin-decharge-table tbody tr { break-inside: avoid; page-break-inside: avoid; }
   .bulletin-print-sheet {
+    page: bulletin-paie;
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) 8mm minmax(0, 1fr);
     gap: 0;

@@ -8,10 +8,10 @@ import {
   formatEmbaucheBulletin,
   formatMontantBulletin,
   montantEnLettresBulletin,
+  NB_EXEMPLAIRES_BULLETIN,
+  paginerPaiesDecharge,
 } from '../bulletin/model';
 import { loadBulletinHeader, defaultBulletinHeader } from '../bulletin/header';
-
-const NAVY: [number, number, number] = [26, 54, 93];
 
 function fmt(value: number | undefined | null): string {
   return Number(value || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -256,221 +256,121 @@ export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle, options?: Bulleti
     doc.text(new Date().toLocaleDateString('fr-FR'), x + 46, fy);
   };
 
-  drawCopy(30, 125.5);
+  const drawCutLine = () => {
+    // Trait de découpe vertical bien marqué au centre entre les exemplaires + symbole ciseaux
+    const cutX = 159.25;
+    doc.setDrawColor(71, 85, 105);
+    doc.setLineWidth(0.3);
+    doc.circle(cutX - 1.1, 6.2, 0.85, 'S');
+    doc.circle(cutX + 1.1, 6.2, 0.85, 'S');
+    doc.line(cutX - 0.65, 6.9, cutX + 0.85, 9.7);
+    doc.line(cutX + 0.65, 6.9, cutX - 0.85, 9.7);
 
-  // Trait de découpe vertical bien marqué au centre entre les 2 exemplaires + symbole ciseaux
-  const cutX = 159.25;
-  doc.setDrawColor(71, 85, 105);
-  doc.setLineWidth(0.3);
-  doc.circle(cutX - 1.1, 6.2, 0.85, 'S');
-  doc.circle(cutX + 1.1, 6.2, 0.85, 'S');
-  doc.line(cutX - 0.65, 6.9, cutX + 0.85, 9.7);
-  doc.line(cutX + 0.65, 6.9, cutX - 0.85, 9.7);
+    doc.setLineWidth(0.35);
+    doc.setLineDashPattern([2.5, 1.8], 0);
+    doc.line(cutX, 11, cutX, 204);
+    doc.setLineDashPattern([], 0);
+  };
 
-  doc.setLineWidth(0.35);
-  doc.setLineDashPattern([2.5, 1.8], 0);
-  doc.line(cutX, 11, cutX, 204);
-  doc.setLineDashPattern([], 0);
-
-  drawCopy(163, 125.5);
+  const copiesA4 = [
+    { x: 30, width: 125.5 },
+    { x: 163, width: 125.5 },
+  ].slice(0, NB_EXEMPLAIRES_BULLETIN);
+  copiesA4.forEach((copy, index) => {
+    if (index > 0) drawCutLine();
+    drawCopy(copy.x, copy.width);
+  });
 }
 
-function drawCover(doc: jsPDF, paies: PaieMensuelle[], mois: string, annee: number): void {
-  const TEAL: [number, number, number] = [61, 153, 153];
-  const TEAL_DARK: [number, number, number] = [33, 122, 122];
-  const SLATE_50: [number, number, number] = [248, 250, 252];
-  const SLATE_200: [number, number, number] = [226, 232, 240];
-  const SLATE_500: [number, number, number] = [100, 116, 139];
-  const SLATE_600: [number, number, number] = [71, 85, 105];
-
+function drawCover(doc: jsPDF, mois: string, annee: number): void {
   const PAGE_W = 297;
   const PAGE_H = 210;
-  const LEFT_W = 92;
-  const GUTTER_X = LEFT_W;
-  const rightCenter = GUTTER_X + (PAGE_W - GUTTER_X) / 2;
+  let image = loadBulletinHeader().image;
+  let properties;
+  try { properties = doc.getImageProperties(image); }
+  catch { image = defaultBulletinHeader().image; properties = doc.getImageProperties(image); }
 
-  // Fond blanc pour toute la page de couverture.
   doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
 
-  // Séparation discrète : la couverture reste blanche, avec l'identité placée à gauche.
-  doc.setDrawColor(...SLATE_200);
-  doc.setLineWidth(0.35);
-  doc.line(GUTTER_X, 12, GUTTER_X, PAGE_H - 12);
+  const maxHeaderW = 140;
+  const maxHeaderH = 34;
+  const headerScale = Math.min(maxHeaderW / properties.width, maxHeaderH / properties.height);
+  const headerW = properties.width * headerScale;
+  const headerH = properties.height * headerScale;
+  doc.addImage(image, properties.fileType, 18, 8, headerW, headerH);
 
-  doc.setDrawColor(...TEAL);
-  doc.setLineWidth(1.15);
-  doc.line(GUTTER_X + 2.8, 20, GUTTER_X + 2.8, PAGE_H - 20);
-
-  // -- Bloc gauche : logo / établissement / infos, sans fond coloré --
-  const leftCenter = LEFT_W / 2;
-  const cardX = 10;
-  const cardY = 12;
-  const cardW = LEFT_W - 20;
-  const cardH = PAGE_H - 24;
-
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(...SLATE_200);
-  doc.setLineWidth(0.4);
-  doc.roundedRect(cardX, cardY, cardW, cardH, 4, 4, 'S');
-
-  // Petit liseré supérieur gauche pour rappeler la charte sans colorer le fond.
-  doc.setDrawColor(...TEAL);
-  doc.setLineWidth(1.5);
-  doc.line(cardX + 8, cardY + 8, cardX + cardW - 8, cardY + 8);
-
-  // Logo stylisé conservé au ratio 1:1.
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(...NAVY);
-  doc.setLineWidth(0.8);
-  doc.circle(leftCenter, 39, 17, 'FD');
-
-  doc.setFillColor(...TEAL);
-  doc.roundedRect(leftCenter - 2.6, 27, 5.2, 24, 1, 1, 'F');
-  doc.roundedRect(leftCenter - 12, 36.4, 24, 5.2, 1, 1, 'F');
-  doc.setFillColor(...NAVY);
-  doc.circle(leftCenter, 39, 2.2, 'F');
-
+  // Reprise du modèle de couverture fourni : entête SALFA en haut, période en grand dessous.
+  doc.setTextColor(0, 0, 0);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...NAVY);
-  doc.setFontSize(18);
-  doc.text('SALFA', leftCenter, 69, { align: 'center' });
-
-  doc.setFontSize(6.8);
-  doc.setTextColor(...TEAL_DARK);
-  doc.text('SAHAM — CLINIQUE', leftCenter, 74.5, { align: 'center' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6.2);
-  doc.setTextColor(...SLATE_500);
-  doc.text('Fiangonana Loterana Malagasy', leftCenter, 80, { align: 'center' });
-
-  doc.setDrawColor(...SLATE_200);
-  doc.setLineWidth(0.25);
-  doc.line(cardX + 11, 91, cardX + cardW - 11, 91);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...NAVY);
-  doc.setFontSize(10.5);
-  doc.text('DISPENSAIRE', leftCenter, 105, { align: 'center' });
-  doc.text('TANAMBAO', leftCenter, 112, { align: 'center' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.2);
-  doc.setTextColor(...TEAL_DARK);
-  doc.text('TOBY BETELA • TOLIARA', leftCenter, 119.5, { align: 'center' });
-
-  doc.setFontSize(6.4);
-  doc.setTextColor(...SLATE_500);
-  doc.text('SAMPAN’ASA LOTERANA', leftCenter, 127, { align: 'center' });
-  doc.text('MOMBA NY FAHASALAMANA', leftCenter, 131, { align: 'center' });
-
-  // Icône état/documents sur le côté gauche de l'état.
-  const iconX = leftCenter - 14;
-  const iconY = 143;
-  doc.setDrawColor(...NAVY);
-  doc.setLineWidth(0.45);
-  doc.roundedRect(iconX, iconY, 28, 19, 1.4, 1.4, 'S');
-  doc.line(iconX, iconY + 5, iconX + 28, iconY + 5);
-  doc.setFillColor(...TEAL);
-  doc.rect(iconX + 3, iconY + 8, 14, 1.15, 'F');
-  doc.setFillColor(...NAVY);
-  doc.rect(iconX + 3, iconY + 10.8, 20, 0.9, 'F');
-  doc.rect(iconX + 3, iconY + 13.3, 12, 0.9, 'F');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.2);
-  doc.setTextColor(...NAVY);
-  doc.text('ÉTATS DE PAIE', leftCenter, 171, { align: 'center' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(5.3);
-  doc.setTextColor(...SLATE_500);
-  doc.text('NIF: 5000767080', leftCenter, 185, { align: 'center' });
-  doc.text('STAT: 851 125 120 120 001 36', leftCenter, 188.6, { align: 'center' });
-  doc.text(`Édité le ${new Date().toLocaleDateString('fr-FR')}`, leftCenter, 196, { align: 'center' });
-
-  // -- Zone droite : contenu principal sur fond blanc --
-  doc.setDrawColor(...SLATE_200);
-  doc.setLineWidth(0.4);
-  doc.roundedRect(GUTTER_X + 14, 12, PAGE_W - GUTTER_X - 26, PAGE_H - 24, 4, 4, 'S');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...NAVY);
-  doc.setFontSize(12.5);
-  doc.text('FIANGONANA LOTERANA MALAGASY', rightCenter, 34, { align: 'center' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(...SLATE_500);
-  doc.text("SAMPAN'ASA LOTERANA MOMBA NY FAHASALAMANA", rightCenter, 41, { align: 'center' });
-
-  doc.setDrawColor(...SLATE_200);
-  doc.setLineWidth(0.35);
-  doc.line(rightCenter - 58, 48, rightCenter + 58, 48);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(...TEAL_DARK);
-  doc.text('DISPENSAIRE TANAMBAO — TOBY BETELA TOLIARA • CLINIQUE SALFA', rightCenter, 55, { align: 'center' });
-
-  // Badge "Document officiel" sur fond blanc/gris très léger.
-  doc.setFillColor(...SLATE_50);
-  doc.setDrawColor(...SLATE_200);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(rightCenter - 38, 63, 76, 9, 2, 2, 'FD');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(6.3);
-  doc.setTextColor(...TEAL_DARK);
-  doc.text('DOCUMENT OFFICIEL DE PAIE', rightCenter, 68.8, { align: 'center' });
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(24);
-  doc.setTextColor(...NAVY);
-  doc.text('ÉTAT GLOBAL', rightCenter, 91, { align: 'center' });
+  doc.setFontSize(25);
+  doc.text('BULLETIN DE PAIE SALAIRE', 18, 82);
   doc.setFontSize(23);
-  doc.text('DES BULLETINS DE PAIE', rightCenter, 103, { align: 'center' });
-
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(...NAVY);
-  doc.setLineWidth(0.55);
-  doc.roundedRect(rightCenter - 60, 115, 120, 28, 3, 3, 'FD');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18.5);
-  doc.setTextColor(...NAVY);
-  doc.text(`${mois} ${annee}`, rightCenter, 132.5, { align: 'center' });
-
-  // Nombre de salariés : badge lisible, le reste de la page reste blanc.
-  doc.setFillColor(...TEAL);
-  doc.roundedRect(rightCenter - 36, 150, 72, 11, 2.5, 2.5, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.8);
-  doc.setTextColor(255, 255, 255);
-  doc.text(`${paies.length} salarié${paies.length > 1 ? 's' : ''} • ${paies.length > 0 ? 'LISTE COMPLÈTE' : ''}`, rightCenter, 157.5, { align: 'center' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.2);
-  doc.setTextColor(...SLATE_600);
-  doc.text('Un bulletin par page — deux exemplaires côte à côte (employeur / salarié)', rightCenter, 169.5, { align: 'center' });
-
-  doc.setDrawColor(...SLATE_200);
-  doc.setLineWidth(0.3);
-  doc.line(GUTTER_X + 24, 183, PAGE_W - 14, 183);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6);
-  doc.setTextColor(140, 150, 165);
-  doc.text('Document confidentiel — Usage interne uniquement — Clinique SALFA Tanambao — Toby Betela Toliara', rightCenter, 190, { align: 'center' });
+  doc.text(`Mois de : ${mois} ${annee}`, 18, 100);
 }
 
-/** Downloads a single print-ready PDF: cover page then one A4 landscape page per employee. */
+function drawCashDischargePages(doc: jsPDF, paies: PaieMensuelle[], mois: string, annee: number): void {
+  const pages = paginerPaiesDecharge(paies);
+  const pageW = 210;
+  const marginX = 10;
+  const tableW = pageW - marginX * 2;
+  const colWidths = [13, 122, tableW - 135];
+  const titleY = 18;
+  const tableTop = 29;
+  const headerH = 9;
+  const rowH = 9.5;
+
+  for (const lignes of pages) {
+    doc.addPage('a4', 'portrait');
+    doc.setTextColor(0, 0, 0);
+    doc.setDrawColor(0, 0, 0);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11.5);
+    doc.text(`FICHE DECHARGE PRIME MOIS DE ${mois} ${annee}`, pageW / 2, titleY, { align: 'center' });
+
+    const drawCell = (x: number, y: number, width: number, height: number, text: string, align: 'left' | 'center', isHeader = false) => {
+      doc.setLineWidth(0.25);
+      doc.rect(x, y, width, height);
+      doc.setFont('helvetica', isHeader ? 'bold' : 'normal');
+      doc.setFontSize(isHeader ? 9.2 : 9);
+      const textY = y + height / 2 + 1.2;
+      const textX = align === 'center' ? x + width / 2 : x + 2;
+      doc.text(text, textX, textY, { align });
+    };
+
+    let x = marginX;
+    drawCell(x, tableTop, colWidths[0], headerH, 'N°', 'center', true);
+    x += colWidths[0];
+    drawCell(x, tableTop, colWidths[1], headerH, 'Noms et Prenom', 'center', true);
+    x += colWidths[1];
+    drawCell(x, tableTop, colWidths[2], headerH, 'Emargement', 'center', true);
+
+    const lignesPage: Array<PaieMensuelle | null> = lignes.length ? lignes : [null];
+    lignesPage.forEach((paie, index) => {
+      const y = tableTop + headerH + index * rowH;
+      let cellX = marginX;
+      if (paie) {
+        drawCell(cellX, y, colWidths[0], rowH, String(paie.numero_matricule), 'center');
+        cellX += colWidths[0];
+        drawCell(cellX, y, colWidths[1], rowH, String(paie.nom_prenoms || ''), 'left');
+        cellX += colWidths[1];
+        drawCell(cellX, y, colWidths[2], rowH, '', 'left');
+      } else {
+        drawCell(cellX, y, tableW, rowH, 'Aucun paiement en espèces supérieur à 5 000 Ar.', 'left');
+      }
+    });
+  }
+}
+
+/** Downloads the booklet: cover, landscape payroll pages, a blank binding page, then the cash-payment discharge sheet. */
 export function downloadPayrollBookletPDF(paies: PaieMensuelle[], mois: string, annee: number): void {
   if (!paies.length) return;
   const ordered = [...paies].sort((a, b) => Number(a.numero_matricule) - Number(b.numero_matricule));
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  drawCover(doc, ordered, mois, annee);
+  drawCover(doc, mois, annee);
   ordered.forEach((p) => { doc.addPage('a4', 'landscape'); drawBulletinPage(doc, p); });
+  doc.addPage('a4', 'landscape'); // page blanche prévue pour la reliure du livre des bulletins
+  drawCashDischargePages(doc, ordered, mois, annee);
   doc.save(`Etats_Bulletins_${safeFilePart(mois)}_${annee}.pdf`);
 }
 

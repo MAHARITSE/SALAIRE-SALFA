@@ -2,6 +2,9 @@ import { PaieMensuelle } from '../types';
 
 export interface BulletinRow { libelle: string; gain?: number; retenue?: number; total?: boolean }
 
+/** Nombre d’exemplaires imprimés côte à côte sur une page A4 paysage. */
+export const NB_EXEMPLAIRES_BULLETIN = 2;
+
 export interface BulletinOptions {
   /** Déduire ou non l'avance sur salaire / prêt de l'état individuel (défaut : true). */
   deduireAvance?: boolean;
@@ -10,6 +13,24 @@ export interface BulletinOptions {
 }
 
 const n = (value: unknown) => Number(value) || 0;
+
+/** Salariés à inscrire sur la décharge : montant réellement payé en espèces strictement supérieur au seuil. */
+export function selectionnerPaiesDecharge(paies: PaieMensuelle[], seuil = 5000): PaieMensuelle[] {
+  return [...(paies || [])]
+    .filter((paie) => Number(paie.especes || 0) > seuil)
+    .sort((a, b) => Number(a.numero_matricule) - Number(b.numero_matricule));
+}
+
+export function paginerPaiesDecharge(paies: PaieMensuelle[], seuil = 5000, lignesParPage = 24): PaieMensuelle[][] {
+  const eligibles = selectionnerPaiesDecharge(paies, seuil);
+  if (!eligibles.length) return [[]];
+  const taille = Math.max(1, Math.floor(lignesParPage) || 24);
+  const pages: PaieMensuelle[][] = [];
+  for (let i = 0; i < eligibles.length; i += taille) {
+    pages.push(eligibles.slice(i, i + taille));
+  }
+  return pages;
+}
 
 /** Calcul du bulletin selon les formules de la feuille BULLETIN du classeur (avec choix optionnel de déduction Avance / Médicament). */
 export function construireBulletin(p: PaieMensuelle, options?: BulletinOptions) {

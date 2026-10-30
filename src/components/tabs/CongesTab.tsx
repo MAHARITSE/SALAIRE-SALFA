@@ -12,6 +12,7 @@ import { UserSession } from '../../types';
 import {
   fetchEmployes, fetchConges, fetchSituationConges, fetchEtatConges,
   creerConge, modifierConge, deciderConge, supprimerConge, saisirOuverturePremiereAnnee,
+  exporterSauvegardeSql,
 } from '../../api';
 import {
   CongeAbsence, CongesConfig, SoldeSaisie, EtatConges, MOTIFS_ABSENCE, LIBELLES_CATEGORIE,
@@ -23,13 +24,12 @@ import { correspondRecherche, normaliserRecherche } from '../../local/recherche'
 import { FicheAbsenceModal, BrouillonConge } from '../conges/FicheAbsenceModal';
 import { FicheAbsence, RecapFiche, dateFr, periodeAbsenceFr, dateRetourFiche } from '../conges/FicheAbsence';
 import { EtatCongesEcran, EtatCongesImpression, exporterEtatCongesExcel } from '../conges/EtatConges';
-import { ImportCongesModal } from '../conges/ImportCongesModal';
 import { BulletinHeaderModal } from '../BulletinHeaderModal';
 import { setRemoteCongeHeader } from '../../bulletin/header';
 import { WAMP } from '../../runtime';
 import { downloadFicheAbsencePDF, downloadEtatCongesPDF } from '../../pdf/congesPdf';
 import {
-  CalendarPlus, Search, Printer, FileSpreadsheet, Upload, Info, CheckCircle2, XCircle,
+  CalendarPlus, Search, Printer, FileSpreadsheet, Info, CheckCircle2, XCircle,
   Eye, Edit2, Trash2, CalendarClock, ShieldCheck, BookOpen, RefreshCw, PenLine, FileText, X, Download, Settings2,
 } from 'lucide-react';
 
@@ -74,7 +74,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
   const [chargement, setChargement] = useState(true);
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; texte: string } | null>(null);
   const [modal, setModal] = useState<{ ouvert: boolean; initial: BrouillonConge | null }>({ ouvert: false, initial: null });
-  const [importOuvert, setImportOuvert] = useState(false);
+  const [exportSqlEnCours, setExportSqlEnCours] = useState(false);
   const [enteteOuvert, setEnteteOuvert] = useState(false);
   const [referentiel, setReferentiel] = useState(false);
   const [ficheImpr, setFicheImpr] = useState<CongeAbsence[]>([]);
@@ -369,20 +369,30 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
     setTimeout(() => window.print(), 120);
   };
 
-  const exporterJson = () => {
-    const contenu = {
-      type: 'salfa-conges',
-      annee,
-      congies: config,
-      exporte_le: new Date().toISOString(),
-      conges,
-    };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(contenu, null, 2)], { type: 'application/json' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `SALFA_FICHES_ABSENCE_${annee}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const exporterSqlConges = async () => {
+    if (user?.role !== 'Administrateur') return;
+    setExportSqlEnCours(true);
+    setMessage(null);
+    try {
+      const resultat = await exporterSauvegardeSql({
+        type: 'CONGES',
+        periode: String(annee),
+        motif: `Sauvegarde SQL Congés & Permissions — ${annee}`,
+        telecharger: true,
+      });
+      if (!resultat.success) {
+        setMessage({ type: 'err', texte: resultat.message || 'Échec de la génération SQL Congés.' });
+        return;
+      }
+      setMessage({
+        type: 'ok',
+        texte: `Sauvegarde SQL Congés téléchargée : ${resultat.filename}${resultat.server_saved ? ' — copie archivée sur le serveur WAMP.' : '.'}`,
+      });
+    } catch (e: any) {
+      setMessage({ type: 'err', texte: e?.message || 'Échec de la génération SQL Congés.' });
+    } finally {
+      setExportSqlEnCours(false);
+    }
   };
 
   const totalAttente = enAttente.length;
@@ -420,18 +430,26 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             <button onClick={() => setEnteteOuvert(true)} title="Modifier l’entête des fiches de congé / permission (comme pour l’entête du bulletin)" className="order-2 min-h-9 flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
               <Settings2 className="w-4 h-4" />Entête
             </button>
-            <button onClick={() => setImportOuvert(true)} className="order-3 min-h-9 flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
-              <Upload className="w-4 h-4" />Importer contrôle
-            </button>
-            <button onClick={() => etatFiltre && downloadEtatCongesPDF(etatFiltre, annee)} disabled={!etatFiltre} className="order-4 min-h-9 flex-1 sm:flex-initial bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
+            <button onClick={() => etatFiltre && downloadEtatCongesPDF(etatFiltre, annee)} disabled={!etatFiltre} className="order-3 min-h-9 flex-1 sm:flex-initial bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
               <Download className="w-4 h-4" />PDF État
             </button>
-            <button onClick={imprimerEtat} className="order-5 min-h-9 flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
+            <button onClick={imprimerEtat} className="order-4 min-h-9 flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
               <Printer className="w-4 h-4" />Imprimer
             </button>
-            <button onClick={() => etatFiltre && exporterEtatCongesExcel(etatFiltre, annee)} disabled={!etatFiltre} className="order-6 min-h-9 flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
+            <button onClick={() => etatFiltre && exporterEtatCongesExcel(etatFiltre, annee)} disabled={!etatFiltre} className="order-5 min-h-9 flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
               <FileSpreadsheet className="w-4 h-4" />Excel
             </button>
+            {user?.role === 'Administrateur' && (
+              <button
+                onClick={exporterSqlConges}
+                disabled={exportSqlEnCours}
+                title="Exporte salfa_conges, salfa_employes et salfa_users sans modifier salfa_paies."
+                className="order-6 min-h-9 flex-1 sm:flex-initial bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow"
+              >
+                <Download className={`w-4 h-4 ${exportSqlEnCours ? 'animate-pulse' : ''}`} />
+                {exportSqlEnCours ? 'Génération SQL…' : 'Exporter SQL Congés uniquement'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -460,9 +478,6 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
           </label>
           <button onClick={charger} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2.5 py-2 text-xs font-bold flex items-center gap-1.5" title="Recharger depuis le stockage local">
             <RefreshCw className={`w-4 h-4 ${chargement ? 'animate-spin' : ''}`} />
-          </button>
-          <button onClick={exporterJson} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-2.5 py-2 text-xs font-bold flex items-center gap-1.5" title="Sauvegarde JSON des fiches d'absence">
-            JSON
           </button>
           {vue === 'etat' && (
             <>
@@ -864,15 +879,6 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             utilisateur={meta}
             onClose={() => setModal({ ouvert: false, initial: null })}
             onEnregistrer={enregistrer}
-          />
-        </div>
-      )}
-      {importOuvert && (
-        <div className="no-print">
-          <ImportCongesModal
-            employes={employes}
-            onClose={() => setImportOuvert(false)}
-            onTermine={(texte) => { setImportOuvert(false); setMessage({ type: 'ok', texte }); charger(); }}
           />
         </div>
       )}

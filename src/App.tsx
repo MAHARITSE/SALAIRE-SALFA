@@ -12,7 +12,6 @@ import { AdminModal, AdminTabKey } from './components/AdminModal';
 import { ImportExcelModal } from './components/ImportExcelModal';
 import { UsersSettingsModal } from './components/UsersSettingsModal';
 import { InactifsModal } from './components/InactifsModal';
-import { SauvegardeSqlModal } from './components/SauvegardeSqlModal';
 import { SalariesSaisieTab } from './components/tabs/SalariesSaisieTab';
 import { BulletinsTab } from './components/tabs/BulletinsTab';
 import { RapportsTab } from './components/tabs/RapportsTab';
@@ -23,7 +22,7 @@ import { applyAppFavicon } from './local/favicon';
 import { apiLogout } from './api';
 import {
   Users, FileText, BarChart3, CheckCircle2, LogOut,
-  CalendarCheck2, ShieldCheck, Moon, Sun, Upload, ChevronDown, Settings, Sliders, User, UserX, Database, Image as ImageIcon,
+  CalendarCheck2, ShieldCheck, Moon, Sun, Upload, ChevronDown, Settings, Sliders, User, UserX, Image as ImageIcon,
 } from 'lucide-react';
 import { AppTab, estRoleAdmin } from './local/roles';
 
@@ -37,7 +36,6 @@ export const App: React.FC = () => {
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showInactifsModal, setShowInactifsModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showSqlBackupModal, setShowSqlBackupModal] = useState(false);
   const [showAdminMenu, setShowAdminMenu] = useState(false);
   const [importedMois, setImportedMois] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -92,9 +90,8 @@ export const App: React.FC = () => {
       if (showAdminModal) setShowAdminModal(false);
       if (showUsersModal) setShowUsersModal(false);
       if (showImportModal) setShowImportModal(false);
-      if (showSqlBackupModal) setShowSqlBackupModal(false);
     }
-  }, [user, activeTab, showAdminModal, showUsersModal, showImportModal, showSqlBackupModal]);
+  }, [user, activeTab, showAdminModal, showUsersModal, showImportModal]);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
@@ -147,10 +144,6 @@ export const App: React.FC = () => {
             setRefreshKey((k) => k + 1);
           }}
         />
-      )}
-
-      {showSqlBackupModal && estAdmin && (
-        <SauvegardeSqlModal onClose={() => setShowSqlBackupModal(false)} />
       )}
 
       {showUsersModal && estAdmin && user && (
@@ -366,22 +359,6 @@ export const App: React.FC = () => {
                             <div>
                               <div>Icône de l'application</div>
                               <div className="text-[10px] font-normal text-slate-400">Remplacer l'icône de l'onglet navigateur</div>
-                            </div>
-                          </button>
-
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => {
-                              setShowAdminMenu(false);
-                              setShowSqlBackupModal(true);
-                            }}
-                            className="w-full px-3.5 py-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-teal-50 dark:hover:bg-teal-900/20 hover:text-teal-700 dark:hover:text-teal-300 flex items-center gap-2.5 transition"
-                          >
-                            <Database className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
-                            <div>
-                              <div>Sauvegarde SQL</div>
-                              <div className="text-[10px] font-normal text-slate-400">Exporter .sql relationnel &amp; sauvegardes clôture</div>
                             </div>
                           </button>
 

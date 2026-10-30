@@ -7,6 +7,8 @@ import { downloadPayrollBookletPDF, downloadSingleBulletinPDF } from '../../pdf/
 import { YearProps, YearSelect } from '../YearSelect';
 import {
   construireBulletin,
+  NB_EXEMPLAIRES_BULLETIN,
+  paginerPaiesDecharge,
   formatCnapsBulletin,
   formatCongesRestantsBulletin,
   formatEmbaucheBulletin,
@@ -32,7 +34,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
 
   // Mode d'impression : 'un_seul' (bulletin actif sélectionné) ou 'tous' (tous les bulletins affichés)
   const [printMode, setPrintMode] = useState<'un_seul' | 'tous'>('un_seul');
-  const [previewDouble, setPreviewDouble] = useState(false);
+  const [previewDouble, setPreviewDouble] = useState(true);
   const [openMenu, setOpenMenu] = useState<'print' | 'pdf' | null>(null);
   const actionsRef = useRef<HTMLDivElement | null>(null);
 
@@ -84,6 +86,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
 
   const bulletinsImprimes: PaieMensuelle[] =
     printMode === 'tous' ? filtered : selectedPaie ? [selectedPaie] : [];
+  const paiesDechargePages = printMode === 'tous' ? paginerPaiesDecharge(filtered) : [];
 
   return (
     <div className="bulletin-root w-full">
@@ -132,7 +135,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
                 >
                   <User className="w-4 h-4 text-salfa-teal shrink-0" />
                   <div>
-                    <div>Télécharger cet état individuel</div>
+                    <div>Télécharger cet état individuel (2 ex. sur A4)</div>
                     {selectedPaie && <div className="text-[10px] font-normal text-slate-400 truncate max-w-[190px]">Mat {selectedPaie.numero_matricule} — {selectedPaie.nom_prenoms}</div>}
                   </div>
                 </button>
@@ -148,7 +151,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
                   <Users className="w-4 h-4 text-emerald-600 shrink-0" />
                   <div>
                     <div>Tous les bulletins ({filtered.length})</div>
-                    <div className="text-[10px] font-normal text-slate-400">Livret complet {mois} {annee}</div>
+                    <div className="text-[10px] font-normal text-slate-400">2 ex. par bulletin · Livret complet {mois} {annee}</div>
                   </div>
                 </button>
               </div>
@@ -164,7 +167,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
               className="w-full min-h-9 justify-center bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 px-4 py-2 rounded-lg text-xs font-bold flex gap-1.5 items-center shadow-sm"
             >
               <Printer className="w-4 h-4" />
-              <span>Imprimer</span>
+              <span>Imprimer 2 ex.</span>
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
             {openMenu === 'print' && (
@@ -177,7 +180,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
                 >
                   <User className="w-4 h-4 text-emerald-600 shrink-0" />
                   <div>
-                    <div>Imprimer cet état individuel</div>
+                    <div>Imprimer cet état individuel (2 ex.)</div>
                     {selectedPaie && <div className="text-[10px] font-normal text-slate-400 truncate max-w-[190px]">Mat {selectedPaie.numero_matricule} — {selectedPaie.nom_prenoms}</div>}
                   </div>
                 </button>
@@ -190,7 +193,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
                   <Users className="w-4 h-4 text-salfa-teal shrink-0" />
                   <div>
                     <div>Imprimer tous les bulletins ({filtered.length})</div>
-                    <div className="text-[10px] font-normal text-slate-400">2 exemplaires par page A4 paysage</div>
+                    <div className="text-[10px] font-normal text-slate-400">2 ex. par bulletin A4 · couverture, bulletins, page blanche, décharge</div>
                   </div>
                 </button>
               </div>
@@ -261,9 +264,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
               {previewDouble ? (
                 <div className="overflow-x-auto pb-1">
                   <div className="min-w-[920px] grid grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)] items-stretch bg-white p-2 rounded-lg border border-slate-200">
-                    <BulletinCard paie={selectedPaie} header={header.image} />
-                    <BulletinCutLine />
-                    <BulletinCard paie={selectedPaie} header={header.image} />
+                    <BulletinCopies paie={selectedPaie} header={header.image} />
                   </div>
                 </div>
               ) : (
@@ -290,13 +291,50 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
 
       {!loading && bulletinsImprimes.length > 0 && (
         <div className="bulletin-print">
+          {printMode === 'tous' && (
+            <div className="bulletin-booklet-cover">
+              <img src={header.image} alt="Entête de la Clinique SALFA" />
+              <div className="bulletin-booklet-cover-title">
+                <h1>BULLETIN DE PAIE SALAIRE</h1>
+                <p>Mois de : {mois} {annee}</p>
+              </div>
+            </div>
+          )}
           {bulletinsImprimes.map((p) => (
             <div key={p.id} className="bulletin-print-sheet">
-              <BulletinCard paie={p} header={header.image} />
-              <BulletinCutLine />
-              <BulletinCard paie={p} header={header.image} />
+              <BulletinCopies paie={p} header={header.image} />
             </div>
           ))}
+          {printMode === 'tous' && (
+            <>
+              <div className="bulletin-booklet-blank" aria-hidden="true" />
+              {paiesDechargePages.map((paiesDecharge, pageIndex) => (
+                <section key={`decharge-page-${pageIndex}`} className="bulletin-decharge-page">
+                  <h1>FICHE DECHARGE PRIME MOIS DE {mois} {annee}</h1>
+                  <table className="bulletin-decharge-table">
+                    <thead>
+                      <tr>
+                        <th>N°</th>
+                        <th>Noms et Prenom</th>
+                        <th>Emargement</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paiesDecharge.length ? paiesDecharge.map((p) => (
+                        <tr key={`decharge-${p.id}`}>
+                          <td>{p.numero_matricule}</td>
+                          <td>{p.nom_prenoms}</td>
+                          <td />
+                        </tr>
+                      )) : (
+                        <tr><td colSpan={3}>Aucun paiement en espèces supérieur à 5 000 Ar.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </section>
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -468,3 +506,14 @@ const BulletinCard: React.FC<{ paie: PaieMensuelle; header: string }> = ({ paie,
     </div>
   );
 };
+
+const BulletinCopies: React.FC<{ paie: PaieMensuelle; header: string }> = ({ paie, header }) => (
+  <>
+    {Array.from({ length: NB_EXEMPLAIRES_BULLETIN }, (_, index) => (
+      <React.Fragment key={`${paie.id}-ex-${index}`}>
+        {index > 0 && <BulletinCutLine />}
+        <BulletinCard paie={paie} header={header} />
+      </React.Fragment>
+    ))}
+  </>
+);

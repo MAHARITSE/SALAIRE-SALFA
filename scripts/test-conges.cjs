@@ -9,6 +9,11 @@ const esbuild = require('esbuild');
 const XLSX = require('xlsx');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-conges-'));
+const congesTabUi = fs.readFileSync('src/components/tabs/CongesTab.tsx', 'utf8');
+const appUi = fs.readFileSync('src/App.tsx', 'utf8');
+assert.doesNotMatch(congesTabUi, /exporterJson|Importer contrôle|>\s*JSON\s*</, 'les boutons JSON et Importer contrôle ne figurent plus dans Congés & Permissions');
+assert.match(congesTabUi, /Exporter SQL Congés uniquement/, 'l’export SQL limité aux congés reste accessible depuis la section Congés');
+assert.doesNotMatch(appUi, /SauvegardeSqlModal|showSqlBackupModal|Sauvegarde SQL/, 'le menu/modal SQL manuel complet est retiré de l’administration');
 function bundle(source, name) {
   const outfile = path.join(tmp, name + '.cjs');
   esbuild.buildSync({ entryPoints: [source], bundle: true, platform: 'node', format: 'cjs', outfile, loader: { '.png': 'dataurl' }, logLevel: 'silent' });

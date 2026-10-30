@@ -226,7 +226,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-wamp-test-'));
   const afterResetCfg = localMod.resetConfig();
   assert.equal(afterResetCfg.iconeApp, testIcon, 'resetConfig des barèmes préserve l’icône personnalisée');
 
-  // Test ajout d'année + sauvegarde SQL manuelle (Administration -> Sauvegarde SQL) en mode local
+  // Test ajout d'année + génération SQL relationnelle via API locale
   const addYearLocal = await localMod.localApi.ajouterAnneeBase(2027);
   assert.equal(addYearLocal.success, true, 'ajout année 2027 en mode local');
   const manualSql = await localMod.localApi.exporterSauvegardeSqlLocale({ telecharger: false, motif: 'test-admin' });
@@ -238,6 +238,18 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-wamp-test-'));
   assert.ok(!manualSql.sql.includes('store_json') && !manualSql.sql.includes('config_json'), 'zéro JSON dans le dump SQL');
   assert.ok(manualSql.sql.includes('INSERT IGNORE INTO `salfa_users`'), 'utilisateurs par défaut inclus dans le dump SQL');
   assert.ok(manualSql.sql.includes('data:image/png;base64,'), 'icone_app incluse dans salfa_config du dump SQL');
+
+  const congesSqlLocal = await localMod.localApi.exporterSauvegardeSqlLocale({
+    type: 'CONGES', periode: '2026', telecharger: false,
+  });
+  assert.equal(congesSqlLocal.success, true, 'export SQL Congés réussi');
+  assert.ok(congesSqlLocal.sql.includes('INSERT IGNORE INTO `salfa_users`'), 'export Congés inclut les utilisateurs sans remplacer leurs mots de passe');
+  assert.ok(congesSqlLocal.sql.includes('INSERT IGNORE INTO `salfa_employes`'), 'export Congés inclut les salariés sans écraser les lignes existantes');
+  assert.ok(congesSqlLocal.sql.includes('DELETE FROM `salfa_conges`'), 'export Congés inclut les fiches de congés');
+  const tablesSchemaConges = [...congesSqlLocal.sql.matchAll(/CREATE TABLE IF NOT EXISTS `([^`]+)`/g)].map((m) => m[1]).sort();
+  assert.deepEqual(tablesSchemaConges, ['salfa_conges', 'salfa_employes', 'salfa_users'], 'le SQL Congés ne crée que les trois tables demandées');
+  assert.ok(!congesSqlLocal.sql.includes('salfa_paies'), 'le SQL Congés ne référence jamais les bulletins, donc ne peut pas les écraser');
+  assert.ok(!/\b(?:DELETE\s+FROM|INSERT(?:\s+IGNORE)?\s+INTO|UPDATE)\s+`salfa_config`/i.test(congesSqlLocal.sql), 'export Congés ne remplace pas la configuration de paie');
 
   // Test clôture de paie/caisse -> sauvegarde SQL forcée automatique en mode local
   localMod.setDerniereSauvegardeSql(null);
