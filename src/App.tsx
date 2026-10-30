@@ -181,6 +181,9 @@ export const App: React.FC = () => {
               setAnnee(derniere.annee);
               setImportedMois(derniere.mois);
             }
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('salfa-annees-updated'));
+            }
             setRefreshKey((k) => k + 1);
           }}
         />

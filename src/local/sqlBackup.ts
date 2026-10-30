@@ -352,6 +352,11 @@ CREATE TABLE IF NOT EXISTS \`salfa_entete\` (
   \`image_complete\` LONGTEXT NULL,
   \`logo_gauche\` LONGTEXT NULL,
   \`logo_droite\` LONGTEXT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS \`salfa_annees\` (
+  \`annee\` INT NOT NULL PRIMARY KEY,
+  \`date_creation\` VARCHAR(32) NOT NULL DEFAULT ''
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`;
 
 function chunkArray<T>(items: T[], size = 150): T[][] {
@@ -544,6 +549,26 @@ export function buildRelationalSqlBackup(params: {
         batch
           .map((c: any, idx: number) => `  (${sqlInt(c.id, idx + 1)}, ${sqlInt(c.numero_matricule)}, ${sqlEscapeString(c.nom_prenoms, 160)}, ${sqlEscapeString(c.categorie, 32)}, ${sqlEscapeString(c.jobs, 160)}, ${sqlFloat(c.net_actuel)}, ${sqlFloat(c.net_avant)}, ${sqlFloat(c.ecart)})`)
           .join(',\n') + ';'
+      );
+    }
+    lines.push('');
+
+    // Années ajoutées explicitement
+    const anneesExplicites = Array.isArray((store as any).annees)
+      ? Array.from(
+          new Set<number>(
+            ((store as any).annees as any[])
+              .map((y) => Number(y))
+              .filter((y) => Number.isInteger(y) && y >= 1990 && y <= 2100)
+          )
+        ).sort((a, b) => a - b)
+      : [];
+    lines.push('-- Années ajoutées explicitement dans la base');
+    lines.push('DELETE FROM `salfa_annees`;');
+    if (anneesExplicites.length > 0) {
+      lines.push('INSERT INTO `salfa_annees` (`annee`, `date_creation`) VALUES');
+      lines.push(
+        anneesExplicites.map((y) => `  (${sqlInt(y)}, ${sqlEscapeString(iso, 32)})`).join(',\n') + ';'
       );
     }
     lines.push('');

@@ -17,6 +17,8 @@ export interface JsonStore {
   utilisateurs: any[];
   /** Fiches d'absence : congés, permissions, examens médicaux, ajustements de droit. */
   conges: any[];
+  /** Années explicitement ajoutées dans la base par l'utilisateur via le bouton d'ajout d'année. */
+  annees?: number[];
 }
 
 const STORAGE_KEY = 'salfa_paie_store_v1';
@@ -45,6 +47,7 @@ function seedStore(): JsonStore {
     paies: Array.isArray(raw.paies) ? raw.paies : [],
     comparaison_net: Array.isArray(raw.comparaison_net) ? raw.comparaison_net : [],
     conges: Array.isArray(raw.conges) ? raw.conges : [],
+    annees: Array.isArray(raw.annees) ? raw.annees.map((y: any) => Number(y)).filter((y: number) => Number.isInteger(y) && y >= 1990 && y <= 2100) : [],
     utilisateurs:
       Array.isArray(raw.utilisateurs) && raw.utilisateurs.length
         ? raw.utilisateurs

@@ -33,6 +33,14 @@ function validStore($store): bool {
             $congeIds[$cid] = true;
         }
     }
+    if (isset($store['annees'])) {
+        if (!is_array($store['annees'])) return false;
+        foreach ($store['annees'] as $y) {
+            if (!is_int($y) && !is_numeric($y)) return false;
+            $yi = (int)$y;
+            if ($yi < 1990 || $yi > 2100) return false;
+        }
+    }
     return true;
 }
 

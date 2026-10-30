@@ -226,6 +226,11 @@ function ensureSalfaInitialized(PDO $db): void {
         `logo_droite` LONGTEXT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    $db->exec("CREATE TABLE IF NOT EXISTS `salfa_annees` (
+        `annee` INT NOT NULL PRIMARY KEY,
+        `date_creation` VARCHAR(32) NOT NULL DEFAULT ''
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     $db->exec("INSERT IGNORE INTO `salfa_revision` (`id`, `revision`) VALUES (1, 1)");
     $db->exec("INSERT IGNORE INTO `salfa_config` (`id`, `configuree`, `jours_feries`) VALUES (1, 0, '')");
     $db->exec("INSERT IGNORE INTO `salfa_entete` (`id`, `configuree`) VALUES (1, 0)");
@@ -453,6 +458,15 @@ function loadRelationalStore(PDO $db): array {
         }
     }
 
+    $anneesExplicites = [];
+    foreach ($db->query("SELECT `annee` FROM `salfa_annees` ORDER BY `annee` ASC")->fetchAll(PDO::FETCH_ASSOC) as $ar) {
+        $ay = (int)$ar['annee'];
+        if ($ay >= 1990 && $ay <= 2100) {
+            $anneesExplicites[] = $ay;
+            $anneesSet[$ay] = true;
+        }
+    }
+
     asort($moisSet);
     $anneesImportees = array_keys($anneesSet);
     sort($anneesImportees);
@@ -479,6 +493,7 @@ function loadRelationalStore(PDO $db): array {
         'paies' => $paies,
         'comparaison_net' => $comp,
         'conges' => $conges,
+        'annees' => $anneesExplicites,
         'utilisateurs' => [],
     ];
 }
@@ -799,6 +814,28 @@ function syncComparaisonNetTable(PDO $db, array $comp): void {
     }
 }
 
+function syncAnneesTable(PDO $db, array $annees): void {
+    $clean = [];
+    foreach ($annees as $y) {
+        $yi = (int)$y;
+        if ($yi >= 1990 && $yi <= 2100) {
+            $clean[$yi] = $yi;
+        }
+    }
+    ksort($clean);
+    if (empty($clean)) {
+        $db->exec("DELETE FROM `salfa_annees`");
+        return;
+    }
+    $inList = implode(',', array_map('intval', array_values($clean)));
+    $db->exec("DELETE FROM `salfa_annees` WHERE `annee` NOT IN ($inList)");
+    $now = date('Y-m-d H:i:s');
+    $st = $db->prepare("INSERT INTO `salfa_annees` (`annee`, `date_creation`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `annee` = VALUES(`annee`)");
+    foreach ($clean as $yi) {
+        $st->execute([$yi, $now]);
+    }
+}
+
 function updateRevisionMeta(PDO $db, array $meta, int $newRevision): void {
     $st = $db->prepare("UPDATE `salfa_revision` SET
         `revision` = ?,
@@ -1023,7 +1060,7 @@ function generateRelationalSqlDump(PDO $db, string $motif = 'Sauvegarde SQL manu
     $lines[] = 'DROP TABLE IF EXISTS `salfa_state`;';
     $lines[] = '';
 
-    foreach (['salfa_users', 'salfa_revision', 'salfa_employes', 'salfa_paies', 'salfa_conges', 'salfa_comparaison_net', 'salfa_config', 'salfa_bareme_anciennete', 'salfa_bareme_irsa', 'salfa_entete'] as $tbl) {
+    foreach (['salfa_users', 'salfa_revision', 'salfa_employes', 'salfa_paies', 'salfa_conges', 'salfa_comparaison_net', 'salfa_config', 'salfa_bareme_anciennete', 'salfa_bareme_irsa', 'salfa_entete', 'salfa_annees'] as $tbl) {
         $createRow = $db->query("SHOW CREATE TABLE `$tbl`")->fetch(PDO::FETCH_NUM);
         if ($createRow && isset($createRow[1])) {
             $ddl = preg_replace('/^CREATE TABLE /i', 'CREATE TABLE IF NOT EXISTS ', (string)$createRow[1]);
@@ -1054,6 +1091,7 @@ function generateRelationalSqlDump(PDO $db, string $motif = 'Sauvegarde SQL manu
         $lines[] = dumpTableRowsSql($db, 'salfa_employes', $empCols, '`id` ASC');
         $lines[] = dumpTableRowsSql($db, 'salfa_paies', ['id', 'employe_id', 'numero_matricule', 'annee', 'mois', 'nom_prenoms', 'numero_cnaps', 'categorie', 'jobs', 'date_embauche', 'nombre_annees', 'enfant_a_charge', 'base_aj', 'logt_trsp', 'rendement', 'resp_repres', 'salaire_brut', 'cnaps', 'patronal', 'salaire_imposable', 'irsa', 'salaire_net', 'augmentation_divers', 'prime_de_garde', 'anciennete2', 'risque', 'repr_rec', 'accessoir', 'brut', 'avance', 'med', 'net', 'virement', 'especes', 'rap', 'rib', 'verrouille', 'conge_maternite', 'date_debut_maternite', 'date_modification'], '`annee` ASC, `id` ASC');
         $lines[] = dumpTableRowsSql($db, 'salfa_comparaison_net', ['id', 'numero_matricule', 'nom_prenoms', 'categorie', 'jobs', 'net_actuel', 'net_avant', 'ecart'], '`id` ASC');
+        $lines[] = dumpTableRowsSql($db, 'salfa_annees', ['annee', 'date_creation'], '`annee` ASC');
     }
 
     $lines[] = dumpTableRowsSql($db, 'salfa_conges', ['id', 'employe_id', 'numero_matricule', 'nom_prenoms', 'fonction', 'service', 'contact', 'categorie', 'motif_code', 'motif_libelle', 'imputation', 'annee', 'date_demande', 'date_debut', 'heure_debut', 'date_fin', 'date_retour', 'heure_fin', 'jours_demandes', 'jours_valides', 'remplacant', 'titre_periode', 'justificatif', 'observations', 'statut', 'visa_chef_par', 'visa_chef_le', 'visa_medecin_par', 'visa_medecin_le', 'visa_gestionnaire_par', 'visa_gestionnaire_le', 'motif_refus', 'ajustement_type', 'saisie_par', 'date_saisie', 'date_modification'], '`id` ASC');

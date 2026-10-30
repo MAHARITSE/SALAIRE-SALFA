@@ -384,8 +384,12 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   const handleInitMois = async () => {
     setActionLoading(true);
     const res = await initMoisPaie(annee, mois);
-    if (res.success) await loadAll();
-    else alert("Erreur lors de l'initialisation du mois.");
+    if (res.success) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('salfa-annees-updated'));
+      }
+      await loadAll();
+    } else alert("Erreur lors de l'initialisation du mois.");
     setActionLoading(false);
   };
 
@@ -486,6 +490,14 @@ export const SalariesSaisieTab: React.FC<Props> = ({
     .filter((p) => p.annee === annee && p.nb > 0)
     .sort((a, b) => MOIS_LISTE.indexOf(a.mois) - MOIS_LISTE.indexOf(b.mois));
 
+  const anneesPeriodes = Array.from(new Set(periodes.map((p) => Number(p.annee)).filter((y) => Number.isFinite(y))));
+  const nbParMoisAnnee = new Map<string, number>();
+  for (const p of periodes) {
+    if (Number(p.annee) === Number(annee)) {
+      nbParMoisAnnee.set(String(p.mois).toUpperCase(), p.nb);
+    }
+  }
+
   const lancerImpressionEtat = async (scope: 'actif' | 'tous') => {
     setOpenPrintMenu(false);
     if (scope === 'actif') {
@@ -549,6 +561,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
           </select>
           <YearSelect
             annee={annee}
+            anneesDisponibles={anneesPeriodes}
             setAnnee={(y) => {
               setEtatsImpression(null);
               setAnnee(y);
@@ -1004,36 +1017,44 @@ export const SalariesSaisieTab: React.FC<Props> = ({
           </div>
         </div>
 
-      {/* ACCÈS RAPIDE AUX PÉRIODES DISPONIBLES */}
-      {periodes.length > 0 && (
-        <div className="no-print bg-white dark:bg-slate-800 rounded-xl p-2.5 sm:p-3 border border-slate-200 dark:border-slate-700 flex items-center gap-2 overflow-x-auto thin-scrollbar">
-          <span className="text-[11px] font-bold uppercase text-slate-400 shrink-0 pl-1">Mois initialisés :</span>
-          <div className="flex items-center gap-1.5">
-            {periodes.map((p) => {
-              const active = p.annee === annee && p.mois === mois;
-              return (
-                <button
-                  key={`${p.annee}-${p.mois}`}
-                  type="button"
-                  onClick={() => {
-                    setEtatsImpression(null);
-                    setAnnee(p.annee);
-                    setMois(p.mois);
-                  }}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition ${
-                    active
-                      ? 'bg-salfa-dark text-white shadow-sm'
-                      : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'
-                  }`}
-                >
-                  <span>{p.mois} {p.annee}</span>
-                  <span className={`text-[10px] ${active ? 'text-sky-200' : 'text-slate-400'}`}>({p.nb})</span>
-                </button>
-              );
-            })}
-          </div>
+      {/* ACCÈS RAPIDE AUX 12 MOIS DE L'ANNÉE (SANS L'ANNÉE — FILTRÉ PAR RAPPORT À L'ANNÉE DE « PÉRIODE : ») */}
+      <div className="no-print bg-white dark:bg-slate-800 rounded-xl p-2.5 sm:p-3 border border-slate-200 dark:border-slate-700 flex items-center gap-2 overflow-x-auto thin-scrollbar">
+        <span className="text-[11px] font-bold uppercase text-slate-400 shrink-0 pl-1">Mois initialisés :</span>
+        <div className="flex items-center gap-1.5">
+          {MOIS_LISTE.map((m) => {
+            const nb = nbParMoisAnnee.get(m) || 0;
+            const active = m === mois;
+            const initialise = nb > 0;
+            return (
+              <button
+                key={m}
+                type="button"
+                title={
+                  initialise
+                    ? `${m} ${annee} — ${nb} bulletin(s) initialisé(s)`
+                    : `${m} ${annee} — non initialisé`
+                }
+                onClick={() => {
+                  setEtatsImpression(null);
+                  setMois(m);
+                }}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition ${
+                  active
+                    ? 'bg-salfa-dark text-white shadow-sm'
+                    : initialise
+                      ? 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'
+                      : 'bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/70 text-slate-400 dark:text-slate-500 border border-dashed border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                <span>{m}</span>
+                {initialise && (
+                  <span className={`text-[10px] ${active ? 'text-sky-200' : 'text-slate-400'}`}>({nb})</span>
+                )}
+              </button>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       {/* FEUILLES D'IMPRESSION PAPIER (A4 PAYSAGE : 2 PAGES PAR MOIS, UN SEUL OU TOUS LES MOIS) */}
       <EtatImpression etats={etatsPourImpression} />
