@@ -115,12 +115,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($sentOrigin === '') {
         $sentOrigin = normalizeOrigin((string)($_SERVER['HTTP_REFERER'] ?? ''));
     }
-    if ($expectedOrigin !== '' && $sentOrigin !== $expectedOrigin) {
+    if ($expectedOrigin !== '' && $sentOrigin !== '' && $sentOrigin !== $expectedOrigin) {
         answer(403, ['error' => 'Origine non autorisée.']);
     }
+    $contentLength = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+    if ($contentLength > 32000000) answer(413, ['error' => 'Données trop volumineuses.']);
+    $rawBody = (string)file_get_contents('php://input');
+    if ($rawBody === '' && $contentLength > 0) {
+        answer(413, ['error' => 'Requête tronquée par la limite PHP post_max_size de WampServer. Augmentez post_max_size (ex. 32M).']);
+    }
     if (stripos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== 0) answer(415, ['error' => 'Format de requête invalide.']);
-    if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 12000000) answer(413, ['error' => 'Données trop volumineuses.']);
-    $input = json_decode((string)file_get_contents('php://input'), true);
+    $input = json_decode($rawBody, true);
     if (!is_array($input)) answer(400, ['error' => 'Requête invalide.']);
 } else {
     $input = [];

@@ -45,7 +45,12 @@ function validStore($store): bool {
 }
 
 /** Normalise une ligne de bulletin pour comparer deux versions sans faux positifs de typage SQL/JS. */
-function normalizePaieForLockCheck(array $p, bool $ignoreUnlock, bool $ignoreIdentityReattach = false): array {
+function normalizePaieForLockCheck(
+    array $p,
+    bool $ignoreUnlock,
+    bool $ignoreIdentityReattach = false,
+    bool $ignoreEmployeeProfileMeta = false
+): array {
     $skip = [
         'date_modification' => true,
         'rap' => true,
@@ -66,6 +71,16 @@ function normalizePaieForLockCheck(array $p, bool $ignoreUnlock, bool $ignoreIde
         $skip['nom_prenoms'] = true;
         $skip['numero_cnaps'] = true;
     }
+    if ($ignoreEmployeeProfileMeta) {
+        // Autoriser l'administrateur à corriger l'identité / la catégorie d'un salarié
+        // tout en interdisant strictement toute modification des montants d'un mois clôturé.
+        $skip['numero_matricule'] = true;
+        $skip['nom_prenoms'] = true;
+        $skip['numero_cnaps'] = true;
+        $skip['categorie'] = true;
+        $skip['jobs'] = true;
+        $skip['date_embauche'] = true;
+    }
     $numericCols = [
         'nombre_annees', 'enfant_a_charge', 'base_aj', 'logt_trsp', 'rendement', 'resp_repres',
         'salaire_brut', 'cnaps', 'patronal', 'salaire_imposable', 'irsa', 'salaire_net',
@@ -81,7 +96,9 @@ function normalizePaieForLockCheck(array $p, bool $ignoreUnlock, bool $ignoreIde
     ];
     if (!$ignoreIdentityReattach) {
         $out['employe_id'] = (int)($p['employe_id'] ?? 0);
-        $out['numero_matricule'] = (int)($p['numero_matricule'] ?? 0);
+        if (!$ignoreEmployeeProfileMeta) {
+            $out['numero_matricule'] = (int)($p['numero_matricule'] ?? 0);
+        }
     }
     foreach ($numericCols as $col) {
         if (isset($skip[$col])) continue;
@@ -160,9 +177,10 @@ function lockedSafe(array $old, array $new, string $action, string $role): bool 
         }
         $n = $newById[$id];
         $ignoreUnlock = ($action === 'deverrouillerMois' && $role === 'Administrateur' && (int)($n['verrouille'] ?? 0) === 0);
+        $ignoreEmployeeProfileMeta = ($action === 'updateEmploye' && $role === 'Administrateur');
         if (
-            normalizePaieForLockCheck($p, $ignoreUnlock, $isMergedSourceRow) !==
-            normalizePaieForLockCheck($n, $ignoreUnlock, $isMergedSourceRow)
+            normalizePaieForLockCheck($p, $ignoreUnlock, $isMergedSourceRow, $ignoreEmployeeProfileMeta) !==
+            normalizePaieForLockCheck($n, $ignoreUnlock, $isMergedSourceRow, $ignoreEmployeeProfileMeta)
         ) {
             return false;
         }

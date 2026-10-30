@@ -47,6 +47,36 @@ try {
   assert.equal(formatCnapsBulletin('863892'), '863 892');
   assert.equal(formatCongesRestantsBulletin(85), '85');
   assert.equal(formatCongesRestantsBulletin(undefined), '........');
+
+  // Choix à l'impression d'un état individuel : déduire ou non les médicaments et avances
+  const pAvecAvanceMed = seed.paies.find(
+    (r) => r.annee === 2026 && r.mois === 'JANVIER' && r.numero_matricule === 3
+  );
+  assert.ok(pAvecAvanceMed && pAvecAvanceMed.avance > 0 && pAvecAvanceMed.med > 0, 'Salarié Mat 3 JANVIER 2026 avec avance et médicament');
+  const bAvecTout = construireBulletin(pAvecAvanceMed);
+  const bSansRien = construireBulletin(pAvecAvanceMed, { deduireAvance: false, deduireMed: false });
+  const bSansAvance = construireBulletin(pAvecAvanceMed, { deduireAvance: false, deduireMed: true });
+  const bSansMed = construireBulletin(pAvecAvanceMed, { deduireAvance: true, deduireMed: false });
+
+  assert.equal(bSansRien.avance, 0, 'Avance ramenée à 0 sur l’état individuel sans déduction');
+  assert.equal(bSansRien.med, 0, 'Médicament ramené à 0 sur l’état individuel sans déduction');
+  assert.equal(formatMontantBulletin(bSansRien.avance), '-');
+  assert.equal(formatMontantBulletin(bSansRien.med), '-');
+  close(bSansRien.retenues, Number(pAvecAvanceMed.cnaps) + Number(pAvecAvanceMed.irsa));
+  close(bSansRien.net - bAvecTout.net, Number(pAvecAvanceMed.avance) + Number(pAvecAvanceMed.med));
+  close(bSansAvance.net - bAvecTout.net, Number(pAvecAvanceMed.avance));
+  close(bSansMed.net - bAvecTout.net, Number(pAvecAvanceMed.med));
+  assert.equal(bSansRien.especes > bAvecTout.especes, true, 'Le règlement espèces reflète le net hors avance/médicament');
+  assert.equal(pAvecAvanceMed.avance, 300000, 'La donnée source en base n’est jamais modifiée');
+  assert.equal(pAvecAvanceMed.med, 51500, 'La donnée médicament en base n’est jamais modifiée');
+
+  const pVirementMed = seed.paies.find(
+    (r) => r.annee === 2026 && r.mois === 'JANVIER' && r.numero_matricule === 13
+  );
+  const bVirAvec = construireBulletin(pVirementMed);
+  const bVirSans = construireBulletin(pVirementMed, { deduireAvance: false, deduireMed: false });
+  assert.equal(bVirSans.virement > bVirAvec.virement, true, 'Pour un salarié payé par virement, le virement reflète le net hors retenue');
+  assert.equal(bVirSans.especes, bVirAvec.especes, 'La part espèces plafonnée reste inchangée');
   const storage = new Map();
   global.localStorage = { getItem: k => storage.get(k) || null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) };
   const api = bundle('src/api-local.ts', 'api');

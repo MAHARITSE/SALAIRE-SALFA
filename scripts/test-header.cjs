@@ -157,5 +157,32 @@ try {
   const srcBul = fs.readFileSync(path.join(process.cwd(), 'src/components/tabs/BulletinsTab.tsx'), 'utf8');
   assert.equal(srcBul.includes('Employé&nbsp;'), false, 'plus aucun alignement approximatif par &nbsp; dans BulletinsTab');
 
+  // Vérification du trait de découpe entre les 2 exemplaires du bulletin (PDF + impression directe + aperçu 2 ex.)
+  const cutLinesPdf = lineCalls.filter((l) => Math.abs(l.x1 - 159.25) < 0.01 && Math.abs(l.x2 - 159.25) < 0.01 && (l.y2 - l.y1) > 180);
+  assert.equal(cutLinesPdf.length, 1, 'trait de découpe vertical dessiné exactement au centre entre les 2 bulletins PDF');
+  assert.ok(srcBul.includes('<BulletinCutLine />') && srcBul.includes('bulletin-cut-line') && srcBul.includes('bulletin-cut-scissors'), 'trait de découpe présent entre les 2 bulletins dans BulletinsTab');
+  assert.ok(css.includes('.bulletin-cut-rule') && css.includes('dashed #334155'), 'trait de découpe pointillé stylisé pour l’impression A4');
+
+  // Vérification du choix « déduire ou non médicament et avance » lors de l'impression / PDF d'un état individuel
+  assert.ok(
+    srcBul.includes('ChoixRetenuesIndividuelModal') &&
+      srcBul.includes('deduireAvance') &&
+      srcBul.includes('deduireMed') &&
+      srcBul.includes('Ne pas déduire Avance ni Médicament'),
+    'BulletinsTab propose le choix de déduire ou non Avance et Médicament à l’impression d’un état individuel'
+  );
+  const paieAvMed = { ...mat1, avance: 120000, med: 35000 };
+  const callsSans = [];
+  const docSans = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const origTextSans = docSans.text.bind(docSans);
+  docSans.text = function (txt, x, y, opts) {
+    const s = Array.isArray(txt) ? txt.join(' ') : String(txt);
+    callsSans.push(s);
+    return origTextSans(txt, x, y, opts);
+  };
+  drawBulletinPage(docSans, paieAvMed, { deduireAvance: false, deduireMed: false });
+  assert.equal(callsSans.some((s) => s.includes('120 000,00')), false, 'Avance non affichée dans le PDF individuel quand deduireAvance=false');
+  assert.equal(callsSans.some((s) => s.includes('35 000,00')), false, 'Médicament non affiché dans le PDF individuel quand deduireMed=false');
+
   console.log('Entête persistant (bulletin + congé), 3 cm de reliure et PDF : OK');
 } finally { fs.rmSync(tmp, { recursive: true, force: true }); }

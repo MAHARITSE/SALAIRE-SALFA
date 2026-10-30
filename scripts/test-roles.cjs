@@ -393,6 +393,63 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-roles-'));
     assert.equal(srcApp.includes('Personnes inactives'), true);
     assert.equal(srcApp.includes('InactifsModal'), true);
 
+    // Non-régression : modification d'un salarié (nom, catégorie ajoutée, fonction, salaire) propagée à la base et à l'interface
+    const empModTest = (await m.fetchEmployes(true)).find((e) => Number(e.id) === Number(emp54.id));
+    assert.ok(empModTest, 'Salarié Mat 54 présent pour le test de modification');
+    const paieClotureeAvant = (await m.fetchEmployePaies(empModTest.id)).find((p) => Number(p.verrouille) === 1);
+    const paieOuverteAvant = (await m.fetchPaiesMois(2026, 'NOVEMBRE')).employes.find((p) => Number(p.employe_id) === Number(empModTest.id));
+    assert.ok(paieOuverteAvant, 'Bulletin ouvert NOVEMBRE 2026 présent avant modification');
+    const avanceAvantMod = Number(paieOuverteAvant.avance || 0);
+    const netClotureAvant = paieClotureeAvant ? Number(paieClotureeAvant.net || 0) : null;
+
+    const okUpdateEmp = await m.updateEmploye(
+      empModTest.id,
+      {
+        ...empModTest,
+        nom_prenoms: 'LUCIENNE RAZAFITENDRY MODIFIEE',
+        categorie: 'CAT-TEST-5A',
+        jobs: 'INFIRMIERE MAJOR',
+        numero_cnaps: '999888777001',
+        base_aj: Number(empModTest.base_aj || 300000) + 50000,
+      },
+      { annee: 2026, mois: 'NOVEMBRE' }
+    );
+    assert.equal(okUpdateEmp, true, 'updateEmploye enregistre les modifications');
+
+    // 1) Fiche salarié mise à jour en base (salfa_employes)
+    const empModApres = (await m.fetchEmployes(false)).find((e) => Number(e.id) === Number(empModTest.id));
+    assert.equal(empModApres.nom_prenoms, 'LUCIENNE RAZAFITENDRY MODIFIEE');
+    assert.equal(empModApres.categorie, 'CAT-TEST-5A');
+    assert.equal(empModApres.jobs, 'INFIRMIERE MAJOR');
+    assert.equal(empModApres.numero_cnaps, '999888777001');
+
+    // 2) État de paie & Bulletins du mois ouvert mis à jour immédiatement (nom + catégorie + recalcul salarial en préservant l'avance)
+    const paieOuverteApres = (await m.fetchPaiesMois(2026, 'NOVEMBRE')).employes.find((p) => Number(p.employe_id) === Number(empModTest.id));
+    assert.equal(paieOuverteApres.nom_prenoms, 'LUCIENNE RAZAFITENDRY MODIFIEE', 'Nom mis à jour sur le tableau salaire');
+    assert.equal(paieOuverteApres.categorie, 'CAT-TEST-5A', 'Catégorie ajoutée visible immédiatement sur le tableau salaire et le bulletin');
+    assert.equal(paieOuverteApres.jobs, 'INFIRMIERE MAJOR', 'Fonction mise à jour sur le tableau salaire');
+    assert.equal(paieOuverteApres.numero_cnaps, '999888777001', 'N° CNaPS mis à jour sur le bulletin');
+    assert.equal(Number(paieOuverteApres.base_aj), Number(empModTest.base_aj || 300000) + 50000, 'Salaire de base recalculé sur le mois ouvert');
+    assert.equal(Number(paieOuverteApres.avance), avanceAvantMod, 'L’avance saisie du mois ouvert est préservée');
+
+    // 3) Mois clôturés : identité / catégorie synchronisée sans jamais altérer le net clôturé
+    if (paieClotureeAvant) {
+      const paieClotureeApres = (await m.fetchEmployePaies(empModTest.id)).find((p) => Number(p.id) === Number(paieClotureeAvant.id));
+      assert.equal(paieClotureeApres.nom_prenoms, 'LUCIENNE RAZAFITENDRY MODIFIEE');
+      assert.equal(paieClotureeApres.categorie, 'CAT-TEST-5A');
+      assert.equal(Number(paieClotureeApres.net), netClotureAvant, 'Le net du mois clôturé reste strictement figé');
+    }
+
+    // 4) Congés & Permissions : nom et fonction mis à jour sans jamais altérer conge.categorie (CONGE / PERMISSION)
+    const congesEmpApres = (await m.fetchConges({})).filter((c) => Number(c.employe_id) === Number(empModTest.id));
+    assert.ok(congesEmpApres.length >= 1);
+    assert.equal(congesEmpApres.every((c) => c.nom_prenoms === 'LUCIENNE RAZAFITENDRY MODIFIEE'), true, 'Nom propagé aux congés');
+    assert.equal(
+      congesEmpApres.every((c) => ['CONGE', 'PERMISSION', 'EXAMEN', 'AJUSTEMENT'].includes(c.categorie)),
+      true,
+      'Le type de congé (conge.categorie) n’est jamais écrasé par la classification salarié'
+    );
+
     m.apiLogoutLocal();
     console.log('Contrôle des droits Administrateur (accès complet) vs Comptable (Permissions & Congés uniquement) : OK');
   } finally {

@@ -67,13 +67,23 @@ const MonetaryInput: React.FC<MonetaryInputProps> = ({ value, onChange, classNam
   );
 };
 
+const CATEGORIES_SUGGEREES = ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', 'TB', 'HC'];
+
 export interface EmployeModalFormProps {
   employe: Employe | null;
+  periodeActive?: { annee: number; mois: string };
+  categoriesExistantes?: string[];
   onClose: () => void;
   onSaved: () => void;
 }
 
-export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({ employe, onClose, onSaved }) => {
+export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
+  employe,
+  periodeActive,
+  categoriesExistantes = [],
+  onClose,
+  onSaved,
+}) => {
   const todayIso = () => new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     numero_matricule: employe?.numero_matricule || '',
@@ -95,6 +105,15 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({ employe, onC
     date_inactif: employe?.date_inactif || '',
   });
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const listeCategories = Array.from(
+    new Set(
+      [...categoriesExistantes, ...CATEGORIES_SUGGEREES]
+        .map((c) => String(c || '').trim())
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
 
   const calculateAncYear = (d: string) => {
     if (!d) return 0;
@@ -145,26 +164,38 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({ employe, onC
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     setSaving(true);
-    const estInactif = Number(form.actif) === 0;
-    const dataToSend: Partial<Employe> = {
-      ...form,
-      numero_matricule: Number(form.numero_matricule),
-      base_aj: Number(form.base_aj),
-      logement_transport: Number(form.logement_transport),
-      rendement: Number(form.rendement),
-      responsabilite_representation: Number(form.responsabilite_representation),
-      enfant_a_charge: Number(form.enfant_a_charge),
-      conge_maternite: form.conge_maternite ? 1 : 0,
-      actif: estInactif ? 0 : 1,
-      date_inactif: estInactif ? (form.date_inactif || todayIso()) : '',
-    };
-    let ok = false;
-    if (employe) ok = await updateEmploye(employe.id, dataToSend);
-    else ok = await createEmploye(dataToSend);
-    setSaving(false);
-    if (ok) onSaved();
-    else alert('Erreur enregistrement (vérifiez le matricule).');
+    try {
+      const estInactif = Number(form.actif) === 0;
+      const dataToSend: Partial<Employe> = {
+        ...form,
+        numero_matricule: Number(form.numero_matricule),
+        nom_prenoms: String(form.nom_prenoms || '').trim(),
+        numero_cnaps: String(form.numero_cnaps || '').trim(),
+        categorie: String(form.categorie || '').trim(),
+        jobs: String(form.jobs || '').trim(),
+        date_embauche: String(form.date_embauche || '').trim(),
+        rib: String(form.rib || '').trim(),
+        base_aj: Number(form.base_aj),
+        logement_transport: Number(form.logement_transport),
+        rendement: Number(form.rendement),
+        responsabilite_representation: Number(form.responsabilite_representation),
+        enfant_a_charge: Number(form.enfant_a_charge),
+        conge_maternite: form.conge_maternite ? 1 : 0,
+        actif: estInactif ? 0 : 1,
+        date_inactif: estInactif ? (form.date_inactif || todayIso()) : '',
+      };
+      let ok = false;
+      if (employe) ok = await updateEmploye(employe.id, dataToSend, periodeActive);
+      else ok = await createEmploye(dataToSend);
+      setSaving(false);
+      if (ok) onSaved();
+      else setFormError("Enregistrement refusé : vérifiez que le N° Matricule est valide et n'est pas déjà attribué à un autre salarié.");
+    } catch (err: any) {
+      setSaving(false);
+      setFormError(err?.message || "Erreur lors de l'enregistrement en base de données.");
+    }
   };
 
   const estInactif = Number(form.actif) === 0;
@@ -193,25 +224,61 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({ employe, onC
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto thin-scrollbar">
+          {formError && (
+            <div className="rounded-xl border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/30 px-3.5 py-2.5 text-xs font-semibold text-red-800 dark:text-red-200">
+              {formError}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {[
               { label: 'N° Matricule *', key: 'numero_matricule', type: 'number', required: true },
               { label: 'NOM ET PRENOMS *', key: 'nom_prenoms', type: 'text', required: true },
               { label: 'N° CNaPS', key: 'numero_cnaps', type: 'text' },
-              { label: 'Catégorie', key: 'categorie', type: 'text' },
+              { label: 'Catégorie (Classification)', key: 'categorie', type: 'text', isCategorie: true },
               { label: 'Fonction (JOBS)', key: 'jobs', type: 'text' },
               { label: 'Date embauche', key: 'date_embauche', type: 'text' },
               { label: 'Enfants à charge', key: 'enfant_a_charge', type: 'number' },
-            ].map((f) => (
+            ].map((f: any) => (
               <div key={f.key}>
                 <label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">{f.label}</label>
                 <input
                   type={f.type}
+                  list={f.isCategorie ? 'salfa-categories-datalist' : undefined}
+                  placeholder={f.isCategorie ? 'Ex: 2B, 3A, HC ou nouvelle catégorie…' : undefined}
                   value={(form as any)[f.key]}
                   onChange={(e) => setForm({ ...form, [f.key]: f.type === 'number' ? Number(e.target.value) : e.target.value })}
                   required={!!f.required}
                   className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm"
                 />
+                {f.isCategorie && (
+                  <>
+                    <datalist id="salfa-categories-datalist">
+                      {listeCategories.map((cat) => (
+                        <option key={cat} value={cat} />
+                      ))}
+                    </datalist>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {listeCategories.map((cat) => {
+                        const selected = String(form.categorie || '').trim().toUpperCase() === cat.toUpperCase();
+                        return (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setForm({ ...form, categorie: cat })}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition ${
+                              selected
+                                ? 'bg-salfa-dark text-white border-salfa-dark'
+                                : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-200 dark:hover:bg-slate-600'
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
             ))}
             <div>
