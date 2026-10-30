@@ -53,8 +53,8 @@ try {
   (async () => {
     const avant = await api.fetchPaiesMois(2026, 'OCTOBRE');
     assert.equal(avant.employes.length, 48);
-    // Gestion indépendante 30 j/an : Mat 47 a pris 5 j en 2026 -> 30 - 5 = 25 j restants
-    assert.equal(avant.employes.find(p => p.numero_matricule === 47).conge_restant, 25);
+    // Le relevé source fournit un solde restant de 30 j pour Mat 47 en 2026.
+    assert.equal(avant.employes.find(p => p.numero_matricule === 47).conge_restant, 30);
     assert.equal((await api.fetchPaiesMois(2027, 'OCTOBRE')).employes.length, 0);
     const emp = (await api.fetchEmployes(true)).find(e => e.numero_matricule === 47);
     await api.initPaieEmploye(emp.id, 2027, 'OCTOBRE');

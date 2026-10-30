@@ -108,15 +108,18 @@ Deux scripts SQL prêts à l'emploi sont fournis dans **`wamp/sql/`** :
 
 Le fichier **`wamp/sql/salfa_donnees_excel_2022-2026.sql`** crée et alimente
 toutes les **tables relationnelles MySQL** en colonnes et lignes (aucun stockage
-JSON dans MySQL) à partir des classeurs Excel `SALAIRE SALFA 2022.xlsx` à
-`SALAIRE SALFA 2026.xlsm` et `CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb` :
+JSON dans MySQL) à partir des classeurs de paie `SALAIRE SALFA 2022.xlsx` à
+`SALAIRE SALFA 2026.xlsm` et du dernier relevé de soldes
+`CONTROLE CONGE A JOUR SALFA 2026.xlsx` :
 
 - **`salfa_users`** : comptes par défaut inclus (`admin` / `admin123` en
   *Administrateur*, `comptable` / `comptable123` en *Comptable*, via `INSERT IGNORE`).
 - **`salfa_employes`** : **70 salariés** (50 salariés 2026 + 20 archivés 2022–2025).
 - **`salfa_paies`** : **2 390 bulletins mensuels** (2022 : 558, 2023 : 576,
   2024 : 556, 2025 : 230, 2026 : 470).
-- **`salfa_conges`** : **610 fiches d'absence** (590 congés annuels + 20 permissions).
+- **`salfa_conges`** : **212 lignes** — 129 soldes restants annuels (43 salariés ×
+  2024–2026; cases vides = 0), plus 83 fiches historiques d'anciens salariés.
+  Le relevé 2026 ne contient pas les dates des demandes : il fournit les soldes annuels.
 - **`salfa_comparaison_net`** : **48 lignes** de comparaison des salaires nets.
 - **`salfa_config`**, **`salfa_bareme_anciennete`**, **`salfa_bareme_irsa`**,
   **`salfa_entete`**, **`salfa_revision`** : paramètres et barèmes en colonnes et lignes.
@@ -137,12 +140,14 @@ Import, au choix :
 
 Si votre base `salfa_paie` contient déjà vos bulletins de paie (`salfa_paies`),
 vos paramètres ou vos en-têtes personnalisés et que vous souhaitez **uniquement
-importer ou mettre à jour les congés & permissions** issus de
-`CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb`, utilisez le fichier dédié :
+importer ou mettre à jour les congés** depuis
+`CONTROLE CONGE A JOUR SALFA 2026.xlsx`, utilisez le fichier dédié :
 
-- **`wamp/sql/salfa_conges_excel.sql`** (**610 fiches d'absence** dans la table
-  relationnelle `salfa_conges` : 590 congés annuels + 20 permissions sur
-  **58 salariés SALFA**, période 2021–2026, règle légale des 3 ans activée).
+- **`wamp/sql/salfa_conges_excel.sql`** : **212 lignes** dans `salfa_conges`, dont
+  **129 soldes restants annuels** (43 salariés × 2024–2026; cases vides = 0) et
+  **83 fiches historiques** (anciens salariés, années 2021–2026). Les soldes sont
+  enregistrés comme ajustements d'ouverture afin que l'état affiche les chiffres
+  du classeur; celui-ci ne fournit pas les dates détaillées des congés.
 
 Garanties de ce fichier :
 
@@ -153,9 +158,9 @@ Garanties de ce fichier :
 - **Ne supprime ni n'écrase jamais** vos bulletins de paie (`salfa_paies`), vos
   comparaisons (`salfa_comparaison_net`), vos paramètres (`salfa_config`), votre
   en-tête de bulletin (`salfa_entete`) ni vos comptes utilisateurs existants.
-- Associe automatiquement chaque congé au bon salarié via son **numéro
-  matricule** (`INNER JOIN salfa_employes`) et ajoute uniquement les éventuelles
-  fiches salariés manquantes (ex. anciens salariés 2022–2025).
+- Rattache chaque ligne au bon salarié via son **numéro de matricule** (`INNER
+  JOIN salfa_employes`) et ajoute uniquement les éventuelles fiches salariés
+  manquantes (ex. anciens salariés 2022–2025).
 - Incrémente automatiquement `salfa_revision.revision` afin que les postes
   connectés rechargent les congés mis à jour.
 
@@ -166,13 +171,17 @@ Import, au choix :
 - **Ligne de commande :**
   `mysql -u root -p --default-character-set=utf8mb4 salfa_paie < wamp\sql\salfa_conges_excel.sql`
 
-Pour régénérer ce fichier SQL après une mise à jour du classeur Excel des congés :
+Pour régénérer ce fichier SQL après une mise à jour du relevé annuel :
 
 ```bash
 npm run sql:conges
-# ou en précisant un autre fichier Excel (.xlsb / .xlsx) :
+# Par défaut, lit CONTROLE CONGE A JOUR SALFA 2026.xlsx.
+# L'ancien classeur détaillé .xlsb reste lisible avec un chemin explicite :
 node scripts/generer_sql_conges_wamp.cjs "CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb"
 ```
+
+Le relevé annuel remplace les précédentes lignes issues de l'import Excel, mais
+les saisies manuelles restent conservées.
 
 ## 3. Sur chaque poste client Windows
 

@@ -1,14 +1,8 @@
-"""Génère le fichier SQL relationnel MySQL (version WAMP) depuis les données Excel.
+"""Génère le SQL relationnel complet WAMP à partir des données SALFA.
 
-Toutes les données sont séparées en tables, colonnes et lignes MySQL (AUCUN JSON) :
-- `salfa_users` (avec comptes par défaut `admin` / `admin123` et `comptable` / `comptable123`)
-- `salfa_employes` (70 salariés : 50 actuels + 20 archivés 2022–2025)
-- `salfa_paies` (2 390 bulletins mensuels 2022–2026)
-- `salfa_conges` (610 fiches d'absence, congés et permissions)
-- `salfa_comparaison_net` (48 lignes de comparaison des nets)
-- `salfa_config`, `salfa_bareme_anciennete`, `salfa_bareme_irsa`, `salfa_entete`, `salfa_revision`
-
-Supprime également toute ancienne table JSON `salfa_state` si elle existait.
+`salfa_conges` contient désormais les soldes annuels importés du classeur
+`CONTROLE CONGE A JOUR SALFA 2026.xlsx` (cases vides = 0), ainsi que les fiches
+historiques conservées pour les anciens salariés.
 
 Usage : python3 scripts/generer_sql_wamp.py
 """
@@ -17,6 +11,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+CONGES_VERSION = "controle-solde-2026-10-30"
 SOURCE = ROOT / "src" / "data" / "salfa_data.json"
 HISTORIQUE = ROOT / "src" / "data" / "salfa_historique.json"
 CONGES_HISTORIQUE = ROOT / "src" / "data" / "salfa_conges_historique.json"
@@ -121,7 +116,7 @@ def charger_historique(data: dict) -> dict:
     annees = sorted({int(p["annee"]) for p in data["paies"]})
     data.setdefault("meta", {})["annees_importees"] = annees
     data["meta"]["source_historique"] = hist.get("source", "SALAIRE SALFA 2022-2025")
-    data["meta"]["conges_version"] = "controle-2026-10"
+    data["meta"]["conges_version"] = CONGES_VERSION
     data["meta"]["conges_loi_3ans"] = 3
     return data
 
@@ -197,7 +192,7 @@ def main() -> None:
         "  `annee` INT NOT NULL DEFAULT 2026,",
         "  `source_version` VARCHAR(60) NOT NULL DEFAULT 'classeur-2026-10',",
         "  `source_historique` VARCHAR(160) NOT NULL DEFAULT 'SALAIRE SALFA 2022-2025',",
-        "  `conges_version` VARCHAR(60) NOT NULL DEFAULT 'controle-2026-10',",
+        f"  `conges_version` VARCHAR(60) NOT NULL DEFAULT '{CONGES_VERSION}',",
         "  `conges_loi_3ans` INT NOT NULL DEFAULT 3,",
         "  `date_modification` VARCHAR(32) NOT NULL DEFAULT ''",
         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
@@ -422,7 +417,7 @@ def main() -> None:
         "  (5, 600000, NULL, 20);",
         "",
         "INSERT INTO `salfa_revision` (`id`, `revision`, `source_file`, `entreprise`, `titre`, `annee`, `source_version`, `source_historique`, `conges_version`, `conges_loi_3ans`, `date_modification`) VALUES",
-        f"  (1, 1, {sql_str(meta.get('source_file', 'SALAIRE SALFA 2026.xlsm'), 160)}, {sql_str(meta.get('entreprise', 'SALFA TANAMBAO'), 160)}, {sql_str(meta.get('titre', 'Bulletin de paie individuel'), 255)}, {sql_int(meta.get('annee', 2026))}, 'classeur-2026-10', {sql_str(meta.get('source_historique', 'SALAIRE SALFA 2022-2025'), 160)}, 'controle-2026-10', 3, NOW())",
+        f"  (1, 1, {sql_str(meta.get('source_file', 'SALAIRE SALFA 2026.xlsm'), 160)}, {sql_str(meta.get('entreprise', 'SALFA TANAMBAO'), 160)}, {sql_str(meta.get('titre', 'Bulletin de paie individuel'), 255)}, {sql_int(meta.get('annee', 2026))}, 'classeur-2026-10', {sql_str(meta.get('source_historique', 'SALAIRE SALFA 2022-2025'), 160)}, {sql_str(CONGES_VERSION, 60)}, 3, NOW())",
         "ON DUPLICATE KEY UPDATE",
         "  `revision` = `revision` + 1,",
         "  `source_version` = VALUES(`source_version`),",

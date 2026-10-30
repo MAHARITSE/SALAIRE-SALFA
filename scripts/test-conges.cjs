@@ -194,38 +194,23 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   const api = bundle('src/api-local.ts', 'api');
 
   const tousEmployes = await api.fetchEmployes(true);
-  // Vérifier la reprise embarquée du fichier réel « CONTROL DE CONGE SALFA TOLIARA 2024-2025.xlsb »
-  // avec blocage à 30 j/an et gestion indépendante année par année (aucun report entre 2024, 2025, 2026)
+  // Le classeur 2026 est un instantané de soldes restants, indépendant pour chaque année.
   const sitInitiale = await api.fetchSituationConges(2026, false);
-  const verifReels2026 = [
-    [1, 5],    // 25 j pris en 2026 -> 30 - 25 = 5 j
-    [3, 9],    // 21 j pris en 2026 -> 30 - 21 = 9 j
-    [6, -7],   // 2025 (31 j) aligne le 30 de 2026 pour absorber 1 j (2025 = 0) -> 29 - 36 = -7 j sur 2026
-    [13, 13],  // RIVONILAINA VICTOR : 2024=0 (30 de 2025 aligné avec 1 sur ligne 6), 2025=17, 2026=13
-    [34, 22],  // 8 j pris en 2026  -> 30 - 8  = 22 j
-    [43, 15],  // 15 j pris en 2026 -> 30 - 15 = 15 j
-    [47, 25],  // 5 j pris en 2026  -> 30 - 5  = 25 j
-    [48, 15],  // 15 j pris en 2026 -> 30 - 15 = 15 j
-    [60, -19], // archive 49 j pris en 2026 -> 30 - 49 = -19 j (sans report de 2024/2025)
-    [63, -2],  // archive 32 j pris en 2026 -> 30 - 32 = -2 j
-    [64, 9],   // 21 j pris en 2026 -> 30 - 21 = 9 j
-    [67, 20],  // 10 j pris en 2026 -> 30 - 10 = 20 j
-  ];
-  for (const [mat, expReste2026] of verifReels2026) {
-    const s = sitInitiale.find((x) => x.numero_matricule === mat);
-    assert.ok(s, `salarié matricule ${mat} présent`);
-    assert.equal(s.ouverture, 30, `Mat ${mat} : ouverture 2026 plafonnée à 30 j`);
-    assert.equal(s.report, 0, `Mat ${mat} : report nul (gestion indépendante par an)`);
-    assert.equal(s.titreActif, 2026, `Mat ${mat} : Titre actif = 2026`);
-    assert.equal(s.restant, expReste2026, `Mat ${mat} : reste ${expReste2026} j sur 2026`);
-  }
+  const mat1Solde = sitInitiale.find((s) => s.numero_matricule === 1);
+  const mat13Solde = sitInitiale.find((s) => s.numero_matricule === 13);
+  const mat20Solde = sitInitiale.find((s) => s.numero_matricule === 20);
+  assert.deepEqual(mat1Solde.droitsParTitre, { 2024: 0, 2025: 0, 2026: 26 }, 'Mat 1 : soldes source 0/0/26');
+  assert.deepEqual(mat13Solde.droitsParTitre, { 2024: 0, 2025: 4, 2026: 30 }, 'Mat 13 : soldes source 0/4/30');
+  assert.deepEqual(mat20Solde.droitsParTitre, { 2024: 9, 2025: 30, 2026: 30 }, 'Mat 20 : soldes source 9/30/30');
+  assert.equal(mat1Solde.restant, 26, 'Mat 1 : solde restant 2026 importé sans recalcul');
+  assert.equal(mat1Solde.report, 0, 'aucun report entre années');
 
-  // Vérification exacte de TINAHINY TSIBARA (05/06/2026 -> 05/06/2026 au 05/06/2026 = 1 congé, reprise 06/06/2026)
-  const tinahiny2026 = (await api.fetchConges({ annee: 2026 })).find((c) => /TINAHINY/i.test(c.nom_prenoms) && c.date_debut === '2026-06-05');
-  assert.ok(tinahiny2026, 'fiche TINAHINY TSIBARA du 05/06/2026 présente');
-  assert.equal(tinahiny2026.jours_demandes, 1, '1 jour demandé le 05/06/2026');
-  assert.equal(tinahiny2026.date_fin, '2026-06-05', 'fin demandée = 05/06/2026 (05/06/2026 au 05/06/2026)');
-  assert.equal(tinahiny2026.date_retour, '2026-06-06', 'Daty fiverenana miasa ajustée automatiquement au 06/06/2026');
+  // Le tableau de soldes ne fournit pas de demandes détaillées pour TINAHINY.
+  const etatInitial = await api.fetchEtatConges(2026);
+  const parcoursTinahinyInitial = etatInitial.parcours.find((p) => /TINAHINY/i.test(p.nom_prenoms));
+  assert.ok(parcoursTinahinyInitial, 'TINAHINY TSIBARA présente dans l’état');
+  assert.equal(parcoursTinahinyInitial.bilans[2026].fin, 30, 'solde 2026 repris du classeur');
+  assert.equal(parcoursTinahinyInitial.lignes.filter((l) => l.type === 'DEMANDE').length, 0, 'le classeur ne contient pas de dates de demandes');
 
   // Utiliser un salarié embauché en 2026 sans congé antérieur pour tester tout le circuit de saisie
   const employe = tousEmployes.find((e) => e.numero_matricule === 68) || tousEmployes[tousEmployes.length - 1];
@@ -314,18 +299,16 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
 
   const parcoursTinahiny = etatApi.parcours.find((p) => /TINAHINY/i.test(p.nom_prenoms));
   assert.ok(parcoursTinahiny, 'TINAHINY TSIBARA présente dans l’état');
-  const ligneTinahiny0506 = parcoursTinahiny.lignes.find((l) => l.date_conge === '2026-06-05');
-  assert.ok(ligneTinahiny0506, 'ligne du 05/06/2026 présente dans l’état');
-  assert.equal(ligneTinahiny0506.jours_conge, 1, '1 congé le 05/06/2026');
-  assert.equal(ligneTinahiny0506.date_fin, '2026-06-05', 'fin demandée = 05/06/2026');
-  assert.equal(ligneTinahiny0506.date_retour, '2026-06-06', 'Daty fiverenana miasa dans l’état = 06/06/2026');
+  assert.equal(parcoursTinahiny.lignes.filter((l) => l.type === 'DEMANDE').length, 0, 'le relevé source fournit le solde, pas les demandes détaillées');
+  assert.equal(parcoursTinahiny.bilans[2026].fin, 30, 'solde 2026 importé sans recalcul');
 
   const etatUiOut = path.join(tmp, 'etatUi.cjs');
   esbuild.buildSync({ entryPoints: ['src/components/conges/EtatConges.tsx'], bundle: true, platform: 'browser', format: 'cjs', outfile: etatUiOut, loader: { '.png': 'dataurl' }, logLevel: 'silent' });
   const EtatUi = require(etatUiOut);
   assert.ok(EtatUi.colonnesEtat([2025, 2026]).colonnes.some((c) => c.cle === 'date_retour' && c.label === 'Daty fiverenana miasa'), 'colonne Daty fiverenana miasa dans l’état');
-  assert.equal(EtatUi.valeurCellule(ligneTinahiny0506, 'date_conge', parcoursTinahiny, [2025, 2026]), '05/06/2026 au 05/06/2026');
-  assert.equal(EtatUi.valeurCellule(ligneTinahiny0506, 'date_retour', parcoursTinahiny, [2025, 2026]), '06/06/2026');
+  const soldeFinalTinahiny = parcoursTinahiny.lignes.find((l) => l.type === 'SOLDE_FINAL');
+  assert.equal(EtatUi.valeurCellule(soldeFinalTinahiny, 'jours_conge', parcoursTinahiny, [2025, 2026]), '0', 'aucun jour de demande détaillée dans le relevé');
+  assert.equal(EtatUi.valeurCellule(soldeFinalTinahiny, 'conge_restant', parcoursTinahiny, [2025, 2026]), '30', 'solde source affiché dans l’état');
 
   // Suppression : le comptable ne touche pas une fiche validée, l'administrateur si.
   const idValidee = hosp.id;
@@ -474,12 +457,12 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   }
   const vazison = sit2026Verif.find((s) => s.numero_matricule === 20);
   const raharilalaintsoa = sit2026Verif.find((s) => s.numero_matricule === 32);
-  assert.equal(vazison.ouverture, 30, 'Mat 20 : ouverture 2026 = 30 j');
-  assert.equal(vazison.restant, 7, 'Mat 20 : 30 - 23 = 7 j restants en 2026');
-  assert.equal(vazison.droitsParTitre[2024], 17, 'Mat 20 : solde 2024 indépendant = 30 - 13 = 17 j');
-  assert.equal(vazison.droitsParTitre[2025], 14, 'Mat 20 : solde 2025 indépendant = 30 - 16 = 14 j');
-  assert.equal(raharilalaintsoa.ouverture, 30, 'Mat 32 : ouverture 2026 = 30 j');
-  assert.equal(raharilalaintsoa.restant, 8, 'Mat 32 : 30 - 22 = 8 j restants en 2026');
+  assert.equal(vazison.ouverture, 30, 'Mat 20 : solde annuel 2026 = 30 j');
+  assert.equal(vazison.restant, 30, 'Mat 20 : solde restant importé en 2026');
+  assert.equal(vazison.droitsParTitre[2024], 9, 'Mat 20 : solde 2024 importé = 9 j');
+  assert.equal(vazison.droitsParTitre[2025], 30, 'Mat 20 : solde 2025 importé = 30 j');
+  assert.equal(raharilalaintsoa.ouverture, 30, 'Mat 32 : solde annuel 2026 = 30 j');
+  assert.equal(raharilalaintsoa.restant, 30, 'Mat 32 : solde restant importé en 2026');
 
   // Toute tentative de demander un congé en 2026 sur un titre ancien (< 2024) est refusée.
   const refusPrescrit = await api.creerConge({
@@ -501,47 +484,46 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.ok(Array.isArray(brut.conges) && brut.conges.length, 'conges persistés dans le store');
   assert.equal(brut.conges.every((c) => typeof c.employe_id === 'number' && c.statut), true);
 
-  // Synchronisation Congés -> État de paie mensuel, Bulletins de paie & État des Congés (30 j/an indépendant)
+  // Synchronisation des soldes annuels importés vers l'état de paie mensuel.
   const paiesJan = await api.fetchPaiesMois(2026, 'JANVIER');
   const mat1Jan = paiesJan.employes.find((p) => p.numero_matricule === 1);
-  assert.equal(mat1Jan.conge_pris_mois, 7, 'Mat 1 : 7 j pris en JANVIER 2026');
-  assert.equal(mat1Jan.conge_restant, 23, 'Mat 1 : 30 - 7 = 23 j restants fin JANVIER 2026');
+  assert.equal(mat1Jan.conge_pris_mois, 0, 'le relevé de soldes ne fournit aucune demande datée');
+  assert.equal(mat1Jan.conge_restant, 26, 'Mat 1 : solde 2026 repris à 26 j');
 
   const paiesJuin = await api.fetchPaiesMois(2026, 'JUIN');
   const mat47Juin = paiesJuin.employes.find((p) => p.numero_matricule === 47);
-  assert.equal(mat47Juin.conge_pris_mois, 2, 'Mat 47 : 2 j en JUIN sur le congé chevauchant 29/06->03/07');
-  assert.equal(mat47Juin.conge_restant, 28, 'Mat 47 : 30 - 2 = 28 j restants fin JUIN 2026');
+  assert.equal(mat47Juin.conge_pris_mois, 0);
+  assert.equal(mat47Juin.conge_restant, 30, 'Mat 47 : solde 2026 repris à 30 j');
 
   const paiesJuil = await api.fetchPaiesMois(2026, 'JUILLET');
   const mat47Juil = paiesJuil.employes.find((p) => p.numero_matricule === 47);
-  assert.equal(mat47Juil.conge_pris_mois, 3, 'Mat 47 : 3 j en JUILLET sur le congé chevauchant 29/06->03/07');
-  assert.equal(mat47Juil.conge_restant, 25, 'Mat 47 : 30 - 5 = 25 j restants fin JUILLET 2026');
+  assert.equal(mat47Juil.conge_pris_mois, 0);
+  assert.equal(mat47Juil.conge_restant, 30);
 
   const paiesOct = await api.fetchPaiesMois(2026, 'OCTOBRE');
   const mat1Oct = paiesOct.employes.find((p) => p.numero_matricule === 1);
   const mat47Oct = paiesOct.employes.find((p) => p.numero_matricule === 47);
   assert.equal(mat1Oct.conge_pris_mois, 0);
-  assert.equal(mat1Oct.conge_restant, 5);
+  assert.equal(mat1Oct.conge_restant, 26);
   assert.equal(mat1Oct.conge_titre_actif, 2026);
-  assert.equal(mat1Oct.conge_reste_titre, 5);
-  assert.equal(mat47Oct.conge_restant, 25);
+  assert.equal(mat1Oct.conge_reste_titre, 26);
+  assert.equal(mat47Oct.conge_restant, 30);
   assert.equal(mat47Oct.conge_titre_actif, 2026);
-  assert.equal(mat47Oct.conge_reste_titre, 25);
+  assert.equal(mat47Oct.conge_reste_titre, 30);
   assert.ok(paiesOct.totaux.total_conge_restant > 0, 'Total des congés restants calculé sur l’état de paie');
 
-  // Vérification de l'État des Congés (colonnes CONGÉ remplies sur DEMANDE et SOLDE_FINAL)
+  // Vérification de l'État des Congés : soldes importés affichés à l'identique.
   const EC = bundle('src/components/conges/EtatConges.tsx', 'etatConges');
   const etat2026 = await api.fetchEtatConges(2026);
   const { colonnes: colsEtat } = EC.colonnesEtat(etat2026.annees);
   assert.ok(colsEtat.some((c) => c.cle === 'conge_restant'), 'Colonne Congé Restant présente dans l’État des Congés');
   const parcMat1 = etat2026.parcours.find((p) => p.numero_matricule === 1);
-  assert.equal(parcMat1.bilans[2024].fin, 10, 'Mat 1 : 2024 = 30 - 20 = 10 j');
-  assert.equal(parcMat1.bilans[2025].fin, 9, 'Mat 1 : 2025 = 30 - 21 = 9 j (sans report de 2024)');
-  assert.equal(parcMat1.bilans[2026].fin, 5, 'Mat 1 : 2026 = 30 - 25 = 5 j (sans report de 2025)');
+  assert.equal(parcMat1.bilans[2024].fin, 0, 'Mat 1 : solde 2024 importé = 0 j');
+  assert.equal(parcMat1.bilans[2025].fin, 0, 'Mat 1 : solde 2025 importé = 0 j');
+  assert.equal(parcMat1.bilans[2026].fin, 26, 'Mat 1 : solde 2026 importé = 26 j');
   const sfMat1 = parcMat1.lignes.find((l) => l.type === 'SOLDE_FINAL');
-  assert.equal(EC.valeurCellule(sfMat1, 'jours_conge', parcMat1, etat2026.annees), '25', 'SOLDE_FINAL Mat 1 : 25 j pris en 2026');
-  assert.equal(EC.valeurCellule(sfMat1, 'conge_restant', parcMat1, etat2026.annees), '5', 'SOLDE_FINAL Mat 1 : 5 j restants en 2026');
-  assert.match(String(EC.valeurCellule(sfMat1, 'date_conge', parcMat1, etat2026.annees)), /Titre 2026 \(5 j\)/);
+  assert.equal(EC.valeurCellule(sfMat1, 'jours_conge', parcMat1, etat2026.annees), '0', 'aucune demande détaillée n’est fournie');
+  assert.equal(EC.valeurCellule(sfMat1, 'conge_restant', parcMat1, etat2026.annees), '26', 'SOLDE_FINAL Mat 1 : 26 j restants en 2026');
 
   // ----------------------------------------------------------------------------
   // 6. Plafond 30 j/an et gestion indépendante sur 2024, 2025, 2026 et 2027
@@ -567,24 +549,24 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   }
   const parc13_2027 = etat2027.parcours.find((p) => p.numero_matricule === 13);
   const parc14_2027 = etat2027.parcours.find((p) => p.numero_matricule === 14);
-  assert.equal(parc13_2027.bilans[2025].ouverture, 30, 'Mat 13 en 2027 : 2025 gérée indépendamment = 30 j');
+  assert.equal(parc13_2027.bilans[2025].ouverture, 4, 'Mat 13 en 2027 : solde 2025 importé = 4 j');
   assert.equal(parc14_2027.bilans[2025].ouverture, 30, 'Mat 14 en 2027 : 2025 gérée indépendamment = 30 j');
 
   // Saisie manuelle dans le tableau 2024 / 2025 / 2026 : indépendante par année et bloquée à [0..30]
   assert.deepEqual(EC.anneesEditables(parcMat1, etat2026.annees), [2024, 2025, 2026], 'toutes les années 2024/2025/2026 sont éditables');
   assert.deepEqual(EC.anneesEditables(parcMat63, etat2026.annees), [2024, 2025, 2026], 'toutes les années 2024/2025/2026 sont éditables même pour embauche 2025');
 
-  // 1) Saisie directe sur 2024 (22 j) : modifie UNIQUEMENT 2024 (2025 reste 9 j, 2026 reste 5 j)
+  // 1) Saisie directe sur 2024 (22 j) : modifie uniquement 2024; 2025/2026 restent les soldes importés.
   const resSaisie22 = await api.saisirOuverturePremiereAnnee(parcMat1.employe_id, 2024, 22, meta);
   assert.equal(resSaisie22.success, true, 'saisie de 22 j en 2024 acceptée pour le comptable');
   const etatApres22 = await api.fetchEtatConges(2026);
   const mat1Apres22 = etatApres22.parcours.find((p) => p.numero_matricule === 1);
   assert.equal(mat1Apres22.bilans[2024].ouverture, 22, 'ouverture 2024 mise à 22 j');
   assert.equal(mat1Apres22.bilans[2024].ouvertureSaisie, true, 'marqueur de saisie manuelle 2024 actif');
-  assert.equal(mat1Apres22.bilans[2024].fin, 2, '22 - 20 = 2 j fin 2024');
-  assert.equal(mat1Apres22.bilans[2025].ouverture, 30, '2025 reste indépendante à 30 j');
-  assert.equal(mat1Apres22.bilans[2025].fin, 9, '2025 reste à 9 j');
-  assert.equal(mat1Apres22.bilans[2026].fin, 5, '2026 reste indépendante à 5 j');
+  assert.equal(mat1Apres22.bilans[2024].fin, 22, 'en l’absence de demandes détaillées, le solde 2024 vaut 22 j');
+  assert.equal(mat1Apres22.bilans[2025].ouverture, 0, '2025 reste au solde importé de 0 j');
+  assert.equal(mat1Apres22.bilans[2025].fin, 0, '2025 reste à 0 j');
+  assert.equal(mat1Apres22.bilans[2026].fin, 26, '2026 reste au solde importé de 26 j');
 
   // Valeurs > 30 j ou < 0 j refusées (plafond 30 j/an)
   assert.equal((await api.saisirOuverturePremiereAnnee(parcMat1.employe_id, 2024, 35, meta)).success, false, '> 30 j refusé');
@@ -597,15 +579,15 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   let mat1_2025 = (await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1);
   assert.equal(mat1_2025.bilans[2025].ouverture, 25, 'ouverture 2025 fixée à 25 j');
   assert.equal(mat1_2025.bilans[2025].ouvertureSaisie, true);
-  assert.equal(mat1_2025.bilans[2025].fin, 4, '25 - 21 = 4 j fin 2025');
-  assert.equal(mat1_2025.bilans[2024].fin, 10, '2024 inchangée (10 j)');
-  assert.equal(mat1_2025.bilans[2026].ouverture, 30, '2026 inchangée (30 j)');
-  assert.equal(mat1_2025.bilans[2026].fin, 5, '2026 inchangée (5 j)');
+  assert.equal(mat1_2025.bilans[2025].fin, 25, 'aucune absence détaillée : le solde 2025 reste à 25 j');
+  assert.equal(mat1_2025.bilans[2024].fin, 30, 'après réinitialisation, 2024 revient au droit automatique de 30 j');
+  assert.equal(mat1_2025.bilans[2026].ouverture, 26, '2026 conserve le solde importé de 26 j');
+  assert.equal(mat1_2025.bilans[2026].fin, 26, '2026 reste à 26 j');
 
   assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2025, 9, meta, 'SOLDE_FINAL')).success, true, 'saisie solde final 2025 <= 30 j acceptée');
   mat1_2025 = (await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1);
   assert.equal(mat1_2025.bilans[2025].fin, 9, 'solde final 2025 fixé exactement à 9 j');
-  assert.equal(mat1_2025.bilans[2026].ouverture, 30, '2026 toujours indépendante à 30 j');
+  assert.equal(mat1_2025.bilans[2026].ouverture, 26, '2026 conserve le solde importé de 26 j');
   assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2025, null, meta)).success, true, 'réinitialisation 2025 acceptée');
 
   // 3) Saisie directe sur 2026 (OUVERTURE et SOLDE_FINAL dans [0..30]) : n'impacte ni 2024 ni 2025
@@ -613,9 +595,9 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2026, 28, meta, 'OUVERTURE')).success, true, 'saisie ouverture 28 j sur 2026 acceptée');
   let mat1_2026 = (await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1);
   assert.equal(mat1_2026.bilans[2026].ouverture, 28, 'ouverture 2026 fixée à 28 j');
-  assert.equal(mat1_2026.bilans[2026].fin, 3, '28 - 25 = 3 j fin 2026');
-  assert.equal(mat1_2026.bilans[2024].fin, 10, '2024 inchangée (10 j)');
-  assert.equal(mat1_2026.bilans[2025].fin, 9, '2025 inchangée (9 j)');
+  assert.equal(mat1_2026.bilans[2026].fin, 28, 'sans demandes détaillées, le solde 2026 vaut 28 j');
+  assert.equal(mat1_2026.bilans[2024].fin, 30, '2024 reste au droit automatique de 30 j');
+  assert.equal(mat1_2026.bilans[2025].fin, 30, 'après réinitialisation, 2025 revient au droit automatique de 30 j');
 
   assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2026, 4, meta, 'SOLDE_FINAL')).success, true, 'saisie solde final 2026 <= 30 j acceptée');
   mat1_2026 = (await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1);
@@ -628,18 +610,36 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal((await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 63).bilans[2024].ouverture, 10);
   assert.equal((await api.saisirSoldeAnnee(parcMat63.employe_id, 2024, null, meta)).success, true);
 
-  // 5) Modification en ligne des jours demandés sur une fiche validée (dans la limite des 30 j/an)
-  const premiereDemandeMat1 = parcMat1.lignes.find((l) => l.type === 'DEMANDE' && l.annee === 2026 && l.categorie === 'CONGE');
+  // 5) Modification en ligne : créer une demande de test, sans en déduire du relevé source.
+  assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2026, 5, meta, 'OUVERTURE')).success, true, 'solde de test fixé à 5 j');
+  const demandeTestMat1 = await api.creerConge({
+    employe_id: parcMat1.employe_id,
+    categorie: 'CONGE',
+    annee: 2026,
+    date_debut: '2026-11-02',
+    date_fin: '2026-11-04',
+    imputation: 'CONGE',
+    statut: 'SOUMIS',
+  }, meta);
+  assert.equal(demandeTestMat1.success, true, 'demande de test créée');
+  assert.equal((await api.deciderConge(demandeTestMat1.id, 'VALIDE', meta)).success, true, 'demande de test validée dans la limite du solde');
+
+  let etatDemandeTest = await api.fetchEtatConges(2026);
+  const parcoursDemandeTest = etatDemandeTest.parcours.find((p) => p.numero_matricule === 1);
+  const premiereDemandeMat1 = parcoursDemandeTest.lignes.find((l) => l.conge_id === demandeTestMat1.id);
   const joursOrigMat1 = premiereDemandeMat1.jours_conge;
+  assert.equal(joursOrigMat1, 3, 'demande de test de 3 jours');
   assert.equal((await api.modifierConge(premiereDemandeMat1.conge_id, { jours_demandes: joursOrigMat1 + 2 }, meta)).success, true);
-  assert.equal((await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1).soldeActuel, 3, 'solde recalculé immédiatement après édition en ligne des jours (5 - 2 = 3)');
-  assert.equal((await api.modifierConge(premiereDemandeMat1.conge_id, { jours_demandes: joursOrigMat1 + 10 }, meta)).success, false, 'dépassement > 30 j en édition en ligne refusé');
-  assert.equal((await api.modifierConge(premiereDemandeMat1.conge_id, { jours_demandes: joursOrigMat1 }, meta)).success, true);
+  assert.equal((await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1).soldeActuel, 0, 'solde recalculé après modification : 5 - 5 = 0');
+  assert.equal((await api.modifierConge(premiereDemandeMat1.conge_id, { jours_demandes: joursOrigMat1 + 10 }, meta)).success, false, 'dépassement du solde de test refusé');
+  assert.equal((await api.modifierConge(premiereDemandeMat1.conge_id, { jours_demandes: joursOrigMat1 }, meta)).success, true, 'demande remise à 3 jours');
+  assert.equal((await api.deciderConge(demandeTestMat1.id, 'REOUVRIR', { ...meta, role: 'Administrateur' })).success, true, 'demande rouverte après vérification');
+  assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2026, null, meta)).success, true, 'réinitialisation du solde temporaire 2026');
 
   const mat1Reset = (await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1);
-  assert.equal(mat1Reset.bilans[2024].ouverture, 30, 'retour à 30 j automatiques');
+  assert.equal(mat1Reset.bilans[2024].ouverture, 30, 'réinitialisation 2024 : droit automatique');
   assert.equal(mat1Reset.bilans[2024].ouvertureSaisie, false);
-  assert.equal(mat1Reset.soldeActuel, 5, 'solde 2026 revenu à 5 j');
+  assert.equal(mat1Reset.soldeActuel, 30, 'la demande rouverte ne consomme pas le solde automatique');
 
   // ----------------------------------------------------------------------------
   // 6bis. Les personnes inactives n'ont plus aucun droit aux congés (droit = 0, solde = 0, saisie bloquée)
@@ -707,24 +707,20 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal((await api.deciderConge(demAvantInact.id, 'REFUSE', { ...meta, motif: 'Salarié devenu inactif' })).success, true, 'refus autorisé pour clore la demande');
   await api.supprimerConge(demAvantInact.id, { utilisateur: 'admin', role: 'Administrateur' });
   await api.toggleActifEmploye(empTestInact.id, true);
-  assert.equal((await api.fetchSituationConges(2026, false)).find((s) => s.employe_id === empTestInact.id).restant, 5, 'réactivation -> retrouve son solde 2026 de 5 j');
+  assert.equal((await api.fetchSituationConges(2026, false)).find((s) => s.employe_id === empTestInact.id).restant, 30, 'réactivation -> retrouve son droit automatique 2026 de 30 j');
 
   // ----------------------------------------------------------------------------
-  // 6ter. Alignement du 30 de l'année suivante avec le reste (ex. Mat 13 RIVONILAINA VICTOR)
-  //       pour absorber les jours demandés sans mettre de -1 en bas de colonne
+  // 6ter. Le relevé de Victor contient uniquement trois soldes annuels importés.
   // ----------------------------------------------------------------------------
   const etatAlign = await api.fetchEtatConges(2026, { inclureInactifs: false });
   const victor = etatAlign.parcours.find((p) => p.numero_matricule === 13);
   assert.ok(victor, 'Mat 13 RIVONILAINA VICTOR présent');
-  assert.deepEqual(victor.lignes[5].solde_par_annee, { 2024: 1, 2025: 30 }, 'Ligne 6 de Victor : le 30 de 2025 est aligné sur la même ligne que le 1 de 2024');
-  assert.equal(victor.lignes[5].jours_conge, 2, 'Ligne 6 de Victor : 2 jours demandés');
-  assert.equal(victor.lignes[5].restant_apres, 29, 'Ligne 6 de Victor : 1 + 30 - 2 = 29 j restants sur 2025');
-  assert.deepEqual(victor.lignes[6].solde_par_annee, { 2025: 29 }, 'Ligne 7 de Victor : 2025 affiche 29');
-  assert.deepEqual(victor.lignes[7].solde_par_annee, { 2025: 29 }, 'Ligne 8 de Victor : 2025 affiche 29 avant déduction de 10 j');
-  assert.deepEqual(victor.lignes[8].solde_par_annee, { 2025: 19 }, 'Ligne 9 de Victor : 2025 affiche 19 avant déduction de 2 j');
-  assert.deepEqual(victor.lignes[9].solde_par_annee, { 2026: 30 }, 'Ligne 10 de Victor : 2026 repart à 30 sans cumul des 17 j de 2025');
+  assert.equal(victor.lignes.filter((l) => l.type === 'DEMANDE').length, 0, 'le relevé ne contient pas de demandes détaillées pour Victor');
+  assert.equal(victor.bilans[2024].fin, 0, 'Victor : solde importé 2024 = 0 j');
+  assert.equal(victor.bilans[2025].fin, 4, 'Victor : solde importé 2025 = 4 j');
+  assert.equal(victor.bilans[2026].fin, 30, 'Victor : solde importé 2026 = 30 j');
   const sfVictor = victor.lignes.find((l) => l.type === 'SOLDE_FINAL');
-  assert.deepEqual(sfVictor.solde_par_annee, { 2024: 0, 2025: 17, 2026: 13 }, 'SOLDE_FINAL de Victor : 2024=0 (pas de -1), 2025=17, 2026=13');
+  assert.deepEqual(sfVictor.solde_par_annee, { 2024: 0, 2025: 4, 2026: 30 }, 'SOLDE_FINAL reprend les trois soldes annuels source');
 
   // Aucun salarié actif ne doit avoir de solde négatif en bas des colonnes 2024 ou 2025
   for (const p of etatAlign.parcours) {
@@ -732,16 +728,14 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
     assert.ok((p.bilans[2025]?.fin ?? 0) >= 0, `Mat ${p.numero_matricule} : aucun solde négatif en 2025 (${p.bilans[2025]?.fin})`);
   }
 
-  // Édition manuelle SOLDE_FINAL sur une colonne ayant absorbé un débordement (Victor 2025 -> 10 j, puis reset)
-  assert.equal((await api.saisirSoldeAnnee(victor.employe_id, 2025, 10, meta, 'SOLDE_FINAL')).success, true, 'saisie solde final 2025 sur colonne alignée acceptée');
+  // Édition manuelle SOLDE_FINAL sur le solde importé de Victor (2025 -> 10 j, puis reset).
+  assert.equal((await api.saisirSoldeAnnee(victor.employe_id, 2025, 10, meta, 'SOLDE_FINAL')).success, true, 'saisie solde final 2025 acceptée');
   const victorModif = (await api.fetchEtatConges(2026, { inclureInactifs: false })).parcours.find((p) => p.numero_matricule === 13);
-  assert.equal(victorModif.bilans[2025].ouverture, 23, 'ouverture 2025 ajustée à 23 j (1 j absorbé de 2024 + 12 j pris en 2025 + 10 j fin = 23)');
-  assert.deepEqual(victorModif.lignes[5].solde_par_annee, { 2024: 1, 2025: 23 }, 'Ligne 6 de Victor aligne désormais 23 avec 1');
+  assert.equal(victorModif.bilans[2025].ouverture, 10, 'en l’absence de demandes détaillées, l’ouverture 2025 est ajustée à 10 j');
   assert.equal(victorModif.bilans[2025].fin, 10, 'SOLDE_FINAL 2025 = 10 j exactement');
   assert.equal((await api.saisirSoldeAnnee(victor.employe_id, 2025, null, meta)).success, true, 'reset 2025 de Victor accepté');
   const victorReset = (await api.fetchEtatConges(2026, { inclureInactifs: false })).parcours.find((p) => p.numero_matricule === 13);
-  assert.deepEqual(victorReset.lignes[5].solde_par_annee, { 2024: 1, 2025: 30 });
-  assert.equal(victorReset.bilans[2025].fin, 17);
+  assert.equal(victorReset.bilans[2025].fin, 30, 'après reset, le droit automatique 2025 est de 30 j');
 
   // ----------------------------------------------------------------------------
   // 7. Vérification du script SQL relationnel WAMP des congés (wamp/sql/salfa_conges_excel.sql)
@@ -755,7 +749,7 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.ok(!/DELETE\s+FROM\s+`?salfa_paies`?/i.test(sqlConges), 'aucune suppression des bulletins de paie salfa_paies');
   assert.ok(sqlConges.includes('INSERT IGNORE INTO `salfa_users`') && sqlConges.includes("'admin'") && sqlConges.includes("'comptable'"), 'utilisateurs par défaut inclus dans le SQL');
   const lignesInsertConges = sqlConges.match(/^\s*\(@base_conge_id \+ \d+,/gm) || [];
-  assert.equal(lignesInsertConges.length, 610, '610 lignes relationnelles insérées dans salfa_conges');
+  assert.equal(lignesInsertConges.length, 212, '212 lignes relationnelles insérées dans salfa_conges');
 
   // ----------------------------------------------------------------------------
   // 8. Heures par défaut 07:45 pour Congé, libellé « 10 andro / 10 jour(s) » et suppression du pied de page
