@@ -51,14 +51,14 @@ ENTETES = {
     "prime de garde": "prime_de_garde", "anciennete": "anciennete2",
     "risque": "risque", "repr rec": "repr_rec", "accessoir": "accessoir",
     "brut": "brut", "avance": "avance", "med": "med", "net": "net",
-    "virement": "virement", "especes": "especes", "rap": "rap", "rib": "rib",
+    "virement": "virement", "especes": "especes", "rib": "rib",
 }
 CHAMPS = ["numero_matricule", "nom_prenoms", "numero_cnaps", "categorie", "jobs",
           "date_embauche", "nombre_annees", "enfant_a_charge", "base_aj", "logt_trsp",
           "rendement", "resp_repres", "salaire_brut", "cnaps", "patronal",
           "salaire_imposable", "irsa", "salaire_net", "augmentation_divers",
           "prime_de_garde", "anciennete2", "risque", "repr_rec", "accessoir",
-          "brut", "avance", "med", "net", "virement", "especes", "rap", "rib"]
+          "brut", "avance", "med", "net", "virement", "especes", "rib"]
 TEXTES = {"nom_prenoms", "numero_cnaps", "categorie", "jobs", "rib"}
 
 
@@ -78,8 +78,6 @@ def convertir(champ, valeur):
         return "" if valeur is None else str(valeur).strip()
     if champ in ("virement", "especes") and valeur is None:
         return None
-    if champ == "rap":
-        return int(bool(valeur))
     return valeur if isinstance(valeur, (int, float)) and not isinstance(valeur, bool) else 0
 
 

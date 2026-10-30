@@ -258,6 +258,8 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-wamp-test-'));
   assert.ok(phpIndex.includes("'congeHeader'") && phpIndex.includes('writeHeaderTable($db, $value, 2)'), 'wamp/api/index.php enregistre l’entête congé dans salfa_entete (id = 2)');
   assert.ok(phpSchema.includes("'congeHeader' => loadRelationalHeader($db, 2)"), 'wamp/api/schema.php charge congeHeader depuis salfa_entete (id = 2)');
   assert.ok(manualSql.sql.includes('(1, ') && manualSql.sql.includes('(2, ') && manualSql.sql.includes('INSERT INTO `salfa_entete`'), 'dump SQL exporte les deux lignes relationnelles (1 = bulletin, 2 = congé) de salfa_entete');
+  assert.ok(!manualSql.sql.includes('`rap`'), 'dump SQL ne contient plus la colonne rap');
+  assert.ok(!phpSchema.includes('`rap` TINYINT') && phpSchema.includes('DROP COLUMN `rap`'), 'schema.php ne crée plus rap et supprime automatiquement toute ancienne colonne rap');
 
   console.log('Mode WAMP, Sauvegarde SQL forcée à la clôture & Icône application : OK');
 })().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => fs.rmSync(temp, { recursive: true, force: true }));

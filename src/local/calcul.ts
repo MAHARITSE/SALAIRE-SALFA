@@ -269,19 +269,16 @@ export function calculerPaieEmploye(
   const pasNet = Number(cfg.arrondiNet) || 0;
   const net_a_payer = pasNet > 0 ? Math.floor(net_brut_calc / pasNet) * pasNet : Math.floor(net_brut_calc);
 
-  const rap_val = employe.rap !== false && employe.rap !== 0;
   let virement: number | null = null;
   let especes: number | null = null;
 
-  if (rap_val) {
-    const plafond = Number(cfg.plafondEspeces) || 0;
-    if (rib && rib.length >= 5) {
-      especes = plafond > 0 ? Math.min(plafond, net_a_payer) : net_a_payer;
-      virement = Math.max(0.0, net_a_payer - (especes as number));
-    } else {
-      virement = null;
-      especes = net_a_payer;
-    }
+  const plafond = Number(cfg.plafondEspeces) || 0;
+  if (rib && rib.length >= 5) {
+    especes = plafond > 0 ? Math.min(plafond, net_a_payer) : net_a_payer;
+    virement = Math.max(0.0, net_a_payer - (especes as number));
+  } else {
+    virement = null;
+    especes = net_a_payer;
   }
 
   return {
@@ -303,7 +300,6 @@ export function calculerPaieEmploye(
     net: net_a_payer,
     virement,
     especes,
-    rap: rap_val,
     conge_maternite: isMaternite ? 1 : 0
   };
 }

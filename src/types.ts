@@ -72,7 +72,6 @@ export interface PaieMensuelle {
   net: number;
   virement: number | null;
   especes: number | null;
-  rap: number;
   rib: string;
   verrouille: number;
   conge_maternite?: number | boolean;

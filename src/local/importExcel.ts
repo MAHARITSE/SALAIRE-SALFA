@@ -67,7 +67,6 @@ export interface ImportedPaie {
   net: number;
   virement: number | null;
   especes: number | null;
-  rap: number;
   rib: string;
 }
 
@@ -128,7 +127,6 @@ export type ChampSalfa =
   | 'net'
   | 'virement'
   | 'especes'
-  | 'rap'
   | 'rib'
   | 'mode_paiement'
   | 'mois'
@@ -165,7 +163,7 @@ export const CHAMPS_SALFA: DefinitionChampSalfa[] = [
   { key: 'enfant_a_charge', label: 'Enfants à charge', groupe: 'identite', groupeLabel: 'Identité & Fiche salarié' },
   { key: 'conge_maternite', label: 'Congé de maternité', groupe: 'identite', groupeLabel: 'Identité & Fiche salarié' },
   // Salaire de base & cotisations
-  { key: 'base_aj', label: 'Salaire de base / BASE AJ', groupe: 'base', groupeLabel: 'Salaire de base & Cotisations', essentiel: true },
+  { key: 'base_aj', label: 'Base (Salaire de base)', groupe: 'base', groupeLabel: 'Salaire de base & Cotisations', essentiel: true },
   { key: 'logt_trsp', label: 'Logement / Transport', groupe: 'base', groupeLabel: 'Salaire de base & Cotisations' },
   { key: 'rendement', label: 'Prime de rendement', groupe: 'base', groupeLabel: 'Salaire de base & Cotisations' },
   { key: 'resp_repres', label: 'Responsabilité / Représentation (base)', groupe: 'base', groupeLabel: 'Salaire de base & Cotisations' },
@@ -190,7 +188,6 @@ export const CHAMPS_SALFA: DefinitionChampSalfa[] = [
   // Règlement
   { key: 'virement', label: 'Montant Virement', groupe: 'reglement', groupeLabel: 'Mode de règlement & Banque' },
   { key: 'especes', label: 'Montant Espèces', groupe: 'reglement', groupeLabel: 'Mode de règlement & Banque' },
-  { key: 'rap', label: 'RAP (Rappel / Validation)', groupe: 'reglement', groupeLabel: 'Mode de règlement & Banque' },
   { key: 'rib', label: 'RIB / Compte bancaire', groupe: 'reglement', groupeLabel: 'Mode de règlement & Banque' },
   { key: 'mode_paiement', label: 'Mode de paiement (texte)', groupe: 'reglement', groupeLabel: 'Mode de règlement & Banque' },
   // Période
@@ -390,7 +387,6 @@ const ALIASES: { key: string; test: RegExp }[] = [
   { key: 'med', test: /^MED$|^MED\b|MEDECIN|MEDICAL|MEDICAMENT|PHARMACIE|FANAFODY|SOINS/ },
   { key: 'virement', test: /VIREMENT|^VIR\b/ },
   { key: 'especes', test: /ESPECE|CASH|CAISSE|BILLETAGE/ },
-  { key: 'rap', test: /^RAP$|^R\s?A\s?P$/ },
   { key: 'rib', test: /^RIB\b|COMPTE|BANQUE|IBAN/ },
 
   // Fiche salarié
@@ -404,7 +400,7 @@ const ALIASES: { key: string; test: RegExp }[] = [
   { key: 'conge_maternite', test: /MATERNITE/ },
 ];
 
-const IGNORED_HEADER_RE = /^(COLONNE\s*\d+|COLUMN\s*\d+|UNNAMED.*|TRAITE|ECART|NET\s+AVANT|ACCORDER|EMARGEMENT|SIGNATURE|OBSERVATION.*)$/;
+const IGNORED_HEADER_RE = /^(COLONNE\s*\d+|COLUMN\s*\d+|UNNAMED.*|TRAITE|ECART|NET\s+AVANT|ACCORDER|EMARGEMENT|SIGNATURE|OBSERVATION.*|RAP|R\s?A\s?P)$/;
 
 /** Retourne la clé canonique d'un libellé d'en-tête (ou null). */
 export function matchHeader(raw: any): string | null {
@@ -1331,14 +1327,6 @@ export function analyserClasseurDetaille(
         virement = 0;
       }
 
-      const rawRap = has('rap') ? row[map.rap] : null;
-      const rapVal =
-        rawRap === null || rawRap === undefined || String(rawRap).trim() === ''
-          ? 1
-          : typeof rawRap === 'number'
-          ? rawRap > 0
-          : !/^(0|NON|N|NO|FALSE)$/i.test(String(rawRap).trim());
-
       const p: ImportedPaie = {
         numero_matricule: matricule,
         annee,
@@ -1372,7 +1360,6 @@ export function analyserClasseurDetaille(
         net,
         virement,
         especes,
-        rap: rapVal ? 1 : 0,
         rib: emp.rib,
       };
 

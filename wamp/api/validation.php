@@ -48,6 +48,7 @@ function validStore($store): bool {
 function normalizePaieForLockCheck(array $p, bool $ignoreUnlock, bool $ignoreIdentityReattach = false): array {
     $skip = [
         'date_modification' => true,
+        'rap' => true,
         'conge_pris_mois' => true,
         'conge_pris_annee' => true,
         'conge_restant' => true,
@@ -69,7 +70,7 @@ function normalizePaieForLockCheck(array $p, bool $ignoreUnlock, bool $ignoreIde
         'nombre_annees', 'enfant_a_charge', 'base_aj', 'logt_trsp', 'rendement', 'resp_repres',
         'salaire_brut', 'cnaps', 'patronal', 'salaire_imposable', 'irsa', 'salaire_net',
         'augmentation_divers', 'prime_de_garde', 'anciennete2', 'risque', 'repr_rec', 'accessoir',
-        'brut', 'avance', 'med', 'net', 'rap', 'conge_maternite', 'verrouille',
+        'brut', 'avance', 'med', 'net', 'conge_maternite', 'verrouille',
     ];
     $nullableNumCols = ['virement', 'especes'];
     $strCols = ['nom_prenoms', 'numero_cnaps', 'categorie', 'jobs', 'date_embauche', 'rib', 'mois', 'date_debut_maternite'];

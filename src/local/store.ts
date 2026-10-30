@@ -178,6 +178,19 @@ export function loadStore(): JsonStore {
     catch { /* ignore */ }
   }
 
+  // Suppression définitive de l'ancien champ obsolète `rap` s'il restait en cache navigateur
+  let strippedRap = false;
+  for (const p of loaded.paies || []) {
+    if (p && typeof p === 'object' && 'rap' in p) {
+      delete p.rap;
+      strippedRap = true;
+    }
+  }
+  if (strippedRap) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded)); }
+    catch { /* ignore */ }
+  }
+
   // Garantir les utilisateurs par défaut
   if (!Array.isArray(loaded.utilisateurs) || loaded.utilisateurs.length === 0) {
     loaded.utilisateurs = defaultUtilisateurs();

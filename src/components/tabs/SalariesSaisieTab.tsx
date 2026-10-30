@@ -110,7 +110,7 @@ const ETAT_GROUPS = [
   { label: 'SALAIRE DE BASE', span: 4, bg: 'bg-sky-900' },
   { label: 'COTISATIONS & IMPÔT', span: 6, bg: 'bg-indigo-900' },
   { label: 'ACCESSOIRES', span: 7, bg: 'bg-teal-900' },
-  { label: 'RETENUES & RÈGLEMENT (AVANCE · MED · VIREMENT · ESPÈCES ÉDITABLES)', span: 7, bg: 'bg-emerald-900' },
+  { label: 'RETENUES & RÈGLEMENT (AVANCE · MED · VIREMENT · ESPÈCES ÉDITABLES)', span: 6, bg: 'bg-emerald-900' },
   { label: 'CONGÉS', span: 2, bg: 'bg-violet-900' },
 ];
 
@@ -126,7 +126,7 @@ const ETAT_COLUMNS: Column[] = [
   { key: 'enfants', label: 'ENF.', group: 0, align: 'center', rawValue: (p) => num(p.enfant_a_charge) },
 
   // 1 — Salaire de base (4)
-  { key: 'base_aj', label: 'BASE AJ', group: 1, align: 'right', money: true, sum: true, rawValue: (p) => num(p.base_aj) },
+  { key: 'base_aj', label: 'Base', group: 1, align: 'right', money: true, sum: true, rawValue: (p) => num(p.base_aj) },
   { key: 'logt_trsp', label: 'LOGT/TRSP', group: 1, align: 'right', money: true, sum: true, rawValue: (p) => num(p.logt_trsp) },
   { key: 'rendement', label: 'RENDEMENT', group: 1, align: 'right', money: true, sum: true, rawValue: (p) => num(p.rendement) },
   { key: 'resp_repres', label: 'RESP/REPRES', group: 1, align: 'right', money: true, sum: true, rawValue: (p) => num(p.resp_repres) },
@@ -148,13 +148,12 @@ const ETAT_COLUMNS: Column[] = [
   { key: 'accessoir', label: 'ACCESSOIR', group: 3, align: 'right', money: true, sum: true, rawValue: (p) => num(p.accessoir) },
   { key: 'brut', label: 'BRUT', group: 3, align: 'right', money: true, sum: true, rawValue: (p) => num(p.brut) },
 
-  // 4 — Retenues & règlement (7)
+  // 4 — Retenues & règlement (6)
   { key: 'avance', label: 'AVANCE', group: 4, align: 'right', money: true, sum: true, editable: 'avance', rawValue: (p) => num(p.avance) },
   { key: 'med', label: 'MED', group: 4, align: 'right', money: true, sum: true, editable: 'med', rawValue: (p) => num(p.med) },
   { key: 'net', label: 'NET À PAYER', group: 4, align: 'right', money: true, sum: true, rawValue: (p) => num(p.net) },
   { key: 'virement', label: 'VIREMENT', group: 4, align: 'right', money: true, sum: true, editable: 'virement', rawValue: (p) => num(p.virement) },
   { key: 'especes', label: 'ESPÈCES', group: 4, align: 'right', money: true, sum: true, editable: 'especes', rawValue: (p) => num(p.especes) },
-  { key: 'rap', label: 'RAP', group: 4, align: 'center', rawValue: (p) => (num(p.rap) ? 'X' : '') },
   { key: 'rib', label: 'RIB', group: 4, align: 'left', rawValue: (p) => p.rib || '' },
 
   // 5 — Congés (alimentés automatiquement par Congés & Permissions) (2)
@@ -171,8 +170,8 @@ const PRINT_PAGES: { title: string; columns: Column[]; widths: number[] }[] = [
   },
   {
     title: 'Accessoires, retenues, règlement et congés',
-    columns: [ETAT_COLUMNS[0], ETAT_COLUMNS[1], ...ETAT_COLUMNS.slice(18, 34)],
-    widths: [2.6, 13.8, 5.0, 5.0, 4.6, 4.6, 4.6, 5.3, 5.8, 5.3, 5.0, 6.0, 5.8, 5.8, 2.0, 10.0, 4.2, 4.6],
+    columns: [ETAT_COLUMNS[0], ETAT_COLUMNS[1], ...ETAT_COLUMNS.slice(18)],
+    widths: [2.6, 13.8, 5.0, 5.0, 4.6, 4.6, 4.6, 5.3, 5.8, 5.3, 5.0, 6.0, 5.8, 5.8, 12.0, 4.2, 4.6],
   },
 ];
 
@@ -340,8 +339,13 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   // Données employés + paies du mois
   const [employes, setEmployes] = useState<Employe[]>([]);
   const [paies, setPaies] = useState<PaieMensuelle[]>([]);
+  const [selectedPaieId, setSelectedPaieId] = useState<number | null>(null);
   const [verrouille, setVerrouille] = useState<boolean>(false);
   const [clotureBackupBanner, setClotureBackupBanner] = useState<ResultatSauvegardeSql | null>(null);
+
+  useEffect(() => {
+    setSelectedPaieId(null);
+  }, [annee, mois]);
   const [fusionBanner, setFusionBanner] = useState<ResultatFusionEmployes | null>(null);
   const [chronoAlert, setChronoAlert] = useState<string | null>(null);
   const [periodes, setPeriodes] = useState<{ annee: number; mois: string; nb: number }[]>([]);
@@ -962,6 +966,8 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                       <th
                         key={c.key}
                         className={`py-2 px-2 whitespace-nowrap border-r border-slate-200 dark:border-slate-600 text-${c.align} ${
+                          c.key === 'base_aj' ? 'normal-case' : ''
+                        } ${
                           idx === 0
                             ? 'sticky left-0 z-30 bg-slate-100 dark:bg-slate-700 w-12'
                             : idx === 1
@@ -1002,30 +1008,51 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                   rows.map((p, rowIdx) => {
                     const emp = empById.get(p.employe_id);
                     const mat = emp ? emp.conge_maternite === 1 || emp.conge_maternite === true : false;
-                    const stickyBg = mat
+                    const isSelected = selectedPaieId === p.id;
+                    const hasSelection = selectedPaieId !== null;
+                    const selectedBorder = isSelected
+                      ? 'border-y-2 border-y-amber-500 dark:border-y-amber-400'
+                      : '';
+                    const stickyBg = isSelected
+                      ? 'bg-amber-200 dark:bg-amber-800 shadow-[2px_0_8px_-2px_rgba(217,119,6,0.45)]'
+                      : mat
                       ? 'bg-pink-50 dark:bg-pink-950/60 group-hover:bg-pink-100 dark:group-hover:bg-pink-900/50'
                       : 'bg-white dark:bg-slate-800 group-hover:bg-sky-50 dark:group-hover:bg-slate-700';
 
                     return (
                       <tr
                         key={p.id}
+                        aria-selected={isSelected}
+                        data-selected={isSelected ? 'true' : undefined}
+                        onClick={() => setSelectedPaieId((prev) => (prev === p.id ? null : p.id))}
                         onDoubleClick={() => {
                           if (emp) {
                             setEditingEmploye(emp);
                             setShowEmpModal(true);
                           }
                         }}
-                        title="Double-cliquez pour modifier la fiche du salarié"
-                        className={`cursor-pointer transition group ${
-                          mat
-                            ? 'bg-pink-50/90 dark:bg-pink-950/35 hover:bg-pink-100/90 dark:hover:bg-pink-900/45 border-l-4 border-l-pink-500'
-                            : 'hover:bg-sky-50/60 dark:hover:bg-slate-700/50'
+                        title="Cliquez pour mettre en évidence la ligne · Double-cliquez pour modifier la fiche du salarié"
+                        className={`cursor-pointer transition-all group ${
+                          isSelected
+                            ? 'bg-amber-100/95 dark:bg-amber-900/55 shadow-md relative z-[5] font-semibold'
+                            : mat
+                            ? `bg-pink-50/90 dark:bg-pink-950/35 hover:bg-pink-100/90 dark:hover:bg-pink-900/45 border-l-4 border-l-pink-500 ${hasSelection ? 'opacity-80 hover:opacity-100' : ''}`
+                            : `hover:bg-sky-50/60 dark:hover:bg-slate-700/50 ${hasSelection ? 'opacity-80 hover:opacity-100' : ''}`
                         }`}
                       >
                         {ETAT_COLUMNS.map((c, idx) => {
                           if (c.editable === 'avance') {
                             return (
-                              <td key={c.key} className="py-1 px-1.5 border-r border-slate-100 dark:border-slate-700 bg-red-50/25 dark:bg-red-950/15" onClick={(e) => e.stopPropagation()}>
+                              <td
+                                key={c.key}
+                                className={`py-1 px-1.5 border-r border-slate-100 dark:border-slate-700 ${
+                                  isSelected ? 'bg-amber-100/95 dark:bg-amber-900/55' : 'bg-red-50/25 dark:bg-red-950/15'
+                                } ${selectedBorder}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedPaieId(p.id);
+                                }}
+                              >
                                 <InlineMoneyInput
                                   compact
                                   value={Number(p.avance || 0)}
@@ -1040,7 +1067,16 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                           }
                           if (c.editable === 'med') {
                             return (
-                              <td key={c.key} className="py-1 px-1.5 border-r border-slate-100 dark:border-slate-700 bg-amber-50/25 dark:bg-amber-950/15" onClick={(e) => e.stopPropagation()}>
+                              <td
+                                key={c.key}
+                                className={`py-1 px-1.5 border-r border-slate-100 dark:border-slate-700 ${
+                                  isSelected ? 'bg-amber-100/95 dark:bg-amber-900/55' : 'bg-amber-50/25 dark:bg-amber-950/15'
+                                } ${selectedBorder}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedPaieId(p.id);
+                                }}
+                              >
                                 <InlineMoneyInput
                                   compact
                                   value={Number(p.med || 0)}
@@ -1055,7 +1091,16 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                           }
                           if (c.editable === 'virement') {
                             return (
-                              <td key={c.key} className="py-1 px-1.5 border-r border-slate-100 dark:border-slate-700 bg-sky-50/30 dark:bg-sky-950/15" onClick={(e) => e.stopPropagation()}>
+                              <td
+                                key={c.key}
+                                className={`py-1 px-1.5 border-r border-slate-100 dark:border-slate-700 ${
+                                  isSelected ? 'bg-amber-100/95 dark:bg-amber-900/55' : 'bg-sky-50/30 dark:bg-sky-950/15'
+                                } ${selectedBorder}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedPaieId(p.id);
+                                }}
+                              >
                                 <InlineMoneyInput
                                   compact
                                   value={Number(p.virement || 0)}
@@ -1070,7 +1115,16 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                           }
                           if (c.editable === 'especes') {
                             return (
-                              <td key={c.key} className="py-1 px-1.5 border-r border-slate-100 dark:border-slate-700 bg-emerald-50/30 dark:bg-emerald-950/15" onClick={(e) => e.stopPropagation()}>
+                              <td
+                                key={c.key}
+                                className={`py-1 px-1.5 border-r border-slate-100 dark:border-slate-700 ${
+                                  isSelected ? 'bg-amber-100/95 dark:bg-amber-900/55' : 'bg-emerald-50/30 dark:bg-emerald-950/15'
+                                } ${selectedBorder}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedPaieId(p.id);
+                                }}
+                              >
                                 <InlineMoneyInput
                                   compact
                                   value={Number(p.especes || 0)}
@@ -1097,19 +1151,35 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                                 c.money || c.days ? 'font-mono' : ''
                               } ${
                                 idx === 0
-                                  ? `sticky left-0 z-10 ${stickyBg} font-bold text-salfa-dark dark:text-sky-300 w-12`
+                                  ? `sticky left-0 z-10 ${stickyBg} font-bold ${
+                                      isSelected
+                                        ? 'text-amber-950 dark:text-amber-100 border-l-4 border-l-amber-600 dark:border-l-amber-400'
+                                        : 'text-salfa-dark dark:text-sky-300'
+                                    } w-12`
                                   : idx === 1
-                                  ? `sticky left-12 z-10 ${stickyBg} font-semibold text-slate-900 dark:text-white min-w-[200px]`
+                                  ? `sticky left-12 z-10 ${stickyBg} ${
+                                      isSelected
+                                        ? 'font-extrabold text-amber-950 dark:text-amber-50'
+                                        : 'font-semibold text-slate-900 dark:text-white'
+                                    } min-w-[200px]`
                                   : ''
                               } ${
                                 c.key === 'net'
-                                  ? 'font-extrabold text-emerald-700 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/20'
+                                  ? isSelected
+                                    ? 'font-extrabold text-emerald-800 dark:text-emerald-300 bg-emerald-200/70 dark:bg-emerald-900/45'
+                                    : 'font-extrabold text-emerald-700 dark:text-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/20'
                                   : c.key === 'conge_restant'
-                                  ? 'font-bold text-violet-700 dark:text-violet-300 bg-violet-50/40 dark:bg-violet-950/15'
+                                  ? isSelected
+                                    ? 'font-bold text-violet-900 dark:text-violet-200 bg-amber-100/95 dark:bg-amber-900/55'
+                                    : 'font-bold text-violet-700 dark:text-violet-300 bg-violet-50/40 dark:bg-violet-950/15'
                                   : c.key === 'conge_pris' && Number(p.conge_pris_mois || 0) > 0
-                                  ? 'font-bold text-violet-800 dark:text-violet-200 bg-violet-50/40 dark:bg-violet-950/15'
+                                  ? isSelected
+                                    ? 'font-bold text-violet-900 dark:text-violet-200 bg-amber-100/95 dark:bg-amber-900/55'
+                                    : 'font-bold text-violet-800 dark:text-violet-200 bg-violet-50/40 dark:bg-violet-950/15'
+                                  : isSelected && idx > 1
+                                  ? 'bg-amber-100/95 dark:bg-amber-900/55 text-slate-950 dark:text-amber-50 font-bold'
                                   : ''
-                              }`}
+                              } ${selectedBorder}`}
                             >
                               {idx === 1 ? (
                                 <div className="flex items-center gap-1.5">
@@ -1124,6 +1194,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        setSelectedPaieId(p.id);
                                         setFusionInitialEmpId(emp.id);
                                         setShowFusionModal(true);
                                       }}
@@ -1142,7 +1213,15 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                           );
                         })}
 
-                        <td className="py-1 px-2 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
+                        <td
+                          className={`py-1 px-2 whitespace-nowrap text-center ${
+                            isSelected ? 'bg-amber-100/95 dark:bg-amber-900/55' : ''
+                          } ${selectedBorder}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedPaieId(p.id);
+                          }}
+                        >
                           <div className="inline-flex items-center gap-1">
                             {!verrouille && (
                               <button
@@ -1524,7 +1603,7 @@ const EmployeHistoryModal: React.FC<HistoryModalProps> = ({ employe, paies, onCl
                 {paies.map((p) => (<div key={p.id} className="border dark:border-slate-700 rounded-xl p-3 bg-slate-50 dark:bg-slate-700/50"><div className="flex justify-between items-center"><span className="font-bold text-salfa-dark dark:text-white text-sm">{p.mois} {p.annee}</span><span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${p.verrouille === 1 ? 'bg-slate-200 dark:bg-slate-600' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300'}`}>{p.verrouille === 1 ? 'Clôturé' : 'Modifiable'}</span></div><div className="grid grid-cols-2 gap-2 mt-2 text-xs dark:text-slate-300"><div>Brut: <span className="font-mono font-bold">{fmt(p.salaire_brut)}</span></div><div>NET: <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmt(p.net)}</span></div><div>Avance: <span className="font-mono text-red-600">{fmt(p.avance)}</span></div><div>Congé restant: <span className="font-mono font-bold text-violet-700 dark:text-violet-300">{fmtJoursCourt(p.conge_restant)} j</span></div></div></div>))}
               </div>
               <div className="hidden lg:block overflow-x-auto thin-scrollbar">
-                <table className="w-full text-left border-collapse min-w-[960px]"><thead><tr className="bg-slate-50 dark:bg-slate-700 border-b dark:border-slate-600 text-xs font-bold uppercase text-slate-600 dark:text-slate-300"><th className="py-2 px-3">Période</th><th className="py-2 px-3 text-right">BASE AJ</th><th className="py-2 px-3 text-right">Brut</th><th className="py-2 px-3 text-right">CNaPS</th><th className="py-2 px-3 text-right">IRSA</th><th className="py-2 px-3 text-right">AVANCE</th><th className="py-2 px-3 text-right">MED</th><th className="py-2 px-4 text-right">NET</th><th className="py-2 px-3 text-right">VIREMENT</th><th className="py-2 px-3 text-right">ESPÈCES</th><th className="py-2 px-3 text-right">Congé pris</th><th className="py-2 px-3 text-right">Congé restant</th><th className="py-2 px-3 text-center">Statut</th></tr></thead><tbody className="divide-y dark:divide-slate-700 text-sm dark:text-slate-200">{paies.map((p) => (<tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="py-2 px-3 font-bold">{p.mois} {p.annee}</td><td className="py-2 px-3 text-right font-mono">{fmt(p.base_aj)}</td><td className="py-2 px-3 text-right font-mono font-semibold">{fmt(p.salaire_brut)}</td><td className="py-2 px-3 text-right font-mono text-xs">{fmt(p.cnaps)}</td><td className="py-2 px-3 text-right font-mono text-xs">{fmt(p.irsa)}</td><td className="py-2 px-3 text-right font-mono text-red-600">{fmt(p.avance)}</td><td className="py-2 px-3 text-right font-mono text-red-600">{fmt(p.med)}</td><td className="py-2 px-4 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmt(p.net)}</td><td className="py-2 px-3 text-right font-mono text-sky-700 dark:text-sky-300">{fmt(p.virement)}</td><td className="py-2 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300">{fmt(p.especes)}</td><td className="py-2 px-3 text-right font-mono text-violet-700 dark:text-violet-300">{Number(p.conge_pris_mois || 0) ? `${fmtJoursCourt(p.conge_pris_mois)} j` : '—'}</td><td className="py-2 px-3 text-right font-mono font-bold text-violet-700 dark:text-violet-300">{fmtJoursCourt(p.conge_restant)} j</td><td className="py-2 px-3 text-center text-xs">{p.verrouille === 1 ? <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 font-semibold">Clôturé</span> : <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 font-semibold">Modifiable</span>}</td></tr>))}</tbody></table>
+                <table className="w-full text-left border-collapse min-w-[960px]"><thead><tr className="bg-slate-50 dark:bg-slate-700 border-b dark:border-slate-600 text-xs font-bold uppercase text-slate-600 dark:text-slate-300"><th className="py-2 px-3">Période</th><th className="py-2 px-3 text-right normal-case">Base</th><th className="py-2 px-3 text-right">Brut</th><th className="py-2 px-3 text-right">CNaPS</th><th className="py-2 px-3 text-right">IRSA</th><th className="py-2 px-3 text-right">AVANCE</th><th className="py-2 px-3 text-right">MED</th><th className="py-2 px-4 text-right">NET</th><th className="py-2 px-3 text-right">VIREMENT</th><th className="py-2 px-3 text-right">ESPÈCES</th><th className="py-2 px-3 text-right">Congé pris</th><th className="py-2 px-3 text-right">Congé restant</th><th className="py-2 px-3 text-center">Statut</th></tr></thead><tbody className="divide-y dark:divide-slate-700 text-sm dark:text-slate-200">{paies.map((p) => (<tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="py-2 px-3 font-bold">{p.mois} {p.annee}</td><td className="py-2 px-3 text-right font-mono">{fmt(p.base_aj)}</td><td className="py-2 px-3 text-right font-mono font-semibold">{fmt(p.salaire_brut)}</td><td className="py-2 px-3 text-right font-mono text-xs">{fmt(p.cnaps)}</td><td className="py-2 px-3 text-right font-mono text-xs">{fmt(p.irsa)}</td><td className="py-2 px-3 text-right font-mono text-red-600">{fmt(p.avance)}</td><td className="py-2 px-3 text-right font-mono text-red-600">{fmt(p.med)}</td><td className="py-2 px-4 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmt(p.net)}</td><td className="py-2 px-3 text-right font-mono text-sky-700 dark:text-sky-300">{fmt(p.virement)}</td><td className="py-2 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300">{fmt(p.especes)}</td><td className="py-2 px-3 text-right font-mono text-violet-700 dark:text-violet-300">{Number(p.conge_pris_mois || 0) ? `${fmtJoursCourt(p.conge_pris_mois)} j` : '—'}</td><td className="py-2 px-3 text-right font-mono font-bold text-violet-700 dark:text-violet-300">{fmtJoursCourt(p.conge_restant)} j</td><td className="py-2 px-3 text-center text-xs">{p.verrouille === 1 ? <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 font-semibold">Clôturé</span> : <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 font-semibold">Modifiable</span>}</td></tr>))}</tbody></table>
               </div>
             </>
           )}

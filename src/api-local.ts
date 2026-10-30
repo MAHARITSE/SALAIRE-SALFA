@@ -732,7 +732,6 @@ function construirePaie(
 
   const ribEffectif = String(emp.rib || (dernier ? dernier.rib : '') || '').trim();
   const cnapsEffectif = String(emp.numero_cnaps || (dernier ? dernier.numero_cnaps : '') || '').trim();
-  const rapEffectif = dernier && dernier.rap !== undefined ? Number(dernier.rap) === 1 : true;
 
   const annees = calculerAnciennete(emp.date_embauche, a);
   const enMaternite = emp.conge_maternite === 1 || estEnCongeMaternite(emp.date_debut_maternite, a, m);
@@ -743,7 +742,6 @@ function construirePaie(
     responsabilite_representation: emp.responsabilite_representation,
     enfant_a_charge: emp.enfant_a_charge,
     rib: ribEffectif,
-    rap: rapEffectif,
     conge_maternite: enMaternite ? 1 : 0,
   };
   const r = calculerPaieEmploye(empCalc, 0, 0, accessoires);
@@ -783,7 +781,6 @@ function construirePaie(
     net: r.net,
     virement: r.virement,
     especes: r.especes,
-    rap: rapEffectif ? 1 : 0,
     rib: ribEffectif,
     verrouille: 0,
     conge_maternite: enMaternite ? 1 : 0,
@@ -1811,7 +1808,6 @@ function lignePaie(src: ImportedPaie, employeId: number, id: number): any {
     net: src.net || 0,
     virement: src.virement,
     especes: src.especes,
-    rap: src.rap === 0 ? 0 : 1,
     rib: src.rib || '',
     verrouille: 0,
     conge_maternite: 0,

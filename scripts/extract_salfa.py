@@ -6,7 +6,7 @@ import openpyxl
 
 ROOT = Path(__file__).resolve().parents[1]
 MONTHS = 'JANVIER FEVRIER MARS AVRIL MAI JUIN JUILLET AOUT SEPTEMBRE OCTOBRE'.split()
-FIELDS = ['numero_matricule','nom_prenoms','numero_cnaps','categorie','jobs','date_embauche','nombre_annees','enfant_a_charge','base_aj','logt_trsp','rendement','resp_repres','salaire_brut','cnaps','patronal','salaire_imposable','irsa','salaire_net','augmentation_divers','prime_de_garde','anciennete2','risque','repr_rec','accessoir','brut','avance','med','net','virement','especes','rap','rib']
+FIELDS = ['numero_matricule','nom_prenoms','numero_cnaps','categorie','jobs','date_embauche','nombre_annees','enfant_a_charge','base_aj','logt_trsp','rendement','resp_repres','salaire_brut','cnaps','patronal','salaire_imposable','irsa','salaire_net','augmentation_divers','prime_de_garde','anciennete2','risque','repr_rec','accessoir','brut','avance','med','net','virement','especes','_ignore_rap','rib']
 TEXT = {'nom_prenoms','numero_cnaps','categorie','jobs','rib'}
 
 def convert(key, val):
@@ -16,8 +16,6 @@ def convert(key, val):
         return '' if val is None else str(val).strip()
     if key in ('virement','especes') and val is None:
         return None
-    if key == 'rap':
-        return int(bool(val))
     return val if isinstance(val, (int, float)) else 0
 
 wb = openpyxl.load_workbook(ROOT / 'SALAIRE SALFA 2026.xlsm', data_only=True)
@@ -28,7 +26,7 @@ for month in MONTHS:
     for row in s.iter_rows(min_row=3, max_col=32):
         if not isinstance(row[0].value, (int,float)) or not isinstance(row[1].value, str) or not row[1].value.strip():
             continue
-        p = {key: convert(key, c.value) for key, c in zip(FIELDS, row)}
+        p = {key: convert(key, c.value) for key, c in zip(FIELDS, row) if not key.startswith('_ignore')}
         # En juin, l'intitulé JOBS est vide mais les valeurs restent en colonne E.
         p.update(annee=2026, mois=month, verrouille=0)
         latest[p['numero_matricule']] = p

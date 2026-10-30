@@ -226,7 +226,7 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({ employe, onC
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">BASE AJ</label>
+              <label className="block text-xs font-bold mb-1 dark:text-slate-300">Base</label>
               <MonetaryInput
                 value={form.base_aj}
                 onChange={(numVal) => setForm({ ...form, base_aj: numVal })}

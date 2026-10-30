@@ -99,7 +99,6 @@ function ensureSalfaInitialized(PDO $db): void {
         `net` DOUBLE NOT NULL DEFAULT 0,
         `virement` DOUBLE NULL DEFAULT NULL,
         `especes` DOUBLE NULL DEFAULT NULL,
-        `rap` TINYINT NOT NULL DEFAULT 1,
         `rib` VARCHAR(80) NOT NULL DEFAULT '',
         `verrouille` TINYINT NOT NULL DEFAULT 0,
         `conge_maternite` TINYINT NOT NULL DEFAULT 0,
@@ -266,6 +265,16 @@ function ensureSalfaInitialized(PDO $db): void {
         $ins->execute([2, 'comptable', 'Comptable Clinique SALFA', 'Comptable', SALFA_DEFAULT_COMPTABLE_HASH]);
     }
 
+    // Suppression automatique de l'ancienne colonne `rap` si présente sur une base existante
+    try {
+        $hasRapCol = $db->query("SHOW COLUMNS FROM `salfa_paies` LIKE 'rap'")->fetch(PDO::FETCH_ASSOC);
+        if ($hasRapCol) {
+            $db->exec("ALTER TABLE `salfa_paies` DROP COLUMN `rap`");
+        }
+    } catch (Throwable $e) {
+        // Ignorer si non applicable
+    }
+
     // Migration automatique et suppression définitive d'une éventuelle ancienne table salfa_state (JSON)
     migrateAndDropLegacyJsonTable($db);
 }
@@ -382,7 +391,6 @@ function loadRelationalStore(PDO $db): array {
             'net' => (float)$r['net'],
             'virement' => $r['virement'] === null ? null : (float)$r['virement'],
             'especes' => $r['especes'] === null ? null : (float)$r['especes'],
-            'rap' => (int)$r['rap'],
             'rib' => (string)$r['rib'],
             'verrouille' => (int)$r['verrouille'],
             'conge_maternite' => (int)$r['conge_maternite'],
@@ -657,7 +665,7 @@ function syncPaiesTable(PDO $db, array $paies): void {
         'logt_trsp', 'rendement', 'resp_repres', 'salaire_brut', 'cnaps', 'patronal',
         'salaire_imposable', 'irsa', 'salaire_net', 'augmentation_divers', 'prime_de_garde',
         'anciennete2', 'risque', 'repr_rec', 'accessoir', 'brut', 'avance', 'med', 'net',
-        'virement', 'especes', 'rap', 'rib', 'verrouille', 'conge_maternite',
+        'virement', 'especes', 'rib', 'verrouille', 'conge_maternite',
         'date_debut_maternite', 'date_modification',
     ];
     $updates = [];
@@ -708,7 +716,6 @@ function syncPaiesTable(PDO $db, array $paies): void {
             $params[] = (float)($p['net'] ?? 0);
             $params[] = ($vir === null || $vir === '') ? null : (float)$vir;
             $params[] = ($esp === null || $esp === '') ? null : (float)$esp;
-            $params[] = isset($p['rap']) && (int)$p['rap'] === 0 ? 0 : 1;
             $params[] = substr((string)($p['rib'] ?? ''), 0, 80);
             $params[] = !empty($p['verrouille']) ? 1 : 0;
             $params[] = !empty($p['conge_maternite']) ? 1 : 0;
@@ -1095,7 +1102,7 @@ function generateRelationalSqlDump(PDO $db, string $motif = 'Sauvegarde SQL manu
         $lines[] = dumpTableRowsSql($db, 'salfa_bareme_irsa', ['ordre', 'seuil_min', 'seuil_max', 'taux'], '`ordre` ASC');
         $lines[] = dumpTableRowsSql($db, 'salfa_entete', ['id', 'configuree', 'mode', 'ligne_1', 'ligne_2', 'ligne_3', 'ligne_4', 'ligne_5', 'ligne_6', 'ligne_7', 'image_finale', 'image_complete', 'logo_gauche', 'logo_droite'], '`id` ASC');
         $lines[] = dumpTableRowsSql($db, 'salfa_employes', $empCols, '`id` ASC');
-        $lines[] = dumpTableRowsSql($db, 'salfa_paies', ['id', 'employe_id', 'numero_matricule', 'annee', 'mois', 'nom_prenoms', 'numero_cnaps', 'categorie', 'jobs', 'date_embauche', 'nombre_annees', 'enfant_a_charge', 'base_aj', 'logt_trsp', 'rendement', 'resp_repres', 'salaire_brut', 'cnaps', 'patronal', 'salaire_imposable', 'irsa', 'salaire_net', 'augmentation_divers', 'prime_de_garde', 'anciennete2', 'risque', 'repr_rec', 'accessoir', 'brut', 'avance', 'med', 'net', 'virement', 'especes', 'rap', 'rib', 'verrouille', 'conge_maternite', 'date_debut_maternite', 'date_modification'], '`annee` ASC, `id` ASC');
+        $lines[] = dumpTableRowsSql($db, 'salfa_paies', ['id', 'employe_id', 'numero_matricule', 'annee', 'mois', 'nom_prenoms', 'numero_cnaps', 'categorie', 'jobs', 'date_embauche', 'nombre_annees', 'enfant_a_charge', 'base_aj', 'logt_trsp', 'rendement', 'resp_repres', 'salaire_brut', 'cnaps', 'patronal', 'salaire_imposable', 'irsa', 'salaire_net', 'augmentation_divers', 'prime_de_garde', 'anciennete2', 'risque', 'repr_rec', 'accessoir', 'brut', 'avance', 'med', 'net', 'virement', 'especes', 'rib', 'verrouille', 'conge_maternite', 'date_debut_maternite', 'date_modification'], '`annee` ASC, `id` ASC');
         $lines[] = dumpTableRowsSql($db, 'salfa_comparaison_net', ['id', 'numero_matricule', 'nom_prenoms', 'categorie', 'jobs', 'net_actuel', 'net_avant', 'ecart'], '`id` ASC');
         $lines[] = dumpTableRowsSql($db, 'salfa_annees', ['annee', 'date_creation'], '`annee` ASC');
     }
