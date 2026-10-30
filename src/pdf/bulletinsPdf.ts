@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import { PaieMensuelle } from '../types';
 import {
+  BulletinOptions,
   construireBulletin,
   formatCnapsBulletin,
   formatCongesRestantsBulletin,
@@ -30,8 +31,8 @@ function drawUnderlinedText(doc: jsPDF, text: string, x: number, y: number, bold
 }
 
 /** Deux exemplaires côte à côte reproduisant fidèlement le corps de la feuille BULLETIN. */
-export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
-  const bulletin = construireBulletin(p);
+export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle, options?: BulletinOptions): void {
+  const bulletin = construireBulletin(p, options);
   // Les polices PDF standard ne comprennent pas l'espace insécable étroit.
   const money = (v: number | null | undefined) => fmt(v).replace(/[\u00a0\u202f]/g, ' ');
   const moneyRubrique = (v: number | null | undefined) =>
@@ -181,11 +182,11 @@ export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
     ry += rowH;
 
     doc.text('Avance sur salaire / Prêt', x + 1.5, ry);
-    drawRetVal(Number(p.avance || 0), ry);
+    drawRetVal(bulletin.avance, ry);
     ry += rowH;
 
     doc.text('Medicament', x + 1.5, ry);
-    drawRetVal(Number(p.med || 0), ry);
+    drawRetVal(bulletin.med, ry);
     ry += rowH;
 
     doc.text('Primes divers', x + 1.5, ry);
@@ -234,13 +235,13 @@ export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
     doc.setFont('helvetica', 'normal');
     doc.text('Virement', x + 41, fy);
     doc.setFont('helvetica', 'bold');
-    doc.text(money(p.virement), x + 95, fy, { align: 'right' });
+    doc.text(money(bulletin.virement), x + 95, fy, { align: 'right' });
     fy += 5.1;
 
     doc.setFont('helvetica', 'normal');
     doc.text('Espece', x + 41, fy);
     doc.setFont('helvetica', 'bold');
-    doc.text(money(p.especes), x + 95, fy, { align: 'right' });
+    doc.text(money(bulletin.especes), x + 95, fy, { align: 'right' });
     fy += 5.5;
 
     // --- NB CONGES RESTANTS & Date ---
@@ -255,13 +256,23 @@ export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
     doc.text(new Date().toLocaleDateString('fr-FR'), x + 46, fy);
   };
 
-  drawCopy(30, 127);
-  doc.setDrawColor(170, 170, 170);
-  doc.setLineWidth(0.25);
-  doc.setLineDashPattern([2, 2], 0);
-  doc.line(159.5, 8, 159.5, 202);
+  drawCopy(30, 125.5);
+
+  // Trait de découpe vertical bien marqué au centre entre les 2 exemplaires + symbole ciseaux
+  const cutX = 159.25;
+  doc.setDrawColor(71, 85, 105);
+  doc.setLineWidth(0.3);
+  doc.circle(cutX - 1.1, 6.2, 0.85, 'S');
+  doc.circle(cutX + 1.1, 6.2, 0.85, 'S');
+  doc.line(cutX - 0.65, 6.9, cutX + 0.85, 9.7);
+  doc.line(cutX + 0.65, 6.9, cutX - 0.85, 9.7);
+
+  doc.setLineWidth(0.35);
+  doc.setLineDashPattern([2.5, 1.8], 0);
+  doc.line(cutX, 11, cutX, 204);
   doc.setLineDashPattern([], 0);
-  drawCopy(162, 127);
+
+  drawCopy(163, 125.5);
 }
 
 function drawCover(doc: jsPDF, paies: PaieMensuelle[], mois: string, annee: number): void {
@@ -463,8 +474,20 @@ export function downloadPayrollBookletPDF(paies: PaieMensuelle[], mois: string, 
   doc.save(`Etats_Bulletins_${safeFilePart(mois)}_${annee}.pdf`);
 }
 
-export function downloadSingleBulletinPDF(paie: PaieMensuelle): void {
+export function downloadSingleBulletinPDF(paie: PaieMensuelle, options?: BulletinOptions): void {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  drawBulletinPage(doc, paie);
-  doc.save(`Bulletin_${safeFilePart(paie.mois)}_${paie.annee}_Mat_${paie.numero_matricule}_${safeFilePart(paie.nom_prenoms)}.pdf`);
+  drawBulletinPage(doc, paie, options);
+  const sansAvance = options?.deduireAvance === false;
+  const sansMed = options?.deduireMed === false;
+  const suffixe =
+    sansAvance && sansMed
+      ? '_sans_avance_ni_med'
+      : sansAvance
+      ? '_sans_avance'
+      : sansMed
+      ? '_sans_med'
+      : '';
+  doc.save(
+    `Bulletin_${safeFilePart(paie.mois)}_${paie.annee}_Mat_${paie.numero_matricule}_${safeFilePart(paie.nom_prenoms)}${suffixe}.pdf`
+  );
 }

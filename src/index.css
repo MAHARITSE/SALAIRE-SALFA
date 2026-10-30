@@ -285,6 +285,32 @@
   font-size: 13px;
 }
 
+.bulletin-cut-line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+  width: 100%;
+  user-select: none;
+  pointer-events: none;
+}
+.bulletin-cut-scissors {
+  display: block;
+  font-size: 12px;
+  line-height: 1;
+  color: #334155 !important;
+  transform: rotate(90deg);
+  margin-bottom: 3px;
+  flex-shrink: 0;
+}
+.bulletin-cut-rule,
+.dark .bulletin-cut-rule {
+  flex: 1;
+  width: 0;
+  border-left: 1.5px dashed #475569 !important;
+  border-color: #475569 !important;
+}
+
 @page bulletin-paie { size: A4 landscape; margin: 5mm 8mm 5mm 30mm; }
 @media print {
   html:has(.bulletin-print), body:has(.bulletin-print),
@@ -297,12 +323,37 @@
   .bulletin-print { page: bulletin-paie; display: block !important; margin: 0 !important; padding: 0 !important; }
   .bulletin-print-sheet {
     display: grid !important;
-    grid-template-columns: 1fr 1fr;
-    gap: 6mm;
+    grid-template-columns: minmax(0, 1fr) 8mm minmax(0, 1fr);
+    gap: 0;
     margin: 0 !important;
     padding: 0 !important;
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+  .bulletin-print .bulletin-cut-line {
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    align-self: stretch;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .bulletin-print .bulletin-cut-scissors,
+  .dark .bulletin-print .bulletin-cut-scissors {
+    font-size: 9pt;
+    line-height: 1;
+    color: #334155 !important;
+    background: transparent !important;
+    margin-bottom: 1mm;
+  }
+  .bulletin-print .bulletin-cut-rule,
+  .dark .bulletin-print .bulletin-cut-rule {
+    flex: 1;
+    width: 0;
+    border-left: 0.35mm dashed #334155 !important;
+    border-color: #334155 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   .bulletin-print-sheet + .bulletin-print-sheet {
     break-before: page;

@@ -355,7 +355,15 @@ export async function fetchEmployePaies(id: number): Promise<PaieMensuelle[]> {
         Number(a.id) - Number(b.id)
     );
   return lignes.map((p: any) => {
-    if (!cibles.length) return { ...p };
+    const baseRow = emp
+      ? {
+          ...p,
+          categorie: p.categorie || emp.categorie || '',
+          numero_cnaps: p.numero_cnaps || emp.numero_cnaps || '',
+          date_embauche: p.date_embauche || emp.date_embauche || '',
+        }
+      : { ...p };
+    if (!cibles.length) return baseRow;
     const syn = calculerSyntheseCongesPeriode(
       cibles,
       store.conges || [],
@@ -363,7 +371,7 @@ export async function fetchEmployePaies(id: number): Promise<PaieMensuelle[]> {
       Number(p.annee),
       String(p.mois).toUpperCase()
     ).get(Number(id));
-    return syn ? { ...p, ...syn } : { ...p };
+    return syn ? { ...baseRow, ...syn } : baseRow;
   });
 }
 
@@ -415,44 +423,57 @@ export async function createEmploye(employe: Partial<Employe>): Promise<boolean>
     date_creation: nowStamp(),
   };
   store.employes.push(newEmp);
-  saveStore();
+  if (!saveStore()) {
+    store.employes.pop();
+    return false;
+  }
   return true;
 }
 
-export async function updateEmploye(id: number, employe: Partial<Employe>): Promise<boolean> {
+export async function updateEmploye(
+  id: number,
+  employe: Partial<Employe>,
+  periodeActive?: { annee: number; mois: string }
+): Promise<boolean> {
   exigerAdmin();
   const store = getStore();
-  const idx = store.employes.findIndex((e: any) => Number(e.id) === id);
+  const idx = store.employes.findIndex((e: any) => Number(e.id) === Number(id));
   if (idx === -1) return false;
 
   const mat = Number(employe.numero_matricule);
-  if (store.employes.some((e: any) => Number(e.numero_matricule) === mat && Number(e.id) !== id)) {
+  if (!Number.isFinite(mat) || mat <= 0) return false;
+  if (store.employes.some((e: any) => Number(e.numero_matricule) === mat && Number(e.id) !== Number(id))) {
     return false;
   }
-  const dateEmb = String(employe.date_embauche || '').trim();
+  const oldEmp = store.employes[idx];
+  const oldMat = Number(oldEmp.numero_matricule);
+  const dateEmb = String(employe.date_embauche ?? oldEmp.date_embauche ?? '').trim();
   const nouvelActif = employe.actif !== undefined
     ? (Number(employe.actif) ? 1 : 0)
-    : Number(store.employes[idx].actif);
+    : Number(oldEmp.actif);
   const dateInactif = nouvelActif === 0
-    ? (String(employe.date_inactif ?? store.employes[idx].date_inactif ?? '').trim() || new Date().toISOString().slice(0, 10))
+    ? (String(employe.date_inactif ?? oldEmp.date_inactif ?? '').trim() || new Date().toISOString().slice(0, 10))
     : '';
 
   const updated = {
-    ...store.employes[idx],
+    ...oldEmp,
     numero_matricule: mat,
-    nom_prenoms: String(employe.nom_prenoms || '').trim(),
-    numero_cnaps: String(employe.numero_cnaps || '').trim(),
-    categorie: String(employe.categorie || '').trim(),
-    jobs: String(employe.jobs || '').trim(),
+    nom_prenoms: String(employe.nom_prenoms ?? oldEmp.nom_prenoms ?? '').trim(),
+    numero_cnaps: String(employe.numero_cnaps ?? oldEmp.numero_cnaps ?? '').trim(),
+    categorie: String(employe.categorie ?? oldEmp.categorie ?? '').trim(),
+    jobs: String(employe.jobs ?? oldEmp.jobs ?? '').trim(),
     date_embauche: dateEmb,
     nombre_annees: calculerAnciennete(dateEmb, new Date().getFullYear()),
-    enfant_a_charge: Number(employe.enfant_a_charge || 0),
-    base_aj: Number(employe.base_aj || 0),
-    logement_transport: Number(employe.logement_transport || 0),
-    rendement: Number(employe.rendement || 0),
-    responsabilite_representation: Number(employe.responsabilite_representation || 0),
-    rib: String(employe.rib || '').trim(),
-    mode_paiement: String(employe.mode_paiement || 'ESPECES').toUpperCase(),
+    enfant_a_charge: employe.enfant_a_charge !== undefined ? Number(employe.enfant_a_charge || 0) : Number(oldEmp.enfant_a_charge || 0),
+    base_aj: employe.base_aj !== undefined ? Number(employe.base_aj || 0) : Number(oldEmp.base_aj || 0),
+    logement_transport: employe.logement_transport !== undefined ? Number(employe.logement_transport || 0) : Number(oldEmp.logement_transport || 0),
+    rendement: employe.rendement !== undefined ? Number(employe.rendement || 0) : Number(oldEmp.rendement || 0),
+    responsabilite_representation:
+      employe.responsabilite_representation !== undefined
+        ? Number(employe.responsabilite_representation || 0)
+        : Number(oldEmp.responsabilite_representation || 0),
+    rib: employe.rib !== undefined ? String(employe.rib || '').trim() : String(oldEmp.rib || '').trim(),
+    mode_paiement: String(employe.mode_paiement ?? oldEmp.mode_paiement ?? 'ESPECES').toUpperCase(),
     actif: nouvelActif,
     date_inactif: dateInactif,
     conge_maternite:
@@ -460,19 +481,139 @@ export async function updateEmploye(id: number, employe: Partial<Employe>): Prom
         ? employe.conge_maternite
           ? 1
           : 0
-        : store.employes[idx].conge_maternite,
+        : oldEmp.conge_maternite,
     date_debut_maternite:
       employe.date_debut_maternite !== undefined
         ? String(employe.date_debut_maternite || '').trim()
-        : store.employes[idx].date_debut_maternite,
+        : oldEmp.date_debut_maternite,
   };
 
+  const salaireOuReglementModifie =
+    Number(oldEmp.base_aj || 0) !== Number(updated.base_aj || 0) ||
+    Number(oldEmp.logement_transport || 0) !== Number(updated.logement_transport || 0) ||
+    Number(oldEmp.rendement || 0) !== Number(updated.rendement || 0) ||
+    Number(oldEmp.responsabilite_representation || 0) !== Number(updated.responsabilite_representation || 0) ||
+    Number(oldEmp.enfant_a_charge || 0) !== Number(updated.enfant_a_charge || 0) ||
+    String(oldEmp.rib || '').trim() !== String(updated.rib || '').trim() ||
+    String(oldEmp.mode_paiement || '').toUpperCase() !== String(updated.mode_paiement || '').toUpperCase() ||
+    Number(oldEmp.conge_maternite ? 1 : 0) !== Number(updated.conge_maternite ? 1 : 0) ||
+    String(oldEmp.date_debut_maternite || '').trim() !== String(updated.date_debut_maternite || '').trim();
+
+  // Seuil chronologique de recalcul salarial sur les bulletins ouverts (verrouille !== 1)
+  let seuilRecalculPaie = Infinity;
+  if (salaireOuReglementModifie) {
+    if (periodeActive && Number.isFinite(Number(periodeActive.annee)) && periodeActive.mois) {
+      seuilRecalculPaie = indexChronoPaie(Number(periodeActive.annee), String(periodeActive.mois).toUpperCase());
+    } else {
+      let maxOpenIdx = -Infinity;
+      for (const p of store.paies || []) {
+        if (Number(p.employe_id) === Number(id) && Number(p.verrouille) !== 1) {
+          const pIdx = indexChronoPaie(Number(p.annee), String(p.mois).toUpperCase());
+          if (pIdx > maxOpenIdx) maxOpenIdx = pIdx;
+        }
+      }
+      if (maxOpenIdx > -Infinity) seuilRecalculPaie = maxOpenIdx;
+    }
+  }
+
   store.employes[idx] = updated;
+
+  // 1. Propager immédiatement l'identité (nom, matricule, catégorie, CNaPS, fonction, date embauche)
+  //    à tous les bulletins du salarié, et recalculer les bulletins ouverts concernés si la rémunération change.
+  const stamp = nowStamp();
+  for (const p of store.paies || []) {
+    if (Number(p.employe_id) !== Number(id)) continue;
+    p.numero_matricule = updated.numero_matricule;
+    p.nom_prenoms = updated.nom_prenoms;
+    p.numero_cnaps = updated.numero_cnaps;
+    p.categorie = updated.categorie;
+    p.jobs = updated.jobs;
+    p.date_embauche = updated.date_embauche;
+
+    if (Number(p.verrouille) !== 1) {
+      const pAnnee = Number(p.annee);
+      const pMois = String(p.mois).toUpperCase();
+      p.nombre_annees = calculerAnciennete(updated.date_embauche, pAnnee);
+      if (String(oldEmp.rib || '').trim() !== String(updated.rib || '').trim() || (!p.rib && updated.rib)) {
+        p.rib = updated.rib;
+      }
+
+      if (salaireOuReglementModifie && indexChronoPaie(pAnnee, pMois) >= seuilRecalculPaie) {
+        const enMat = updated.conge_maternite === 1 || estEnCongeMaternite(updated.date_debut_maternite, pAnnee, pMois);
+        const ribEff = updated.mode_paiement === 'ESPECES' && !updated.rib ? '' : updated.rib;
+        const calc = calculerPaieEmploye(
+          {
+            base_aj: updated.base_aj,
+            logement_transport: updated.logement_transport,
+            rendement: updated.rendement,
+            responsabilite_representation: updated.responsabilite_representation,
+            enfant_a_charge: updated.enfant_a_charge,
+            rib: ribEff,
+            conge_maternite: enMat ? 1 : 0,
+          },
+          Number(p.avance || 0),
+          Number(p.med || 0),
+          {
+            augmentation_divers: Number(p.augmentation_divers || 0),
+            prime_de_garde: Number(p.prime_de_garde || 0),
+            anciennete2: Number(p.anciennete2 || 0),
+            risque: Number(p.risque || 0),
+            repr_rec: Number(p.repr_rec || 0),
+          }
+        );
+        p.enfant_a_charge = updated.enfant_a_charge;
+        p.base_aj = updated.base_aj;
+        p.logt_trsp = updated.logement_transport;
+        p.rendement = updated.rendement;
+        p.resp_repres = updated.responsabilite_representation;
+        p.salaire_brut = calc.salaire_brut;
+        p.cnaps = calc.cnaps;
+        p.patronal = calc.patronal;
+        p.salaire_imposable = calc.salaire_imposable;
+        p.irsa = calc.irsa;
+        p.salaire_net = calc.salaire_net;
+        p.accessoir = calc.accessoir;
+        p.brut = calc.brut;
+        p.net = calc.net;
+        if (updated.mode_paiement === 'ESPECES' && String(oldEmp.mode_paiement || '').toUpperCase() !== 'ESPECES') {
+          p.virement = 0;
+          p.especes = calc.net;
+        } else {
+          p.virement = calc.virement;
+          p.especes = calc.especes;
+        }
+        p.rib = updated.rib;
+        p.conge_maternite = enMat ? 1 : 0;
+        p.date_debut_maternite = updated.date_debut_maternite;
+      }
+      p.date_modification = stamp;
+    }
+  }
+
+  // 2. Propager nom, matricule et fonction aux fiches de congés/permissions du salarié
+  //    (sans toucher à c.categorie qui désigne le type CONGE / PERMISSION / EXAMEN_MEDICAL / AJUSTEMENT)
+  for (const c of store.conges || []) {
+    if (Number(c.employe_id) !== Number(id)) continue;
+    c.numero_matricule = updated.numero_matricule;
+    c.nom_prenoms = updated.nom_prenoms;
+    if (updated.jobs) {
+      c.fonction = updated.jobs;
+    }
+  }
+
+  // 3. Propager nom, matricule, catégorie et fonction à la table comparaison_net
+  for (const c of store.comparaison_net || []) {
+    if (Number(c.numero_matricule) !== oldMat && Number(c.numero_matricule) !== updated.numero_matricule) continue;
+    c.numero_matricule = updated.numero_matricule;
+    c.nom_prenoms = updated.nom_prenoms;
+    c.categorie = updated.categorie;
+    c.jobs = updated.jobs;
+  }
+
   if (nouvelActif === 0) {
     retirerPaiesOuvertesDepuisInactif(store, id, dateInactif);
   }
-  saveStore();
-  return true;
+  return saveStore();
 }
 
 export async function toggleActifEmploye(id: number, actif: boolean, dateInactif?: string): Promise<boolean> {
@@ -513,13 +654,27 @@ export async function fetchPaiesMois(
     m
   );
 
+  const empMap = new Map<number, any>();
+  for (const e of store.employes || []) {
+    empMap.set(Number(e.id), e);
+  }
+
   const employes: PaieMensuelle[] = (store.paies || [])
     .filter((p: any) => Number(p.annee) === a && String(p.mois).toUpperCase() === m)
-    .sort((x: any, y: any) => Number(x.numero_matricule) - Number(y.numero_matricule))
     .map((p: any) => {
+      const emp = empMap.get(Number(p.employe_id));
+      const baseRow = emp
+        ? {
+            ...p,
+            categorie: p.categorie || emp.categorie || '',
+            numero_cnaps: p.numero_cnaps || emp.numero_cnaps || '',
+            date_embauche: p.date_embauche || emp.date_embauche || '',
+          }
+        : { ...p };
       const syn = syntheseParEmp.get(Number(p.employe_id));
-      return syn ? { ...p, ...syn } : { ...p };
-    });
+      return syn ? { ...baseRow, ...syn } : baseRow;
+    })
+    .sort((x: any, y: any) => Number(x.numero_matricule) - Number(y.numero_matricule));
 
   const verrouille = employes.some((p: any) => Number(p.verrouille) === 1);
 

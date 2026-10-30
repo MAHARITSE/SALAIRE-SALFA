@@ -403,7 +403,14 @@ export const SalariesSaisieTab: React.FC<Props> = ({
     loadAll();
   }, [loadAll, refreshKey]);
 
-  const empById = new Map<number, Employe>(employes.map((e) => [e.id, e]));
+  const empById = new Map<number, Employe>(employes.map((e) => [Number(e.id), e]));
+  const categoriesExistantes = Array.from(
+    new Set(
+      [...employes.map((e) => e.categorie), ...paies.map((p) => p.categorie)]
+        .map((c) => String(c || '').trim())
+        .filter(Boolean)
+    )
+  );
   const idsEnDoublon = new Set<number>(
     doublonsGroupes.flatMap((g) => [
       Number(g.cibleSuggeree.employe.id),
@@ -1006,7 +1013,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                   </tr>
                 ) : (
                   rows.map((p, rowIdx) => {
-                    const emp = empById.get(p.employe_id);
+                    const emp = empById.get(Number(p.employe_id));
                     const mat = emp ? emp.conge_maternite === 1 || emp.conge_maternite === true : false;
                     const isSelected = selectedPaieId === p.id;
                     const hasSelection = selectedPaieId !== null;
@@ -1362,7 +1369,10 @@ export const SalariesSaisieTab: React.FC<Props> = ({
 
       {showEmpModal && (
         <EmployeModalForm
+          key={editingEmploye ? `emp-${editingEmploye.id}` : 'emp-new'}
           employe={editingEmploye}
+          periodeActive={{ annee, mois }}
+          categoriesExistantes={categoriesExistantes}
           onClose={() => setShowEmpModal(false)}
           onSaved={async () => {
             const wasCreate = !editingEmploye;

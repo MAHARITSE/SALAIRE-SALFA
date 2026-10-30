@@ -1,14 +1,45 @@
 import { PaieMensuelle } from '../types';
 
 export interface BulletinRow { libelle: string; gain?: number; retenue?: number; total?: boolean }
+
+export interface BulletinOptions {
+  /** Déduire ou non l'avance sur salaire / prêt de l'état individuel (défaut : true). */
+  deduireAvance?: boolean;
+  /** Déduire ou non les médicaments de l'état individuel (défaut : true). */
+  deduireMed?: boolean;
+}
+
 const n = (value: unknown) => Number(value) || 0;
 
-/** Calcul du bulletin selon les formules de la feuille BULLETIN du classeur. */
-export function construireBulletin(p: PaieMensuelle) {
+/** Calcul du bulletin selon les formules de la feuille BULLETIN du classeur (avec choix optionnel de déduction Avance / Médicament). */
+export function construireBulletin(p: PaieMensuelle, options?: BulletinOptions) {
+  const deduireAvance = options?.deduireAvance !== false;
+  const deduireMed = options?.deduireMed !== false;
+
   const base = n(p.base_aj) + n(p.logt_trsp) + n(p.rendement) + n(p.resp_repres);
   const gains = base + n(p.accessoir);
-  const retenues = n(p.cnaps) + n(p.irsa) + n(p.avance) + n(p.med);
+  const avance = deduireAvance ? n(p.avance) : 0;
+  const med = deduireMed ? n(p.med) : 0;
+  const retenues = n(p.cnaps) + n(p.irsa) + avance + med;
   const net = gains - retenues;
+
+  const montantNonDeduit = (deduireAvance ? 0 : n(p.avance)) + (deduireMed ? 0 : n(p.med));
+  let virement = n(p.virement);
+  let especes = n(p.especes);
+  if (montantNonDeduit > 0) {
+    const netArrondiEtat = Math.floor(Math.max(0, net) / 100) * 100;
+    const totalReglementInitial = n(p.virement) + n(p.especes);
+    const baseRef = totalReglementInitial > 0 ? totalReglementInitial : n(p.net);
+    const deltaReglement = Math.max(0, netArrondiEtat - baseRef);
+    if (deltaReglement > 0) {
+      if (n(p.virement) > 0) {
+        virement = n(p.virement) + deltaReglement;
+      } else {
+        especes = n(p.especes) + deltaReglement;
+      }
+    }
+  }
+
   const lignes: BulletinRow[] = [
     { libelle: 'Salaire de base', gain: n(p.base_aj) },
     { libelle: 'Indemnités de Transp et Logement', gain: n(p.logt_trsp) },
@@ -17,12 +48,26 @@ export function construireBulletin(p: PaieMensuelle) {
     { libelle: 'TOTAL', gain: base, total: true },
     { libelle: 'Cotisation CNaPS', retenue: n(p.cnaps) },
     { libelle: 'Retenue IRSA', retenue: n(p.irsa) },
-    { libelle: 'Avance sur salaire / Prêt', retenue: n(p.avance) },
-    { libelle: 'Medicament', retenue: n(p.med) },
+    { libelle: 'Avance sur salaire / Prêt', retenue: avance },
+    { libelle: 'Medicament', retenue: med },
     { libelle: 'Primes divers', gain: n(p.accessoir) },
     { libelle: 'TOTAL', gain: gains, retenue: retenues, total: true },
   ];
-  return { lignes, base, gains, retenues, net, netEnregistre: n(p.net), ecartNet: Math.abs(net - n(p.net)) >= 0.005 };
+  return {
+    lignes,
+    base,
+    gains,
+    retenues,
+    avance,
+    med,
+    net,
+    virement,
+    especes,
+    deduireAvance,
+    deduireMed,
+    netEnregistre: n(p.net),
+    ecartNet: Math.abs(net - n(p.net)) >= 0.005,
+  };
 }
 
 const units = ['zéro','un','deux','trois','quatre','cinq','six','sept','huit','neuf','dix','onze','douze','treize','quatorze','quinze','seize'];

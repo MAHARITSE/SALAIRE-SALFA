@@ -261,5 +261,19 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-wamp-test-'));
   assert.ok(!manualSql.sql.includes('`rap`'), 'dump SQL ne contient plus la colonne rap');
   assert.ok(!phpSchema.includes('`rap` TINYINT') && phpSchema.includes('DROP COLUMN `rap`'), 'schema.php ne crée plus rap et supprime automatiquement toute ancienne colonne rap');
 
+  // Vérification WAMP PHP + .htaccess/.user.ini pour la persistance des modifications du personnel (nom + catégorie sur base complète > 2 Mo)
+  assert.ok(
+    phpVal.includes("$action === 'updateEmploye' && $role === 'Administrateur'") &&
+      phpVal.includes('$ignoreEmployeeProfileMeta'),
+    'wamp/api/validation.php autorise la synchronisation nom/catégorie sur les bulletins clôturés sans toucher aux montants'
+  );
+  assert.ok(
+    phpIndex.includes('contentLength > 32000000') && phpIndex.includes('post_max_size'),
+    'wamp/api/index.php relève la limite applicative à 32 Mo et diagnostique toute troncature post_max_size'
+  );
+  const htaccess = fs.readFileSync(path.join(process.cwd(), 'wamp/.htaccess'), 'utf8');
+  const userIni = fs.readFileSync(path.join(process.cwd(), 'wamp/.user.ini'), 'utf8');
+  assert.ok(htaccess.includes('post_max_size 32M') && userIni.includes('post_max_size = 32M'), 'wamp/.htaccess et wamp/.user.ini relèvent post_max_size à 32M pour le jeu complet 2022–2026');
+
   console.log('Mode WAMP, Sauvegarde SQL forcée à la clôture & Icône application : OK');
 })().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => fs.rmSync(temp, { recursive: true, force: true }));
