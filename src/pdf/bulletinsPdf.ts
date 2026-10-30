@@ -60,36 +60,45 @@ export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
     doc.setTextColor(0, 0, 0);
     doc.setDrawColor(0, 0, 0);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
+    doc.setFontSize(11);
     doc.text('BULLETIN DE PAIE', center, titleY, { align: 'center' });
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.2);
-    doc.text(`Mois de : ${p.mois} ${p.annee}`, center, titleY + 4.5, { align: 'center' });
+    doc.setFontSize(9.2);
+    doc.text(`Mois de : ${p.mois} ${p.annee}`, center, titleY + 4.7, { align: 'center' });
 
-    // --- Bloc identité (labels soulignés exactement comme sur le modèle) ---
-    let iy = titleY + 10.5;
-    const labelColW = 27;
+    // --- Bloc identité (titres soulignés de largeur uniforme et deux-points parfaitement alignés) ---
+    let iy = titleY + 10.6;
+    const underlineW = 24.5;
+    const colonX = x + underlineW + 0.7;
+    const labelColW = 28.5;
+    const drawAlignedIdLabel = (label: string, rowY: number) => {
+      doc.setFont('helvetica', 'bold');
+      doc.text(label, x, rowY);
+      doc.setLineWidth(0.24);
+      doc.line(x, rowY + 0.65, x + underlineW, rowY + 0.65);
+      doc.text(':', colonX, rowY);
+    };
     const idRows: [string, string][] = [
-      ['Employé       :', p.nom_prenoms || '—'],
-      ['Fonction      :', p.jobs || '—'],
-      ['N° Matricule :', String(p.numero_matricule)],
-      ['Embauche     :', formatEmbaucheBulletin(p.date_embauche)],
+      ['Employé', p.nom_prenoms || '—'],
+      ['Fonction', p.jobs || '—'],
+      ['N° Matricule', String(p.numero_matricule)],
+      ['Embauche', formatEmbaucheBulletin(p.date_embauche)],
     ];
-    doc.setFontSize(8);
+    doc.setFontSize(9);
     for (const [lbl, val] of idRows) {
-      drawUnderlinedText(doc, lbl, x, iy, true);
+      drawAlignedIdLabel(lbl, iy);
       doc.setFont('helvetica', 'normal');
       const clipped = doc.splitTextToSize(val, width - labelColW - 1)[0] || '';
       doc.text(clipped, x + labelColW, iy);
-      iy += 4.3;
+      iy += 4.5;
     }
-    drawUnderlinedText(doc, 'Classification :', x, iy, true);
+    drawAlignedIdLabel('Classification', iy);
     doc.setFont('helvetica', 'normal');
     doc.text(String(p.categorie || '—'), x + labelColW, iy);
     doc.setFont('helvetica', 'bold');
-    doc.text('N° CNaPS :', x + 46, iy);
+    doc.text('N° CNaPS :', x + 48, iy);
     doc.setFont('helvetica', 'normal');
-    doc.text(formatCnapsBulletin(p.numero_cnaps), x + 65, iy);
+    doc.text(formatCnapsBulletin(p.numero_cnaps), x + 69, iy);
 
     // --- Tableau principal encadré (sans lignes horizontales internes sauf sous-total GAINS) ---
     const tableTop = iy + 4.5;
@@ -100,20 +109,20 @@ export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
     const x2 = x1 + c2;
     const x3 = x + width;
 
-    const headH = 6.2;
+    const headH = 6.4;
     doc.setLineWidth(0.45);
     doc.rect(x, tableTop, width, headH);
     doc.line(x1, tableTop, x1, tableTop + headH);
     doc.line(x2, tableTop, x2, tableTop + headH);
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.8);
-    doc.text('RUBRIQUES DE PAIE', x + c1 / 2, tableTop + 4.2, { align: 'center' });
-    doc.text('GAINS', x1 + c2 / 2, tableTop + 4.2, { align: 'center' });
-    doc.text('RETENUES', x2 + c3 / 2, tableTop + 4.2, { align: 'center' });
+    doc.setFontSize(8.8);
+    doc.text('RUBRIQUES DE PAIE', x + c1 / 2, tableTop + 4.4, { align: 'center' });
+    doc.text('GAINS', x1 + c2 / 2, tableTop + 4.4, { align: 'center' });
+    doc.text('RETENUES', x2 + c3 / 2, tableTop + 4.4, { align: 'center' });
 
     const bodyTop = tableTop + headH;
-    const rowH = 4.5;
+    const rowH = 4.6;
     const topPad = 3.2;
     const subGap = 2.2;
     const botPad = 2.6;
@@ -126,7 +135,7 @@ export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
     doc.line(x2, bodyTop, x2, bodyTop + bodyH);
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.8);
+    doc.setFontSize(8.8);
 
     const drawGainVal = (val: number, ry: number) => {
       const txt = moneyRubrique(val);
@@ -137,7 +146,7 @@ export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
       doc.text(txt, txt === '-' ? x3 - 6 : x3 - 1.8, ry, { align: 'right' });
     };
 
-    let ry = bodyTop + topPad + 2.8;
+    let ry = bodyTop + topPad + 2.9;
     // 4 lignes du bloc Salaire de base
     doc.text('Salaire de base', x + 1.5, ry);
     drawGainVal(Number(p.base_aj || 0), ry);
@@ -157,7 +166,7 @@ export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
 
     // Filet horizontal uniquement dans la colonne GAINS au-dessus de TOTAL :
     doc.setLineWidth(0.38);
-    doc.line(x1, ry - 3.6, x2, ry - 3.6);
+    doc.line(x1, ry - 3.7, x2, ry - 3.7);
     doc.text('TOTAL :', x1 - 2.5, ry, { align: 'right' });
     doc.text(money(bulletin.base), x2 - 1.8, ry, { align: 'right' });
     ry += rowH;
@@ -184,66 +193,66 @@ export function drawBulletinPage(doc: jsPDF, p: PaieMensuelle): void {
 
     // --- Ligne TOTAL ...... ---
     const totY = bodyTop + bodyH;
-    const totH = 6.4;
+    const totH = 6.6;
     doc.setLineWidth(0.45);
     doc.rect(x1, totY, c2, totH);
     doc.rect(x2, totY, c3, totH);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.text('TOTAL ......', x1 - 12, totY + 4.5, { align: 'right' });
-    doc.setFontSize(8.2);
-    doc.text(money(bulletin.gains), x2 - 1.8, totY + 4.4, { align: 'right' });
-    doc.text(money(bulletin.retenues), x3 - 1.8, totY + 4.4, { align: 'right' });
+    doc.setFontSize(10.5);
+    doc.text('TOTAL ......', x1 - 12, totY + 4.7, { align: 'right' });
+    doc.setFontSize(9.2);
+    doc.text(money(bulletin.gains), x2 - 1.8, totY + 4.6, { align: 'right' });
+    doc.text(money(bulletin.retenues), x3 - 1.8, totY + 4.6, { align: 'right' });
 
     // --- Ligne NET à PAYER : ---
     const netY = totY + totH;
-    const netH = 6.8;
-    const partialLineX = x + c1 * 0.64;
+    const netH = 7.0;
+    const partialLineX = x + c1 * 0.56;
     doc.setLineWidth(0.45);
     doc.line(partialLineX, netY, x2, netY);
     doc.rect(x2, netY, c3, netH);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.8);
-    doc.text('NET à PAYER :', partialLineX + 2, netY + 4.8);
-    doc.setFontSize(8.5);
-    doc.text(money(bulletin.net), x3 - 1.8, netY + 4.7, { align: 'right' });
+    doc.setFontSize(10.8);
+    doc.text('NET à PAYER :', partialLineX + 2, netY + 5.0);
+    doc.setFontSize(9.5);
+    doc.text(money(bulletin.net), x3 - 1.8, netY + 4.9, { align: 'right' });
 
     // --- Arrêtée à la somme de ---
-    let fy = netY + netH + 5.2;
+    let fy = netY + netH + 5.0;
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.4);
+    doc.setFontSize(8.4);
     const words = doc.splitTextToSize(
       `Arrêtée à la somme de : ${montantEnLettresBulletin(bulletin.net)}`,
       width
     );
     doc.text(words, x, fy);
-    fy += words.length * 3.4 + 3.2;
+    fy += words.length * 3.8 + 3.0;
 
     // --- Paiement : Virement / Espece ---
-    doc.setFontSize(9.5);
-    drawUnderlinedText(doc, 'Paiement :', x + 20, fy, false);
+    doc.setFontSize(10.5);
+    drawUnderlinedText(doc, 'Paiement :', x + 18, fy, false);
     doc.setFont('helvetica', 'normal');
     doc.text('Virement', x + 41, fy);
     doc.setFont('helvetica', 'bold');
-    doc.text(money(p.virement), x + 92, fy, { align: 'right' });
-    fy += 5;
+    doc.text(money(p.virement), x + 95, fy, { align: 'right' });
+    fy += 5.1;
 
     doc.setFont('helvetica', 'normal');
     doc.text('Espece', x + 41, fy);
     doc.setFont('helvetica', 'bold');
-    doc.text(money(p.especes), x + 92, fy, { align: 'right' });
+    doc.text(money(p.especes), x + 95, fy, { align: 'right' });
     fy += 5.5;
 
     // --- NB CONGES RESTANTS & Date ---
-    doc.setFontSize(7.8);
+    doc.setFontSize(8.8);
     drawUnderlinedText(doc, 'NB CONGES RESTANTS:', x, fy, true);
     doc.setFont('helvetica', 'bold');
-    doc.text(`${formatCongesRestantsBulletin(p.conge_restant)}   jrs`, x + 56, fy);
-    fy += 4.6;
+    doc.text(`${formatCongesRestantsBulletin(p.conge_restant)}   jrs`, x + 58, fy);
+    fy += 4.7;
 
     doc.setFont('helvetica', 'normal');
     doc.text('Tulear le,', x + 28, fy);
-    doc.text(new Date().toLocaleDateString('fr-FR'), x + 45, fy);
+    doc.text(new Date().toLocaleDateString('fr-FR'), x + 46, fy);
   };
 
   drawCopy(30, 127);

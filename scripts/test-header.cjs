@@ -114,5 +114,48 @@ try {
   assert.equal(count745, 2, 'Ora (heure de départ) et Ora (heure de reprise) valent toutes deux @ 07 Ora 45 mn (7h45) par défaut pour un Congé');
   assert.ok(!joinedPdfText.includes('Situation :') && !joinedPdfText.includes('Fiche n°') && !joinedPdfText.includes('Saisie le'), 'pied de page supprimé du PDF de congé');
 
+  // --- Vérification taille +1, alignement exact des titres/deux-points et impression 1 seule page sans page vide ---
+  const docSingle = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const textCalls = [];
+  const lineCalls = [];
+  const fontSizes = [];
+  const origDocText = docSingle.text.bind(docSingle);
+  const origDocLine = docSingle.line.bind(docSingle);
+  const origSetFontSize = docSingle.setFontSize.bind(docSingle);
+  docSingle.text = (txt, x, y, opts) => {
+    textCalls.push({ txt: Array.isArray(txt) ? txt.join(' ') : String(txt), x, y, opts });
+    return origDocText(txt, x, y, opts);
+  };
+  docSingle.line = (x1, y1, x2, y2) => {
+    lineCalls.push({ x1, y1, x2, y2 });
+    return origDocLine(x1, y1, x2, y2);
+  };
+  docSingle.setFontSize = (sz) => {
+    fontSizes.push(sz);
+    return origSetFontSize(sz);
+  };
+  const mat1 = paies.find((r) => Number(r.numero_matricule) === 1) || paies[0];
+  drawBulletinPage(docSingle, mat1);
+  assert.equal(docSingle.internal.getNumberOfPages(), 1, '1 salarié = strictement 1 seule page PDF');
+  assert.ok(fontSizes.includes(11) && fontSizes.includes(9) && fontSizes.includes(8.8) && fontSizes.includes(10.8), 'tailles de police du bulletin augmentées de +1');
+  const maxY = Math.max(...textCalls.map((c) => c.y));
+  assert.ok(maxY <= 202, `tout le contenu du bulletin tient largement dans la hauteur A4 paysage (maxY=${maxY.toFixed(1)}mm <= 202mm)`);
+
+  // Sur l'exemplaire gauche (x = 30), les 5 titres et les 5 « : » ont exactement le même alignement X
+  const leftLabels = textCalls.filter((c) => c.x === 30 && ['Employé', 'Fonction', 'N° Matricule', 'Embauche', 'Classification'].includes(c.txt));
+  assert.equal(leftLabels.length, 5, '5 intitulés alignés à gauche sur x=30');
+  const leftColons = textCalls.filter((c) => c.txt === ':' && c.x > 30 && c.x < 90);
+  assert.equal(leftColons.length, 5, '5 deux-points séparés sur l’exemplaire gauche');
+  assert.equal(new Set(leftColons.map((c) => c.x.toFixed(2))).size, 1, 'les 5 « : » sont parfaitement alignés sur la même verticale');
+  const idUnderlines = lineCalls.filter((l) => l.x1 === 30 && Math.abs(l.y1 - l.y2) < 0.001 && Math.abs((l.x2 - l.x1) - 24.5) < 0.01);
+  assert.equal(idUnderlines.length, 5, 'les 5 soulignements ont exactement la même longueur jusqu’aux deux-points');
+
+  const css = fs.readFileSync(path.join(process.cwd(), 'src/index.css'), 'utf8');
+  assert.ok(css.includes('font: 13px/1.35 Calibri') && css.includes('font: 9.2pt/1.2 Calibri'), 'police du bulletin augmentée de +1 à l’écran (13px) et à l’impression (9.2pt)');
+  assert.ok(css.includes('.bul-id-lbl-txt') && css.includes('.bul-id-colon'), 'alignement CSS flex des titres soulignés et des deux-points');
+  assert.ok(css.includes('min-height: 0 !important;') && css.includes('.bulletin-print-sheet + .bulletin-print-sheet'), 'suppression de la 2e page vide lors de l’impression d’une seule personne');
+  const srcBul = fs.readFileSync(path.join(process.cwd(), 'src/components/tabs/BulletinsTab.tsx'), 'utf8');
+  assert.equal(srcBul.includes('Employé&nbsp;'), false, 'plus aucun alignement approximatif par &nbsp; dans BulletinsTab');
+
   console.log('Entête persistant (bulletin + congé), 3 cm de reliure et PDF : OK');
 } finally { fs.rmSync(tmp, { recursive: true, force: true }); }

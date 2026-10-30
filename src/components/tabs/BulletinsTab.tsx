@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { PaieMensuelle } from '../../types';
 import { fetchPaiesMois } from '../../api';
 import { Calendar, Printer, Download, FileText, Eye, Settings2, ChevronDown, User, Users } from 'lucide-react';
@@ -72,18 +73,20 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
   });
 
   const lancerImpression = (mode: 'un_seul' | 'tous') => {
-    setOpenMenu(null);
-    setPrintMode(mode);
-    // Laisser React mettre à jour les feuilles d'impression avant d'ouvrir la boîte d'impression
-    setTimeout(() => window.print(), 60);
+    flushSync(() => {
+      setOpenMenu(null);
+      setPrintMode(mode);
+    });
+    window.requestAnimationFrame(() => window.print());
   };
 
   const bulletinsImprimes: PaieMensuelle[] =
     printMode === 'tous' ? filtered : selectedPaie ? [selectedPaie] : [];
 
   return (
-    <div className="bulletin-root space-y-3 sm:space-y-6 w-full">
-      <div className="no-print bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl border dark:border-slate-700 flex flex-wrap items-center gap-3">
+    <div className="bulletin-root w-full">
+      <div className="no-print space-y-3 sm:space-y-6 w-full">
+      <div className="bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl border dark:border-slate-700 flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Calendar className="w-4 h-4 text-salfa-teal" />
           <span className="font-bold text-xs">Période :</span>
@@ -258,6 +261,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
           }}
         />
       )}
+      </div>
 
       {!loading && bulletinsImprimes.length > 0 && (
         <div className="bulletin-print">
@@ -283,26 +287,41 @@ const BulletinCard: React.FC<{ paie: PaieMensuelle; header: string }> = ({ paie,
         <div>Mois de : {paie.mois} {paie.annee}</div>
       </div>
 
-      {/* Bloc identité conforme au modèle Excel */}
+      {/* Bloc identité conforme au modèle Excel : titres soulignés et deux-points parfaitement alignés */}
       <div className="bul-identity">
         <div className="bul-id-row">
-          <span className="bul-id-lbl">Employé&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</span>
+          <span className="bul-id-lbl">
+            <span className="bul-id-lbl-txt">Employé</span>
+            <span className="bul-id-colon">:</span>
+          </span>
           <span className="bul-id-val">{paie.nom_prenoms}</span>
         </div>
         <div className="bul-id-row">
-          <span className="bul-id-lbl">Fonction&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</span>
+          <span className="bul-id-lbl">
+            <span className="bul-id-lbl-txt">Fonction</span>
+            <span className="bul-id-colon">:</span>
+          </span>
           <span className="bul-id-val">{paie.jobs || '—'}</span>
         </div>
         <div className="bul-id-row">
-          <span className="bul-id-lbl">N° Matricule&nbsp;:</span>
+          <span className="bul-id-lbl">
+            <span className="bul-id-lbl-txt">N° Matricule</span>
+            <span className="bul-id-colon">:</span>
+          </span>
           <span className="bul-id-val">{paie.numero_matricule}</span>
         </div>
         <div className="bul-id-row">
-          <span className="bul-id-lbl">Embauche&nbsp;&nbsp;&nbsp;&nbsp;:</span>
+          <span className="bul-id-lbl">
+            <span className="bul-id-lbl-txt">Embauche</span>
+            <span className="bul-id-colon">:</span>
+          </span>
           <span className="bul-id-val">{formatEmbaucheBulletin(paie.date_embauche)}</span>
         </div>
         <div className="bul-id-row bul-id-row-class">
-          <span className="bul-id-lbl">Classification&nbsp;:</span>
+          <span className="bul-id-lbl">
+            <span className="bul-id-lbl-txt">Classification</span>
+            <span className="bul-id-colon">:</span>
+          </span>
           <span className="bul-id-cat">{paie.categorie || '—'}</span>
           <span className="bul-id-cnaps-lbl">N° CNaPS :</span>
           <span className="bul-id-val">{formatCnapsBulletin(paie.numero_cnaps)}</span>
