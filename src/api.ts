@@ -18,7 +18,21 @@ import {
   remoteDownloadSqlBackupFile,
 } from './wampClient';
 import { setDerniereSauvegardeSql, getDerniereSauvegardeSql } from './local/sqlBackup';
-export type { ImportOptions, ImportRapport, SaisieLot, CongeFiltres, CongeMeta, EntreeHistoriqueSql, ResultatSauvegardeSql } from './api-local';
+export type {
+  ImportOptions,
+  ImportRapport,
+  SaisieLot,
+  CongeFiltres,
+  CongeMeta,
+  EntreeHistoriqueSql,
+  ResultatSauvegardeSql,
+  SuiteChronologiquePaie,
+  ResultatInitMoisPaie,
+  CandidatFusionEmploye,
+  GroupeDoublonEmploye,
+  ApercuFusionEmployes,
+  ResultatFusionEmployes,
+} from './api-local';
 export { getDerniereSauvegardeSql };
 export type { CongeImportLigne, CongeImportRapport, AnalyseControleConges } from './local/importConges';
 export const apiLogin: typeof local.apiLogin = async (u, p) => {
@@ -36,6 +50,23 @@ export const fetchEmployePaies: typeof local.fetchEmployePaies = (...args) => WA
 export const fetchPaiesMois: typeof local.fetchPaiesMois = (...args) => WAMP ? remoteRead(() => local.fetchPaiesMois(...args)) : local.fetchPaiesMois(...args);
 export const fetchComparaison: typeof local.fetchComparaison = (...args) => WAMP ? remoteRead(() => local.fetchComparaison(...args)) : local.fetchComparaison(...args);
 export const fetchPeriodes: typeof local.fetchPeriodes = (...args) => WAMP ? remoteRead(() => local.fetchPeriodes(...args)) : local.fetchPeriodes(...args);
+export const fetchSuiteChronologiquePaie: typeof local.fetchSuiteChronologiquePaie = (...args) =>
+  WAMP ? remoteRead(() => local.fetchSuiteChronologiquePaie(...args)) : local.fetchSuiteChronologiquePaie(...args);
+export const fetchDoublonsEmployes: typeof local.fetchDoublonsEmployes = (...args) =>
+  WAMP ? remoteRead(() => local.fetchDoublonsEmployes(...args)) : local.fetchDoublonsEmployes(...args);
+export const apercevoirFusionEmployes: typeof local.apercevoirFusionEmployes = (...args) =>
+  WAMP ? remoteRead(() => local.apercevoirFusionEmployes(...args)) : local.apercevoirFusionEmployes(...args);
+export const fusionnerEmployes: typeof local.fusionnerEmployes = (...args) =>
+  WAMP
+    ? remoteWrite('fusionnerEmployes', () => local.fusionnerEmployes(...args), {
+        success: false,
+        message: 'Fusion non confirmée.',
+        paiesTransferees: 0,
+        paiesDoublonsSupprimees: 0,
+        congesTransferes: 0,
+        congesDoublonsSupprimes: 0,
+      })
+    : local.fusionnerEmployes(...args);
 export const fetchAnneesBase: typeof local.fetchAnneesBase = (...args) => WAMP ? remoteRead(() => local.fetchAnneesBase(...args)) : local.fetchAnneesBase(...args);
 export const ajouterAnneeBase: typeof local.ajouterAnneeBase = (...args) =>
   WAMP

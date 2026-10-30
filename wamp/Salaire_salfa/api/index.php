@@ -299,7 +299,7 @@ if (($action === 'save' || $action === 'settings') && $_SERVER['REQUEST_METHOD']
             $operation = (string)($input['action'] ?? '');
             $role = (string)($_SESSION['user']['role'] ?? '');
             $congeActions = ['creerConge', 'modifierConge', 'deciderConge', 'supprimerConge', 'saisirOuverturePremiereAnnee', 'saisirSoldeAnnee', 'importerConges', 'ajouterAnnee'];
-            $adminActions = ['createEmploye', 'updateEmploye', 'toggleActifEmploye', 'initPaieEmploye', 'initMoisPaie', 'savePaieSaisie', 'savePaieReglement', 'cloturerMois', 'deverrouillerMois', 'importerClasseur', 'enregistrerSaisieLot'];
+            $adminActions = ['createEmploye', 'updateEmploye', 'toggleActifEmploye', 'fusionnerEmployes', 'initPaieEmploye', 'initMoisPaie', 'savePaieSaisie', 'savePaieReglement', 'cloturerMois', 'deverrouillerMois', 'importerClasseur', 'enregistrerSaisieLot'];
             $allowed = array_merge($adminActions, $congeActions);
             if (!in_array($operation, $allowed, true)) { $db->rollBack(); answer(403, ['error' => 'Action non autorisée.']); }
             if ($role !== 'Administrateur' && !in_array($operation, $congeActions, true)) { $db->rollBack(); answer(403, ['error' => 'Action réservée à l’administrateur.']); }
@@ -330,22 +330,31 @@ if (($action === 'save' || $action === 'settings') && $_SERVER['REQUEST_METHOD']
                 $stRev = $db->prepare('UPDATE salfa_revision SET revision = ?, date_modification = ? WHERE id = 1');
                 $stRev->execute([$revision + 1, date('Y-m-d H:i:s')]);
             } else {
-                syncEmployesTable($db, $storeToSave['employes']);
-                syncPaiesTable($db, $storeToSave['paies']);
-                syncCongesTable($db, is_array($storeToSave['conges'] ?? null) ? $storeToSave['conges'] : []);
+                if ($operation === 'fusionnerEmployes') {
+                    // Lors d'une fusion, le salarié cible existe déjà : rattacher paies & congés d'abord puis supprimer la fiche doublon
+                    syncPaiesTable($db, $storeToSave['paies']);
+                    syncCongesTable($db, is_array($storeToSave['conges'] ?? null) ? $storeToSave['conges'] : []);
+                    syncEmployesTable($db, $storeToSave['employes']);
+                } else {
+                    syncEmployesTable($db, $storeToSave['employes']);
+                    syncPaiesTable($db, $storeToSave['paies']);
+                    syncCongesTable($db, is_array($storeToSave['conges'] ?? null) ? $storeToSave['conges'] : []);
+                }
                 syncComparaisonNetTable($db, $storeToSave['comparaison_net']);
                 syncAnneesTable($db, is_array($storeToSave['annees'] ?? null) ? $storeToSave['annees'] : []);
                 updateRevisionMeta($db, is_array($storeToSave['meta'] ?? null) ? $storeToSave['meta'] : [], $revision + 1);
             }
         } else {
-            if (($_SESSION['user']['role'] ?? '') !== 'Administrateur') { $db->rollBack(); answer(403, ['error' => 'Réservé à l’administrateur.']); }
             $kind = $input['kind'] ?? '';
             $value = $input['value'] ?? null;
-            if (!in_array($kind, ['header', 'config'], true) || !is_array($value)) { $db->rollBack(); answer(400, ['error' => 'Paramètres invalides.']); }
+            if (!in_array($kind, ['header', 'congeHeader', 'config'], true) || !is_array($value)) { $db->rollBack(); answer(400, ['error' => 'Paramètres invalides.']); }
+            if ($kind !== 'congeHeader' && ($_SESSION['user']['role'] ?? '') !== 'Administrateur') { $db->rollBack(); answer(403, ['error' => 'Réservé à l’administrateur.']); }
             if ($kind === 'config') {
                 writeConfigTables($db, $value);
+            } elseif ($kind === 'congeHeader') {
+                writeHeaderTable($db, $value, 2);
             } else {
-                writeHeaderTable($db, $value);
+                writeHeaderTable($db, $value, 1);
             }
             $stRev = $db->prepare('UPDATE salfa_revision SET revision = ?, date_modification = ? WHERE id = 1');
             $stRev->execute([$revision + 1, date('Y-m-d H:i:s')]);

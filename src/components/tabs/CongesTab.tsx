@@ -23,10 +23,13 @@ import { FicheAbsenceModal, BrouillonConge } from '../conges/FicheAbsenceModal';
 import { FicheAbsence, RecapFiche, dateFr, periodeAbsenceFr, dateRetourFiche } from '../conges/FicheAbsence';
 import { EtatCongesEcran, EtatCongesImpression, exporterEtatCongesExcel } from '../conges/EtatConges';
 import { ImportCongesModal } from '../conges/ImportCongesModal';
+import { BulletinHeaderModal } from '../BulletinHeaderModal';
+import { setRemoteCongeHeader } from '../../bulletin/header';
+import { WAMP } from '../../runtime';
 import { downloadFicheAbsencePDF, downloadEtatCongesPDF } from '../../pdf/congesPdf';
 import {
   CalendarPlus, Search, Printer, FileSpreadsheet, Upload, Info, CheckCircle2, XCircle,
-  Eye, Edit2, Trash2, CalendarClock, ShieldCheck, BookOpen, RefreshCw, PenLine, FileText, X, Download,
+  Eye, Edit2, Trash2, CalendarClock, ShieldCheck, BookOpen, RefreshCw, PenLine, FileText, X, Download, Settings2,
 } from 'lucide-react';
 
 const MOIS_LISTE = ['JANVIER','FEVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOUT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DECEMBRE'];
@@ -67,6 +70,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; texte: string } | null>(null);
   const [modal, setModal] = useState<{ ouvert: boolean; initial: BrouillonConge | null }>({ ouvert: false, initial: null });
   const [importOuvert, setImportOuvert] = useState(false);
+  const [enteteOuvert, setEnteteOuvert] = useState(false);
   const [referentiel, setReferentiel] = useState(false);
   const [ficheImpr, setFicheImpr] = useState<CongeAbsence[]>([]);
 
@@ -231,6 +235,8 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
         annee: anneeCible,
         date_demande: dateDefaut,
         date_debut: dateDefaut,
+        heure_debut: '07:45',
+        heure_fin: '07:45',
         jours_demandes: 1,
         titre_periode: `Titre ${anneeCible}`,
         statut: 'VALIDE',
@@ -331,19 +337,22 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             </span>
           )}
           <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto sm:ml-auto">
-            <button onClick={() => setModal({ ouvert: true, initial: { annee, date_demande: new Date().toISOString().slice(0, 10) } })} className="order-1 min-h-9 flex-1 sm:flex-initial bg-salfa-dark hover:bg-salfa-teal text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
+            <button onClick={() => setModal({ ouvert: true, initial: { annee, date_demande: new Date().toISOString().slice(0, 10), heure_debut: '07:45', heure_fin: '07:45' } })} className="order-1 min-h-9 flex-1 sm:flex-initial bg-salfa-dark hover:bg-salfa-teal text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
               <CalendarPlus className="w-4 h-4" />Fiche d’absence
             </button>
-            <button onClick={() => setImportOuvert(true)} className="order-3 sm:order-2 min-h-9 flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
+            <button onClick={() => setEnteteOuvert(true)} title="Modifier l’entête des fiches de congé / permission (comme pour l’entête du bulletin)" className="order-2 min-h-9 flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
+              <Settings2 className="w-4 h-4" />Entête
+            </button>
+            <button onClick={() => setImportOuvert(true)} className="order-3 min-h-9 flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
               <Upload className="w-4 h-4" />Importer contrôle
             </button>
-            <button onClick={() => etat && downloadEtatCongesPDF(etat, annee)} disabled={!etat} className="order-4 sm:order-3 min-h-9 flex-1 sm:flex-initial bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
+            <button onClick={() => etat && downloadEtatCongesPDF(etat, annee)} disabled={!etat} className="order-4 min-h-9 flex-1 sm:flex-initial bg-sky-700 hover:bg-sky-800 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
               <Download className="w-4 h-4" />PDF État
             </button>
-            <button onClick={imprimerEtat} className="order-5 sm:order-4 min-h-9 flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
+            <button onClick={imprimerEtat} className="order-5 min-h-9 flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5">
               <Printer className="w-4 h-4" />Imprimer
             </button>
-            <button onClick={() => etat && exporterEtatCongesExcel(etat, annee)} disabled={!etat} className="order-2 sm:order-5 min-h-9 flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
+            <button onClick={() => etat && exporterEtatCongesExcel(etat, annee)} disabled={!etat} className="order-6 min-h-9 flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
               <FileSpreadsheet className="w-4 h-4" />Excel
             </button>
           </div>
@@ -678,7 +687,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
                     );
                   })}
                   {listeFiltree.length === 0 && (
-                    <tr><td colSpan={10} className="py-8 text-center text-slate-500">Aucune fiche dans cette situation. <button onClick={() => setModal({ ouvert: true, initial: { annee } })} className="font-bold text-salfa-teal underline">Créer la première</button></td></tr>
+                    <tr><td colSpan={10} className="py-8 text-center text-slate-500">Aucune fiche dans cette situation. <button onClick={() => setModal({ ouvert: true, initial: { annee, heure_debut: '07:45', heure_fin: '07:45' } })} className="font-bold text-salfa-teal underline">Créer la première</button></td></tr>
                   )}
                 </tbody>
               </table>
@@ -742,6 +751,22 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             employes={employes}
             onClose={() => setImportOuvert(false)}
             onTermine={(texte) => { setImportOuvert(false); setMessage({ type: 'ok', texte }); charger(); }}
+          />
+        </div>
+      )}
+      {enteteOuvert && (
+        <div className="no-print">
+          <BulletinHeaderModal
+            target="conge"
+            onClose={() => setEnteteOuvert(false)}
+            onSaved={(cfgEntete) => {
+              if (WAMP) {
+                setRemoteCongeHeader(cfgEntete);
+                window.dispatchEvent(new CustomEvent('salfa-conge-header-updated'));
+              }
+              setEnteteOuvert(false);
+              setMessage({ type: 'ok', texte: 'Entête des fiches de congé mis à jour.' });
+            }}
           />
         </div>
       )}

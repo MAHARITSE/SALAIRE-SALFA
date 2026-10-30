@@ -13,7 +13,10 @@ import {
 } from '../../local/conges';
 import { FicheAbsence, dateFr } from './FicheAbsence';
 import { downloadFicheAbsencePDF } from '../../pdf/congesPdf';
-import { X, Save, Printer, Eye, PenLine, CalendarClock, Info, CheckCircle2, Download } from 'lucide-react';
+import { BulletinHeaderModal } from '../BulletinHeaderModal';
+import { setRemoteCongeHeader } from '../../bulletin/header';
+import { WAMP } from '../../runtime';
+import { X, Save, Printer, Eye, PenLine, CalendarClock, Info, CheckCircle2, Download, Settings2 } from 'lucide-react';
 
 export interface BrouillonConge extends Partial<CongeAbsence> {
   id?: number;
@@ -48,8 +51,11 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
   const [recherche, setRecherche] = useState('');
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState('');
+  const [enteteModalOuvert, setEnteteModalOuvert] = useState(false);
   const [b, setB] = useState<BrouillonConge>(() => {
     const soldeInit = initial?.employe_id ? soldes[Number(initial.employe_id)] : undefined;
+    const catInit: CategorieAbsence = (initial?.categorie as CategorieAbsence) || 'CONGE';
+    const heureParDefaut = catInit === 'CONGE' ? '07:45' : '';
     const base: BrouillonConge = {
       employe_id: undefined,
       categorie: 'CONGE',
@@ -61,8 +67,8 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
       date_debut: '',
       date_fin: '',
       date_retour: '',
-      heure_debut: '',
-      heure_fin: '',
+      heure_debut: heureParDefaut,
+      heure_fin: heureParDefaut,
       jours_demandes: 0,
       jours_valides: null,
       service: '',
@@ -75,6 +81,10 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
       ajustement_type: 'DROIT',
       ...initial,
     };
+    if (base.categorie === 'CONGE') {
+      if (!base.heure_debut) base.heure_debut = '07:45';
+      if (!base.heure_fin) base.heure_fin = '07:45';
+    }
     if (base.categorie !== 'AJUSTEMENT' && base.date_debut) {
       const nb = Number(base.jours_demandes) || 0;
       if (!base.date_fin) {
@@ -218,6 +228,8 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
         jours_demandes: nvJours,
         date_fin: finAuto,
         date_retour: retourAuto,
+        heure_debut: categorie === 'CONGE' ? prev.heure_debut || '07:45' : categorie === 'AJUSTEMENT' ? '' : prev.heure_debut,
+        heure_fin: categorie === 'CONGE' ? prev.heure_fin || '07:45' : categorie === 'AJUSTEMENT' ? '' : prev.heure_fin,
       };
     });
   };
@@ -654,13 +666,23 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
           <div className={`${onglet === 'saisie' ? 'hidden lg:block' : ''}`}>
             <div className="flex items-center justify-between mb-1.5 gap-2">
               <div className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">Aperçu de la fiche — identique à la FICHE D’ABSENCE (A4)</div>
-              <button
-                type="button"
-                onClick={() => downloadFicheAbsencePDF(apercuConge, recap)}
-                className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-[11px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1"
-              >
-                <Download className="w-3.5 h-3.5" />PDF A4
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setEnteteModalOuvert(true)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-[11px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1"
+                  title="Modifier l’entête des fiches de congé"
+                >
+                  <Settings2 className="w-3.5 h-3.5" />Entête
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadFicheAbsencePDF(apercuConge, recap)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-[11px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1"
+                >
+                  <Download className="w-3.5 h-3.5" />PDF A4
+                </button>
+              </div>
             </div>
             <div className="bg-slate-100 dark:bg-slate-900/40 rounded-xl p-2 sm:p-3 overflow-auto thin-scrollbar max-h-[62vh]">
               <FicheAbsence conge={apercuConge} recap={recap} compact />
@@ -686,21 +708,42 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
           </div>
         </div>
       </div>
+
+      {enteteModalOuvert && (
+        <BulletinHeaderModal
+          target="conge"
+          onClose={() => setEnteteModalOuvert(false)}
+          onSaved={(cfgEntete) => {
+            if (WAMP) {
+              setRemoteCongeHeader(cfgEntete);
+              window.dispatchEvent(new CustomEvent('salfa-conge-header-updated'));
+            }
+            setEnteteModalOuvert(false);
+          }}
+        />
+      )}
     </div>
   );
 };
 
 /** Complète le brouillon pour que l'aperçu affiche les mêmes colonnes que la fiche enregistrée. */
 function normaliserPourApercu(draft: Partial<CongeAbsence>): CongeAbsence {
+  const cat = draft.categorie || 'CONGE';
+  const heureDefaut = cat === 'CONGE' ? '07:45' : '';
   const vide: CongeAbsence = {
     id: 0, employe_id: 0, numero_matricule: 0, nom_prenoms: '', fonction: '', service: '', contact: '',
     categorie: 'CONGE', motif_code: '', motif_libelle: '', imputation: 'CONGE', annee: new Date().getFullYear(),
-    date_demande: '', date_debut: '', heure_debut: '', date_fin: '', date_retour: '', heure_fin: '', jours_demandes: 0,
+    date_demande: '', date_debut: '', heure_debut: heureDefaut, date_fin: '', date_retour: '', heure_fin: heureDefaut, jours_demandes: 0,
     jours_valides: null, remplacant: '', titre_periode: '', justificatif: '', observations: '', statut: 'SOUMIS',
     visa_chef_par: '', visa_chef_le: '', visa_medecin_par: '', visa_medecin_le: '', visa_gestionnaire_par: '',
     visa_gestionnaire_le: '', motif_refus: '', ajustement_type: '', saisie_par: '', date_saisie: '', date_modification: '',
   };
-  return { ...vide, ...draft } as CongeAbsence;
+  const out = { ...vide, ...draft } as CongeAbsence;
+  if (out.categorie === 'CONGE') {
+    if (!out.heure_debut) out.heure_debut = '07:45';
+    if (!out.heure_fin) out.heure_fin = '07:45';
+  }
+  return out;
 }
 
 export default FicheAbsenceModal;

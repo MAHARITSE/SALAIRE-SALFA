@@ -237,7 +237,7 @@ START TRANSACTION;
 -- 2. Paramètres, barèmes et métadonnées de révision
 -- ============================================================================
 INSERT IGNORE INTO `salfa_config` (`id`, `configuree`, `jours_feries`) VALUES (1, 0, '');
-INSERT IGNORE INTO `salfa_entete` (`id`, `configuree`) VALUES (1, 0);
+INSERT IGNORE INTO `salfa_entete` (`id`, `configuree`) VALUES (1, 0), (2, 0);
 
 DELETE FROM `salfa_bareme_anciennete`;
 INSERT INTO `salfa_bareme_anciennete` (`ordre`, `annees_min`, `annees_max`, `indice`, `description`) VALUES

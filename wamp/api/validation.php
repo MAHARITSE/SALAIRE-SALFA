@@ -45,7 +45,7 @@ function validStore($store): bool {
 }
 
 /** Normalise une ligne de bulletin pour comparer deux versions sans faux positifs de typage SQL/JS. */
-function normalizePaieForLockCheck(array $p, bool $ignoreUnlock): array {
+function normalizePaieForLockCheck(array $p, bool $ignoreUnlock, bool $ignoreIdentityReattach = false): array {
     $skip = [
         'date_modification' => true,
         'conge_pris_mois' => true,
@@ -59,6 +59,12 @@ function normalizePaieForLockCheck(array $p, bool $ignoreUnlock): array {
     if ($ignoreUnlock) {
         $skip['verrouille'] = true;
     }
+    if ($ignoreIdentityReattach) {
+        $skip['employe_id'] = true;
+        $skip['numero_matricule'] = true;
+        $skip['nom_prenoms'] = true;
+        $skip['numero_cnaps'] = true;
+    }
     $numericCols = [
         'nombre_annees', 'enfant_a_charge', 'base_aj', 'logt_trsp', 'rendement', 'resp_repres',
         'salaire_brut', 'cnaps', 'patronal', 'salaire_imposable', 'irsa', 'salaire_net',
@@ -70,10 +76,12 @@ function normalizePaieForLockCheck(array $p, bool $ignoreUnlock): array {
 
     $out = [
         'id' => (int)($p['id'] ?? 0),
-        'employe_id' => (int)($p['employe_id'] ?? 0),
-        'numero_matricule' => (int)($p['numero_matricule'] ?? 0),
         'annee' => (int)($p['annee'] ?? 0),
     ];
+    if (!$ignoreIdentityReattach) {
+        $out['employe_id'] = (int)($p['employe_id'] ?? 0);
+        $out['numero_matricule'] = (int)($p['numero_matricule'] ?? 0);
+    }
     foreach ($numericCols as $col) {
         if (isset($skip[$col])) continue;
         $out[$col] = round((float)($p[$col] ?? 0), 4);
@@ -83,6 +91,7 @@ function normalizePaieForLockCheck(array $p, bool $ignoreUnlock): array {
         $out[$col] = ($v === null || $v === '') ? null : round((float)$v, 4);
     }
     foreach ($strCols as $col) {
+        if (isset($skip[$col])) continue;
         $val = trim((string)($p[$col] ?? ''));
         $out[$col] = $col === 'mois' ? strtoupper($val) : $val;
     }
@@ -99,6 +108,27 @@ function lockedSafe(array $old, array $new, string $action, string $role): bool 
     $oldLocked = [];
     $oldPeriods = [];
     $newById = [];
+    $newPeriodsWithLockedRow = [];
+
+    // Identifier si exactement une fiche salarié doublon est fusionnée par un Administrateur
+    $mergedSourceEmpId = 0;
+    if ($action === 'fusionnerEmployes' && $role === 'Administrateur') {
+        $newEmpSet = [];
+        foreach ($new['employes'] ?? [] as $e) {
+            $newEmpSet[(int)($e['id'] ?? 0)] = true;
+        }
+        $removedIds = [];
+        foreach ($old['employes'] ?? [] as $e) {
+            $eid = (int)($e['id'] ?? 0);
+            if ($eid > 0 && !isset($newEmpSet[$eid])) {
+                $removedIds[] = $eid;
+            }
+        }
+        if (count($removedIds) === 1) {
+            $mergedSourceEmpId = $removedIds[0];
+        }
+    }
+
     foreach ($old['paies'] as $p) {
         if ((int)($p['verrouille'] ?? 0) === 1) {
             $oldLocked[(int)$p['id']] = $p;
@@ -109,13 +139,30 @@ function lockedSafe(array $old, array $new, string $action, string $role): bool 
         $id = (int)($p['id'] ?? 0);
         $newById[$id] = $p;
         $period = ($p['annee'] ?? '') . '|' . strtoupper((string)($p['mois'] ?? ''));
+        if ((int)($p['verrouille'] ?? 0) === 1) {
+            $newPeriodsWithLockedRow[$period] = true;
+        }
         if (isset($oldPeriods[$period]) && !isset($oldLocked[$id])) return false;
     }
     foreach ($oldLocked as $id => $p) {
-        if (!isset($newById[$id])) return false;
+        $isMergedSourceRow = ($mergedSourceEmpId > 0 && (int)($p['employe_id'] ?? 0) === $mergedSourceEmpId);
+        if (!isset($newById[$id])) {
+            // Lors d'une fusion de doublon, une ligne verrouillée du doublon ne peut disparaître
+            // que si la période correspondante conserve déjà le bulletin verrouillé du salarié cible
+            if ($isMergedSourceRow) {
+                $period = ($p['annee'] ?? '') . '|' . strtoupper((string)($p['mois'] ?? ''));
+                if (isset($newPeriodsWithLockedRow[$period])) {
+                    continue;
+                }
+            }
+            return false;
+        }
         $n = $newById[$id];
         $ignoreUnlock = ($action === 'deverrouillerMois' && $role === 'Administrateur' && (int)($n['verrouille'] ?? 0) === 0);
-        if (normalizePaieForLockCheck($p, $ignoreUnlock) !== normalizePaieForLockCheck($n, $ignoreUnlock)) {
+        if (
+            normalizePaieForLockCheck($p, $ignoreUnlock, $isMergedSourceRow) !==
+            normalizePaieForLockCheck($n, $ignoreUnlock, $isMergedSourceRow)
+        ) {
             return false;
         }
     }

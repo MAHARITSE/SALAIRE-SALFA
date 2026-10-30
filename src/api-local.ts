@@ -604,6 +604,94 @@ const MOIS_ORDRE: Record<string, number> = {
   JUILLET: 6, AOUT: 7, SEPTEMBRE: 8, OCTOBRE: 9, NOVEMBRE: 10, DECEMBRE: 11,
 };
 
+const MOIS_PAR_INDEX = [
+  'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN',
+  'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE',
+];
+
+function indexChronoPaie(annee: number, mois: string): number {
+  return Number(annee) * 12 + (MOIS_ORDRE[String(mois).toUpperCase()] ?? 0);
+}
+
+function depuisIndexChronoPaie(idx: number): { annee: number; mois: string } {
+  const annee = Math.floor(idx / 12);
+  const mIdx = ((idx % 12) + 12) % 12;
+  return { annee, mois: MOIS_PAR_INDEX[mIdx] };
+}
+
+export interface SuiteChronologiquePaie {
+  /** Dernier état initialisé chronologiquement dans la base (ex. OCTOBRE 2026), ou null si base vide */
+  dernierMoisEtat: { annee: number; mois: string } | null;
+  /** Prochain mois chronologique à ouvrir après le dernier état (ex. NOVEMBRE 2026 ou JANVIER 2027) */
+  prochainMoisChronologique: { annee: number; mois: string } | null;
+  /** La période consultée (annee, mois) est-elle déjà initialisée ? */
+  dejaInitialise: boolean;
+  /** La période consultée peut-elle être ouverte selon la suite chronologique de l'état ? */
+  peutOuvrirCible: boolean;
+  /** Mois immédiatement précédent (M - 1) de la période consultée */
+  moisPrecedentCible: { annee: number; mois: string; initialise: boolean } | null;
+  message?: string;
+}
+
+function calculerSuiteChronologiqueInterne(
+  store: any,
+  annee?: number,
+  mois?: string
+): SuiteChronologiquePaie {
+  const periodesSet = new Set<number>();
+  for (const p of store.paies || []) {
+    const mUp = String(p.mois || '').toUpperCase();
+    if (MOIS_ORDRE[mUp] === undefined || !Number.isFinite(Number(p.annee))) continue;
+    periodesSet.add(indexChronoPaie(Number(p.annee), mUp));
+  }
+
+  const a = annee !== undefined ? Number(annee) : Number(store.meta?.annee || new Date().getFullYear());
+  const m = mois !== undefined ? String(mois).toUpperCase() : 'JANVIER';
+
+  if (periodesSet.size === 0) {
+    return {
+      dernierMoisEtat: null,
+      prochainMoisChronologique: { annee: a, mois: m },
+      dejaInitialise: false,
+      peutOuvrirCible: true,
+      moisPrecedentCible: null,
+    };
+  }
+
+  const maxIdx = Math.max(...periodesSet);
+  const dernierMoisEtat = depuisIndexChronoPaie(maxIdx);
+  const prochainMoisChronologique = depuisIndexChronoPaie(maxIdx + 1);
+
+  const targetIdx = indexChronoPaie(a, m);
+  const dejaInitialise = periodesSet.has(targetIdx);
+  const prev = depuisIndexChronoPaie(targetIdx - 1);
+  const prevInit = periodesSet.has(targetIdx - 1);
+  const peutOuvrirCible = dejaInitialise || prevInit;
+
+  let message: string | undefined;
+  if (!peutOuvrirCible) {
+    message = `Suite chronologique obligatoire : le mois précédent (${prev.mois} ${prev.annee}) n'est pas encore ouvert. Dernier état initialisé : ${dernierMoisEtat.mois} ${dernierMoisEtat.annee} — prochain mois à ouvrir : ${prochainMoisChronologique.mois} ${prochainMoisChronologique.annee}.`;
+  }
+
+  return {
+    dernierMoisEtat,
+    prochainMoisChronologique,
+    dejaInitialise,
+    peutOuvrirCible,
+    moisPrecedentCible: { annee: prev.annee, mois: prev.mois, initialise: prevInit },
+    message,
+  };
+}
+
+export async function fetchSuiteChronologiquePaie(
+  annee?: number,
+  mois?: string
+): Promise<SuiteChronologiquePaie> {
+  exigerAdmin();
+  const store = getStore();
+  return calculerSuiteChronologiqueInterne(store, annee, mois);
+}
+
 function indexPaiesParEmploye(store: any): Record<number, any[]> {
   const paiesParEmploye: Record<number, any[]> = {};
   for (const p of store.paies || []) {
@@ -621,15 +709,16 @@ function indexPaiesParEmploye(store: any): Record<number, any[]> {
   return paiesParEmploye;
 }
 
-/** Construit (sans l'enregistrer) le bulletin d'un salarié pour une période. */
+/** Construit (sans l'enregistrer) le bulletin d'un salarié pour une période en continuité avec l'état précédent. */
 function construirePaie(
   emp: any,
   a: number,
   m: string,
   paiesParEmploye: Record<number, any[]>
 ): any {
+  const targetIdx = indexChronoPaie(a, m);
   const dernier = (paiesParEmploye[Number(emp.id)] || []).find(
-    (p: any) => Number(p.annee) * 12 + (MOIS_ORDRE[String(p.mois).toUpperCase()] ?? 0) < a * 12 + (MOIS_ORDRE[m] ?? 0)
+    (p: any) => indexChronoPaie(Number(p.annee), String(p.mois).toUpperCase()) < targetIdx
   );
   const accessoires = dernier
     ? {
@@ -641,6 +730,10 @@ function construirePaie(
       }
     : {};
 
+  const ribEffectif = String(emp.rib || (dernier ? dernier.rib : '') || '').trim();
+  const cnapsEffectif = String(emp.numero_cnaps || (dernier ? dernier.numero_cnaps : '') || '').trim();
+  const rapEffectif = dernier && dernier.rap !== undefined ? Number(dernier.rap) === 1 : true;
+
   const annees = calculerAnciennete(emp.date_embauche, a);
   const enMaternite = emp.conge_maternite === 1 || estEnCongeMaternite(emp.date_debut_maternite, a, m);
   const empCalc = {
@@ -649,8 +742,8 @@ function construirePaie(
     rendement: emp.rendement,
     responsabilite_representation: emp.responsabilite_representation,
     enfant_a_charge: emp.enfant_a_charge,
-    rib: emp.rib,
-    rap: true,
+    rib: ribEffectif,
+    rap: rapEffectif,
     conge_maternite: enMaternite ? 1 : 0,
   };
   const r = calculerPaieEmploye(empCalc, 0, 0, accessoires);
@@ -662,7 +755,7 @@ function construirePaie(
     annee: a,
     mois: m,
     nom_prenoms: emp.nom_prenoms,
-    numero_cnaps: emp.numero_cnaps || '',
+    numero_cnaps: cnapsEffectif,
     categorie: emp.categorie || '',
     jobs: emp.jobs || '',
     date_embauche: emp.date_embauche || '',
@@ -690,8 +783,8 @@ function construirePaie(
     net: r.net,
     virement: r.virement,
     especes: r.especes,
-    rap: 1,
-    rib: emp.rib || '',
+    rap: rapEffectif ? 1 : 0,
+    rib: ribEffectif,
     verrouille: 0,
     conge_maternite: enMaternite ? 1 : 0,
     date_debut_maternite: emp.date_debut_maternite || '',
@@ -726,37 +819,661 @@ export async function initPaieEmploye(
   return { success: true, created: true };
 }
 
+export interface ResultatInitMoisPaie {
+  success: boolean;
+  initializedCount: number;
+  code?: 'HORS_SUITE_CHRONOLOGIQUE' | 'MOIS_VERROUILLE';
+  prochainMois?: string;
+  prochaineAnnee?: number;
+  message?: string;
+}
+
 export async function initMoisPaie(
   annee: number,
-  mois: string
-): Promise<{ success: boolean; initializedCount: number }> {
+  mois: string,
+  options?: { inclureTousActifs?: boolean }
+): Promise<ResultatInitMoisPaie> {
   exigerAdmin();
   const store = getStore();
   const a = Number(annee);
   const m = String(mois).toUpperCase();
+
+  // 1. Vérification stricte de la suite chronologique de l'état (M - 1 doit être initialisé)
+  const suite = calculerSuiteChronologiqueInterne(store, a, m);
+  if (!suite.peutOuvrirCible) {
+    return {
+      success: false,
+      initializedCount: 0,
+      code: 'HORS_SUITE_CHRONOLOGIQUE',
+      prochainMois: suite.prochainMoisChronologique?.mois,
+      prochaineAnnee: suite.prochainMoisChronologique?.annee,
+      message: suite.message,
+    };
+  }
+
+  // Interdire l'ajout dans un mois déjà clôturé
+  const dejaVerrouille = (store.paies || []).some(
+    (p: any) => Number(p.annee) === a && String(p.mois).toUpperCase() === m && Number(p.verrouille) === 1
+  );
+  if (dejaVerrouille) {
+    return {
+      success: false,
+      initializedCount: 0,
+      code: 'MOIS_VERROUILLE',
+      message: `La période ${m} ${a} est clôturée et verrouillée.`,
+    };
+  }
 
   const employesActifs = (store.employes || [])
     .filter((e: any) => Number(e.actif) === 1)
     .sort((x: any, y: any) => Number(x.numero_matricule) - Number(y.numero_matricule));
 
   const paiesParEmploye = indexPaiesParEmploye(store);
+  const targetIdx = indexChronoPaie(a, m);
+  const prevIdx = targetIdx - 1;
+
+  // Salariés présents dans l'état immédiatement précédent (M - 1)
+  const idsMoisPrecedent = new Set<number>();
+  for (const p of store.paies || []) {
+    if (indexChronoPaie(Number(p.annee), String(p.mois).toUpperCase()) === prevIdx) {
+      idsMoisPrecedent.add(Number(p.employe_id));
+    }
+  }
+
+  const filtrerParEtatPrecedent = !options?.inclureTousActifs && idsMoisPrecedent.size > 0;
 
   let count = 0;
   for (const emp of employesActifs) {
+    const empId = Number(emp.id);
     const exist = (store.paies || []).some(
       (p: any) =>
-        Number(p.employe_id) === Number(emp.id) &&
+        Number(p.employe_id) === empId &&
         Number(p.annee) === a &&
         String(p.mois).toUpperCase() === m
     );
     if (exist) continue;
 
+    if (filtrerParEtatPrecedent) {
+      const historiqueEmp = paiesParEmploye[empId] || [];
+      const etaitDansMoisPrecedent = idsMoisPrecedent.has(empId);
+      const estNouveauSalarieSansHistorique = historiqueEmp.length === 0;
+      if (!etaitDansMoisPrecedent && !estNouveauSalarieSansHistorique) {
+        continue;
+      }
+    }
+
     store.paies.push(construirePaie(emp, a, m, paiesParEmploye));
     count++;
   }
 
-  if (count > 0) saveStore();
+  if (count > 0) {
+    // Enregistrer automatiquement l'année dans store.annees (ex. passage DECEMBRE 2026 -> JANVIER 2027)
+    if (Number.isInteger(a) && a >= 1990 && a <= 2100) {
+      const setAnnees = new Set<number>(
+        (store.annees || [])
+          .map((v: any) => Number(v))
+          .filter((v: number) => Number.isInteger(v) && v >= 1990 && v <= 2100)
+      );
+      if (!setAnnees.has(a)) {
+        setAnnees.add(a);
+        store.annees = Array.from(setAnnees).sort((x, y) => x - y);
+      }
+    }
+    saveStore();
+  }
   return { success: true, initializedCount: count };
+}
+
+// ------------------------------------------------------------------------------
+// DÉTECTION DE DOUBLONS & FUSION DE SALARIÉS (ex. Mat 54 & Mat 61)
+// ------------------------------------------------------------------------------
+export interface CandidatFusionEmploye {
+  employe: Employe;
+  nbPaies: number;
+  nbConges: number;
+  premierePeriode: string | null;
+  dernierePeriode: string | null;
+}
+
+export interface GroupeDoublonEmploye {
+  cle: string;
+  raison: string;
+  cibleSuggeree: CandidatFusionEmploye;
+  doublons: CandidatFusionEmploye[];
+}
+
+export interface ApercuFusionEmployes {
+  cible: CandidatFusionEmploye;
+  source: CandidatFusionEmploye;
+  periodesTransferees: string[];
+  periodesEnDoublon: {
+    periode: string;
+    verrouille: boolean;
+    netCible: number;
+    netSource: number;
+    avanceSource: number;
+    medSource: number;
+  }[];
+  congesATransferer: number;
+  congesDoublons: number;
+  champsCompletesSurCible: string[];
+}
+
+export interface ResultatFusionEmployes {
+  success: boolean;
+  message: string;
+  cible?: Employe;
+  paiesTransferees: number;
+  paiesDoublonsSupprimees: number;
+  congesTransferes: number;
+  congesDoublonsSupprimes: number;
+}
+
+function normaliserCleNomFusion(nom: string): string {
+  const sansAccents = String(nom || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+  const jetons = sansAccents
+    .split(/[^A-Z0-9]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+  return jetons.sort().join(' ');
+}
+
+function normaliserCnapsFusion(cnaps: string): string {
+  const c = String(cnaps || '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase();
+  if (c.length < 5 || /^0+$/.test(c)) return '';
+  return c;
+}
+
+function construireCandidatFusion(store: any, emp: any): CandidatFusionEmploye {
+  const empId = Number(emp.id);
+  const paies = (store.paies || [])
+    .filter((p: any) => Number(p.employe_id) === empId)
+    .slice()
+    .sort(
+      (a: any, b: any) =>
+        indexChronoPaie(Number(a.annee), String(a.mois).toUpperCase()) -
+        indexChronoPaie(Number(b.annee), String(b.mois).toUpperCase())
+    );
+  const nbConges = (store.conges || []).filter((c: any) => Number(c.employe_id) === empId).length;
+  const premiere = paies.length > 0 ? `${String(paies[0].mois).toUpperCase()} ${paies[0].annee}` : null;
+  const derniere =
+    paies.length > 0
+      ? `${String(paies[paies.length - 1].mois).toUpperCase()} ${paies[paies.length - 1].annee}`
+      : null;
+  return {
+    employe: { ...emp },
+    nbPaies: paies.length,
+    nbConges,
+    premierePeriode: premiere,
+    dernierePeriode: derniere,
+  };
+}
+
+function comparerPrioriteCibleFusion(a: CandidatFusionEmploye, b: CandidatFusionEmploye): number {
+  const actifA = Number(a.employe.actif) === 1 ? 1 : 0;
+  const actifB = Number(b.employe.actif) === 1 ? 1 : 0;
+  if (actifA !== actifB) return actifB - actifA;
+
+  const ribA = String(a.employe.rib || '').trim() ? 1 : 0;
+  const ribB = String(b.employe.rib || '').trim() ? 1 : 0;
+  if (ribA !== ribB) return ribB - ribA;
+
+  if (a.nbPaies !== b.nbPaies) return b.nbPaies - a.nbPaies;
+
+  return Number(a.employe.numero_matricule) - Number(b.employe.numero_matricule);
+}
+
+export async function fetchDoublonsEmployes(): Promise<GroupeDoublonEmploye[]> {
+  exigerAdmin();
+  const store = getStore();
+  const employes: any[] = store.employes || [];
+  if (employes.length < 2) return [];
+
+  // Union-Find par nom normalisé ou N° CNaPS identique
+  const parent = new Map<number, number>();
+  for (const e of employes) parent.set(Number(e.id), Number(e.id));
+  const find = (x: number): number => {
+    let r = x;
+    while (parent.get(r) !== r) r = parent.get(r)!;
+    let cur = x;
+    while (cur !== r) {
+      const nxt = parent.get(cur)!;
+      parent.set(cur, r);
+      cur = nxt;
+    }
+    return r;
+  };
+  const union = (a: number, b: number) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(rb, ra);
+  };
+
+  const parNom = new Map<string, number[]>();
+  const parCnaps = new Map<string, number[]>();
+  for (const e of employes) {
+    const id = Number(e.id);
+    const cleNom = normaliserCleNomFusion(e.nom_prenoms);
+    if (cleNom.length >= 3) {
+      const arr = parNom.get(cleNom) || [];
+      arr.push(id);
+      parNom.set(cleNom, arr);
+    }
+    const cleCnaps = normaliserCnapsFusion(e.numero_cnaps);
+    if (cleCnaps) {
+      const arr = parCnaps.get(cleCnaps) || [];
+      arr.push(id);
+      parCnaps.set(cleCnaps, arr);
+    }
+  }
+
+  for (const ids of parNom.values()) {
+    for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]);
+  }
+  for (const ids of parCnaps.values()) {
+    for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]);
+  }
+
+  const groupesMap = new Map<number, any[]>();
+  for (const e of employes) {
+    const root = find(Number(e.id));
+    const g = groupesMap.get(root) || [];
+    g.push(e);
+    groupesMap.set(root, g);
+  }
+
+  const resultats: GroupeDoublonEmploye[] = [];
+  for (const membres of groupesMap.values()) {
+    if (membres.length < 2) continue;
+    const candidats = membres.map((e) => construireCandidatFusion(store, e)).sort(comparerPrioriteCibleFusion);
+    const [cibleSuggeree, ...doublons] = candidats;
+
+    const nomsSet = new Set(membres.map((e) => normaliserCleNomFusion(e.nom_prenoms)).filter(Boolean));
+    const cnapsVals = membres.map((e) => normaliserCnapsFusion(e.numero_cnaps)).filter(Boolean);
+    const memeNom = nomsSet.size === 1;
+    const memeCnaps = cnapsVals.length >= 2 && new Set(cnapsVals).size === 1;
+
+    let raison = 'Nom & prénoms identiques';
+    if (memeNom && memeCnaps) {
+      raison = `Même nom & N° CNaPS (${cnapsVals[0]})`;
+    } else if (memeCnaps) {
+      raison = `Même N° CNaPS (${cnapsVals[0]})`;
+    }
+
+    resultats.push({
+      cle: `grp-${cibleSuggeree.employe.id}`,
+      raison,
+      cibleSuggeree,
+      doublons,
+    });
+  }
+
+  return resultats.sort(
+    (a, b) => Number(a.cibleSuggeree.employe.numero_matricule) - Number(b.cibleSuggeree.employe.numero_matricule)
+  );
+}
+
+function signatureCongeFusion(c: any): string {
+  return [
+    Number(c.annee || 0),
+    String(c.categorie || '').toUpperCase(),
+    String(c.ajustement_type || '').toUpperCase(),
+    String(c.date_debut || ''),
+    String(c.date_fin || ''),
+    Number(c.jours_demandes || 0),
+  ].join('|');
+}
+
+export async function apercevoirFusionEmployes(
+  cibleId: number,
+  sourceId: number
+): Promise<ApercuFusionEmployes | null> {
+  exigerAdmin();
+  const store = getStore();
+  const cibleEmp = (store.employes || []).find((e: any) => Number(e.id) === Number(cibleId));
+  const sourceEmp = (store.employes || []).find((e: any) => Number(e.id) === Number(sourceId));
+  if (!cibleEmp || !sourceEmp || Number(cibleId) === Number(sourceId)) return null;
+
+  const cible = construireCandidatFusion(store, cibleEmp);
+  const source = construireCandidatFusion(store, sourceEmp);
+
+  const paiesCibleMap = new Map<string, any>();
+  for (const p of store.paies || []) {
+    if (Number(p.employe_id) === Number(cibleId)) {
+      paiesCibleMap.set(`${Number(p.annee)}|${String(p.mois).toUpperCase()}`, p);
+    }
+  }
+
+  const paiesSource = (store.paies || [])
+    .filter((p: any) => Number(p.employe_id) === Number(sourceId))
+    .slice()
+    .sort(
+      (a: any, b: any) =>
+        indexChronoPaie(Number(a.annee), String(a.mois).toUpperCase()) -
+        indexChronoPaie(Number(b.annee), String(b.mois).toUpperCase())
+    );
+
+  const periodesTransferees: string[] = [];
+  const periodesEnDoublon: ApercuFusionEmployes['periodesEnDoublon'] = [];
+  for (const ps of paiesSource) {
+    const moisUp = String(ps.mois).toUpperCase();
+    const cle = `${Number(ps.annee)}|${moisUp}`;
+    const pc = paiesCibleMap.get(cle);
+    if (!pc) {
+      periodesTransferees.push(`${moisUp} ${ps.annee}`);
+    } else {
+      periodesEnDoublon.push({
+        periode: `${moisUp} ${ps.annee}`,
+        verrouille: Number(pc.verrouille) === 1 || Number(ps.verrouille) === 1,
+        netCible: Number(pc.net || 0),
+        netSource: Number(ps.net || 0),
+        avanceSource: Number(ps.avance || 0),
+        medSource: Number(ps.med || 0),
+      });
+    }
+  }
+
+  const congesCible = (store.conges || []).filter((c: any) => Number(c.employe_id) === Number(cibleId));
+  const anneesOuvertureCible = new Set<number>(
+    congesCible
+      .filter((c: any) => c.categorie === 'AJUSTEMENT' && c.ajustement_type === 'OUVERTURE')
+      .map((c: any) => Number(c.annee))
+  );
+  const signaturesCible = new Set<string>(congesCible.map(signatureCongeFusion));
+
+  let congesATransferer = 0;
+  let congesDoublons = 0;
+  for (const cs of store.conges || []) {
+    if (Number(cs.employe_id) !== Number(sourceId)) continue;
+    const estOuvertureDoublon =
+      cs.categorie === 'AJUSTEMENT' &&
+      cs.ajustement_type === 'OUVERTURE' &&
+      anneesOuvertureCible.has(Number(cs.annee));
+    if (estOuvertureDoublon || signaturesCible.has(signatureCongeFusion(cs))) {
+      congesDoublons++;
+    } else {
+      congesATransferer++;
+    }
+  }
+
+  const champsCompletesSurCible: string[] = [];
+  if (!String(cibleEmp.rib || '').trim() && String(sourceEmp.rib || '').trim()) {
+    champsCompletesSurCible.push(`RIB (${sourceEmp.rib})`);
+  }
+  if (!String(cibleEmp.numero_cnaps || '').trim() && String(sourceEmp.numero_cnaps || '').trim()) {
+    champsCompletesSurCible.push(`N° CNaPS (${sourceEmp.numero_cnaps})`);
+  }
+  if (!String(cibleEmp.categorie || '').trim() && String(sourceEmp.categorie || '').trim()) {
+    champsCompletesSurCible.push(`Catégorie (${sourceEmp.categorie})`);
+  }
+  if (!String(cibleEmp.jobs || '').trim() && String(sourceEmp.jobs || '').trim()) {
+    champsCompletesSurCible.push(`Fonction (${sourceEmp.jobs})`);
+  }
+  if (!String(cibleEmp.date_embauche || '').trim() && String(sourceEmp.date_embauche || '').trim()) {
+    champsCompletesSurCible.push(`Date d'embauche (${sourceEmp.date_embauche})`);
+  }
+
+  return {
+    cible,
+    source,
+    periodesTransferees,
+    periodesEnDoublon,
+    congesATransferer,
+    congesDoublons,
+    champsCompletesSurCible,
+  };
+}
+
+export async function fusionnerEmployes(
+  cibleId: number,
+  sourceId: number,
+  options?: { cumulerRetenuesMoisOuverts?: boolean }
+): Promise<ResultatFusionEmployes> {
+  exigerAdmin();
+  if (!storeEstSynchronise()) {
+    return {
+      success: false,
+      message: 'Les données ont été modifiées dans un autre onglet. Rechargez la page avant de fusionner.',
+      paiesTransferees: 0,
+      paiesDoublonsSupprimees: 0,
+      congesTransferes: 0,
+      congesDoublonsSupprimes: 0,
+    };
+  }
+  const idCible = Number(cibleId);
+  const idSource = Number(sourceId);
+  if (!idCible || !idSource || idCible === idSource) {
+    return {
+      success: false,
+      message: 'Veuillez sélectionner deux fiches salariés distinctes à fusionner.',
+      paiesTransferees: 0,
+      paiesDoublonsSupprimees: 0,
+      congesTransferes: 0,
+      congesDoublonsSupprimes: 0,
+    };
+  }
+
+  const store = getStore();
+  const idxCible = (store.employes || []).findIndex((e: any) => Number(e.id) === idCible);
+  const idxSource = (store.employes || []).findIndex((e: any) => Number(e.id) === idSource);
+  if (idxCible === -1 || idxSource === -1) {
+    return {
+      success: false,
+      message: 'Salarié cible ou doublon introuvable.',
+      paiesTransferees: 0,
+      paiesDoublonsSupprimees: 0,
+      congesTransferes: 0,
+      congesDoublonsSupprimes: 0,
+    };
+  }
+
+  // Sauvegarde de secours pour rollback atomique si saveStore() échoue
+  const snapEmployes = JSON.parse(JSON.stringify(store.employes || []));
+  const snapPaies = JSON.parse(JSON.stringify(store.paies || []));
+  const snapConges = JSON.parse(JSON.stringify(store.conges || []));
+  const snapComp = JSON.parse(JSON.stringify(store.comparaison_net || []));
+
+  const cible = store.employes[idxCible];
+  const source = store.employes[idxSource];
+
+  // 1. Enrichir la fiche conservée avec les informations éventuellement manquantes sur cible
+  const ribFinal = String(cible.rib || source.rib || '').trim();
+  const modeFinal = ribFinal
+    ? String(cible.rib ? cible.mode_paiement || 'VIREMENT' : 'VIREMENT').toUpperCase()
+    : String(cible.mode_paiement || source.mode_paiement || 'ESPECES').toUpperCase();
+  const dateEmbFinale = String(cible.date_embauche || source.date_embauche || '').trim();
+  const actifFinal = Number(cible.actif) === 1 || Number(source.actif) === 1 ? Number(cible.actif) : 0;
+
+  const cibleFusionnee = {
+    ...cible,
+    numero_cnaps: String(cible.numero_cnaps || source.numero_cnaps || '').trim(),
+    categorie: String(cible.categorie || source.categorie || '').trim(),
+    jobs: String(cible.jobs || source.jobs || '').trim(),
+    date_embauche: dateEmbFinale,
+    nombre_annees: dateEmbFinale
+      ? calculerAnciennete(dateEmbFinale, new Date().getFullYear())
+      : Number(cible.nombre_annees || source.nombre_annees || 0),
+    enfant_a_charge: Math.max(Number(cible.enfant_a_charge || 0), Number(source.enfant_a_charge || 0)),
+    base_aj: Number(cible.base_aj) > 0 ? Number(cible.base_aj) : Number(source.base_aj || 0),
+    logement_transport:
+      Number(cible.logement_transport) > 0
+        ? Number(cible.logement_transport)
+        : Number(source.logement_transport || 0),
+    rendement: Number(cible.rendement) > 0 ? Number(cible.rendement) : Number(source.rendement || 0),
+    responsabilite_representation:
+      Number(cible.responsabilite_representation) > 0
+        ? Number(cible.responsabilite_representation)
+        : Number(source.responsabilite_representation || 0),
+    rib: ribFinal,
+    mode_paiement: modeFinal,
+    actif: actifFinal,
+  };
+  store.employes[idxCible] = cibleFusionnee;
+
+  // 2. Rattacher ou dédoublonner les bulletins de paie
+  const paiesCibleParPeriode = new Map<string, number>();
+  const nouvellesPaies: any[] = [];
+
+  for (const p of store.paies || []) {
+    if (Number(p.employe_id) === idSource) continue;
+    const copie = { ...p };
+    const idx = nouvellesPaies.length;
+    nouvellesPaies.push(copie);
+    if (Number(copie.employe_id) === idCible) {
+      paiesCibleParPeriode.set(`${Number(copie.annee)}|${String(copie.mois).toUpperCase()}`, idx);
+    }
+  }
+
+  let paiesTransferees = 0;
+  let paiesDoublonsSupprimees = 0;
+
+  for (const ps of store.paies || []) {
+    if (Number(ps.employe_id) !== idSource) continue;
+    const cle = `${Number(ps.annee)}|${String(ps.mois).toUpperCase()}`;
+    const idxExistant = paiesCibleParPeriode.get(cle);
+
+    if (idxExistant === undefined) {
+      // Aucune paie sur cible pour ce mois (ex. AOUT 2024) : rattacher l'historique intact à cible
+      nouvellesPaies.push({
+        ...ps,
+        employe_id: idCible,
+        numero_matricule: Number(cibleFusionnee.numero_matricule),
+        nom_prenoms: cibleFusionnee.nom_prenoms,
+        numero_cnaps: String(ps.numero_cnaps || cibleFusionnee.numero_cnaps || '').trim(),
+      });
+      paiesCibleParPeriode.set(cle, nouvellesPaies.length - 1);
+      paiesTransferees++;
+    } else {
+      // Collision sur le même mois (ex. NOVEMBRE 2026 présent sur 54 et 61)
+      const pc = nouvellesPaies[idxExistant];
+      if (
+        options?.cumulerRetenuesMoisOuverts &&
+        Number(pc.verrouille) !== 1 &&
+        (Number(ps.avance || 0) > 0 || Number(ps.med || 0) > 0)
+      ) {
+        const nouvelleAvance = Number(pc.avance || 0) + Number(ps.avance || 0);
+        const nouveauMed = Number(pc.med || 0) + Number(ps.med || 0);
+        const acc = {
+          augmentation_divers: pc.augmentation_divers,
+          prime_de_garde: pc.prime_de_garde,
+          anciennete2: pc.anciennete2,
+          risque: pc.risque,
+          repr_rec: pc.repr_rec,
+        };
+        const r = calculerPaieEmploye({ ...pc, conge_maternite: pc.conge_maternite }, nouvelleAvance, nouveauMed, acc);
+        nouvellesPaies[idxExistant] = {
+          ...pc,
+          avance: r.avance,
+          med: r.med,
+          net: r.net,
+          virement: r.virement,
+          especes: r.especes,
+          date_modification: nowStamp(),
+        };
+      }
+      paiesDoublonsSupprimees++;
+    }
+  }
+  store.paies = nouvellesPaies;
+
+  // 3. Rattacher ou dédoublonner les fiches de congés / permissions
+  const nouveauxConges: any[] = [];
+  const anneesOuvertureCible = new Set<number>();
+  const signaturesCible = new Set<string>();
+
+  for (const c of store.conges || []) {
+    if (Number(c.employe_id) === idSource) continue;
+    nouveauxConges.push({ ...c });
+    if (Number(c.employe_id) === idCible) {
+      if (c.categorie === 'AJUSTEMENT' && c.ajustement_type === 'OUVERTURE') {
+        anneesOuvertureCible.add(Number(c.annee));
+      }
+      signaturesCible.add(signatureCongeFusion(c));
+    }
+  }
+
+  let congesTransferes = 0;
+  let congesDoublonsSupprimes = 0;
+  for (const cs of store.conges || []) {
+    if (Number(cs.employe_id) !== idSource) continue;
+    const estOuvertureDoublon =
+      cs.categorie === 'AJUSTEMENT' &&
+      cs.ajustement_type === 'OUVERTURE' &&
+      anneesOuvertureCible.has(Number(cs.annee));
+    const sig = signatureCongeFusion(cs);
+    if (estOuvertureDoublon || signaturesCible.has(sig)) {
+      congesDoublonsSupprimes++;
+      continue;
+    }
+    if (cs.categorie === 'AJUSTEMENT' && cs.ajustement_type === 'OUVERTURE') {
+      anneesOuvertureCible.add(Number(cs.annee));
+    }
+    signaturesCible.add(sig);
+    nouveauxConges.push({
+      ...cs,
+      employe_id: idCible,
+      numero_matricule: Number(cibleFusionnee.numero_matricule),
+      nom_prenoms: cibleFusionnee.nom_prenoms,
+      fonction: String(cibleFusionnee.jobs || cs.fonction || ''),
+    });
+    congesTransferes++;
+  }
+  store.conges = nouveauxConges;
+
+  // 4. Mettre à jour comparaison_net
+  if (Array.isArray(store.comparaison_net)) {
+    const aDejaCible = store.comparaison_net.some(
+      (x: any) => Number(x.numero_matricule) === Number(cibleFusionnee.numero_matricule)
+    );
+    const nextComp: any[] = [];
+    for (const x of store.comparaison_net) {
+      if (Number(x.numero_matricule) === Number(source.numero_matricule)) {
+        if (!aDejaCible) {
+          nextComp.push({
+            ...x,
+            numero_matricule: Number(cibleFusionnee.numero_matricule),
+            nom_prenoms: cibleFusionnee.nom_prenoms,
+          });
+        }
+      } else {
+        nextComp.push(x);
+      }
+    }
+    store.comparaison_net = nextComp;
+  }
+
+  // 5. Supprimer définitivement la fiche doublon source
+  store.employes = (store.employes || []).filter((e: any) => Number(e.id) !== idSource);
+
+  if (!saveStore()) {
+    store.employes = snapEmployes;
+    store.paies = snapPaies;
+    store.conges = snapConges;
+    store.comparaison_net = snapComp;
+    return {
+      success: false,
+      message: 'La sauvegarde de la fusion a échoué.',
+      paiesTransferees: 0,
+      paiesDoublonsSupprimees: 0,
+      congesTransferes: 0,
+      congesDoublonsSupprimes: 0,
+    };
+  }
+
+  return {
+    success: true,
+    message: `Fusion effectuée : Mat ${source.numero_matricule} fusionné dans Mat ${cibleFusionnee.numero_matricule} (${cibleFusionnee.nom_prenoms}).`,
+    cible: { ...cibleFusionnee },
+    paiesTransferees,
+    paiesDoublonsSupprimees,
+    congesTransferes,
+    congesDoublonsSupprimes,
+  };
 }
 
 function enrichirLignePaieConges(store: any, paie: any): PaieMensuelle {
@@ -1624,10 +2341,10 @@ async function prepareConge(
     annee,
     date_demande: dateDemande,
     date_debut: dateDebut,
-    heure_debut: nettoyerHeure(draft.heure_debut),
+    heure_debut: nettoyerHeure(draft.heure_debut) || (categorie === 'CONGE' ? '07:45' : ''),
     date_fin: dateFin,
     date_retour: dateRetour,
-    heure_fin: nettoyerHeure(draft.heure_fin),
+    heure_fin: nettoyerHeure(draft.heure_fin) || (categorie === 'CONGE' ? '07:45' : ''),
     jours_demandes: jours,
     jours_valides: joursValides,
     remplacant: nettoyerTexte(draft.remplacant, 120),

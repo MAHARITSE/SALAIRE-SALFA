@@ -6,7 +6,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { CongeAbsence, EtatConges, fmtJours, LIBELLES_STATUT } from '../local/conges';
-import { loadBulletinHeader, defaultBulletinHeader } from '../bulletin/header';
+import { loadCongeHeader, defaultCongeHeader } from '../bulletin/header';
 import { blocsFiche, dateFr, periodeAbsenceDocx, dateRetourFiche, RecapFiche } from '../components/conges/FicheAbsence';
 import { colonnesEtat, valeurCellule } from '../components/conges/EtatConges';
 
@@ -29,8 +29,9 @@ function safeFilePart(value: string): string {
 
 const andro = (n: number): string => `${String(Math.abs(Math.round(Number(n) || 0))).padStart(2, '0')} andro`;
 
-const heureDocx = (h: string): string => {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(String(h || '').trim());
+const heureDocx = (h: string, categorie?: string): string => {
+  const brut = String(h || '').trim() || (categorie === 'CONGE' ? '07:45' : '');
+  const m = /^(\d{1,2})[:hH](\d{2})$/.exec(brut);
   return m ? `@ ${m[1]} Ora ${m[2]} mn` : '@ ....... Ora ....... mn';
 };
 
@@ -40,12 +41,12 @@ export function drawFicheAbsencePage(doc: jsPDF, conge: CongeAbsence, recap?: Re
   const marginX = 12;
   const contentW = pageW - marginX * 2;
 
-  let image = loadBulletinHeader().image;
+  let image = loadCongeHeader().image;
   let props;
   try {
     props = doc.getImageProperties(image);
   } catch {
-    image = defaultBulletinHeader().image;
+    image = defaultCongeHeader().image;
     props = doc.getImageProperties(image);
   }
   const maxHeaderH = 22;
@@ -88,7 +89,12 @@ export function drawFicheAbsencePage(doc: jsPDF, conge: CongeAbsence, recap?: Re
   drawField("Anarana & Fanampin'anarana :", identite);
   drawField('Service /Projet :', conge.service || conge.fonction || '');
   drawField('Adiresy / n° tel ahafahana mifandray :', conge.contact || '');
-  drawField('Fangatahana :', jours ? `${objet} (${cleanPdfText(fmtJours(jours))} andro)` : objet);
+  drawField(
+    'Fangatahana :',
+    jours
+      ? `${objet} - ${cleanPdfText(fmtJours(jours))} andro / ${cleanPdfText(fmtJours(jours))} jour(s)`
+      : objet
+  );
 
   // Tableau central des motifs et droits du FITSIPIKA ANATINY
   const blocs = blocsFiche();
@@ -232,8 +238,8 @@ export function drawFicheAbsencePage(doc: jsPDF, conge: CongeAbsence, recap?: Re
     ]],
     body: [[
       cleanPdfText(dateFr(conge.date_demande)),
-      `${cleanPdfText(periodeAbsenceDocx(conge))}\n${heureDocx(conge.heure_debut)}`,
-      `${cleanPdfText(dateFr(dateRetourFiche(conge)))}\n${heureDocx(conge.heure_fin)}`,
+      `${cleanPdfText(periodeAbsenceDocx(conge))}\n${heureDocx(conge.heure_debut, conge.categorie)}`,
+      `${cleanPdfText(dateFr(dateRetourFiche(conge)))}\n${heureDocx(conge.heure_fin, conge.categorie)}`,
     ]],
     headStyles: {
       fillColor: [248, 250, 252], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center',
@@ -291,17 +297,6 @@ export function drawFicheAbsencePage(doc: jsPDF, conge: CongeAbsence, recap?: Re
       cellPadding: 1.2, lineColor: [60, 60, 60], lineWidth: 0.2, textColor: [0, 0, 0],
     },
   });
-
-  const endY = Math.min(291, (doc as any).lastAutoTable.finalY + 3.8);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(80, 80, 80);
-  doc.text(
-    cleanPdfText(`Statut : ${LIBELLES_STATUT[conge.statut]}  |  Fiche n° ${conge.id || '-'}  |  Imputation : ${conge.imputation === 'CONGE' ? 'Congé' : conge.imputation === 'PERMISSION' ? 'Permission' : 'Sans décompte'}`),
-    marginX,
-    endY
-  );
-  doc.text(`Toliara, le ${new Date().toLocaleDateString('fr-FR')}`, pageW - marginX, endY, { align: 'right' });
 }
 
 export function downloadFicheAbsencePDF(conge: CongeAbsence, recap?: RecapFiche | null): void {

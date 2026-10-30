@@ -3,6 +3,7 @@ import defaultLogoLeft from '../assets/logo-salfa.png?inline';
 import defaultLogoRight from '../assets/logo-courrier.png?inline';
 
 const STORAGE_KEY = 'salfa_bulletin_entete_v1';
+const CONGE_HEADER_STORAGE_KEY = 'salfa_conge_entete_v1';
 export const DEFAULT_LINES = [
   'FIANGONANA LOTERANA MALAGASY',
   '(EGLISE LUTHERIENNE MALGACHE - MALAGASY LUTHERAN CHURCH)',
@@ -23,24 +24,61 @@ export interface BulletinHeaderConfig {
 export function defaultBulletinHeader(): BulletinHeaderConfig {
   return { mode: 'image', image: defaultImage, fullImage: defaultImage, lines: [...DEFAULT_LINES], logoLeft: defaultLogoLeft, logoRight: defaultLogoRight };
 }
+export function defaultCongeHeader(): BulletinHeaderConfig {
+  return defaultBulletinHeader();
+}
 const isImage = (value: unknown): value is string => typeof value === 'string' && /^data:image\/(png|jpeg);base64,/i.test(value);
+
+function parseStoredHeaderConfig(raw: string | null, fallback: () => BulletinHeaderConfig): BulletinHeaderConfig {
+  if (!raw) return fallback();
+  try {
+    const cfg = JSON.parse(raw);
+    if (
+      (cfg.mode !== 'image' && cfg.mode !== 'personnalise') ||
+      !isImage(cfg.image) ||
+      !isImage(cfg.fullImage) ||
+      !Array.isArray(cfg.lines) ||
+      cfg.lines.length !== DEFAULT_LINES.length ||
+      !cfg.lines.every((x: unknown) => typeof x === 'string') ||
+      !(cfg.logoLeft === '' || isImage(cfg.logoLeft)) ||
+      !(cfg.logoRight === '' || isImage(cfg.logoRight))
+    ) {
+      return fallback();
+    }
+    return cfg as BulletinHeaderConfig;
+  } catch {
+    return fallback();
+  }
+}
 
 let remoteHeader: BulletinHeaderConfig | null | undefined;
 export function setRemoteHeader(config: BulletinHeaderConfig | null): void { remoteHeader = config; }
 export function loadBulletinHeader(): BulletinHeaderConfig {
   if (remoteHeader !== undefined) return remoteHeader || defaultBulletinHeader();
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultBulletinHeader();
-    const cfg = JSON.parse(raw);
-    if ((cfg.mode !== 'image' && cfg.mode !== 'personnalise') || !isImage(cfg.image) || !isImage(cfg.fullImage) || !Array.isArray(cfg.lines) || cfg.lines.length !== DEFAULT_LINES.length || !cfg.lines.every((x: unknown) => typeof x === 'string') || !(cfg.logoLeft === '' || isImage(cfg.logoLeft)) || !(cfg.logoRight === '' || isImage(cfg.logoRight))) return defaultBulletinHeader();
-    return cfg as BulletinHeaderConfig;
+    return parseStoredHeaderConfig(localStorage.getItem(STORAGE_KEY), defaultBulletinHeader);
   } catch { return defaultBulletinHeader(); }
 }
 
 export function saveBulletinHeader(config: BulletinHeaderConfig): void {
   // En cas de quota dépassé, laisser l'appelant afficher l'erreur sans modifier l'aperçu.
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+}
+
+let remoteCongeHeader: BulletinHeaderConfig | null | undefined;
+export function setRemoteCongeHeader(config: BulletinHeaderConfig | null): void { remoteCongeHeader = config; }
+export function loadCongeHeader(): BulletinHeaderConfig {
+  if (remoteCongeHeader !== undefined) return remoteCongeHeader || defaultCongeHeader();
+  try {
+    return parseStoredHeaderConfig(localStorage.getItem(CONGE_HEADER_STORAGE_KEY), defaultCongeHeader);
+  } catch { return defaultCongeHeader(); }
+}
+
+export function saveCongeHeader(config: BulletinHeaderConfig): void {
+  localStorage.setItem(CONGE_HEADER_STORAGE_KEY, JSON.stringify(config));
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('salfa-conge-header-updated'));
+  }
 }
 
 /** Lit une image locale et vérifie son type, son poids et son décodage. */
