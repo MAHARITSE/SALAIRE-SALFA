@@ -757,6 +757,73 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   const lignesInsertConges = sqlConges.match(/^\s*\(@base_conge_id \+ \d+,/gm) || [];
   assert.equal(lignesInsertConges.length, 610, '610 lignes relationnelles insérées dans salfa_conges');
 
+  // ----------------------------------------------------------------------------
+  // 8. Heures par défaut 07:45 pour Congé, libellé « 10 andro / 10 jour(s) » et suppression du pied de page
+  // ----------------------------------------------------------------------------
+  const empActifTest = (await api.fetchEmployes(true)).find((e) => Number(e.actif) !== 0);
+  const resDefautConge = await api.creerConge(
+    {
+      employe_id: empActifTest.id,
+      categorie: 'CONGE',
+      annee: 2026,
+      date_debut: '2026-11-02',
+      jours_demandes: 10,
+      statut: 'SOUMIS',
+    },
+    { utilisateur: 'admin', role: 'Administrateur' }
+  );
+  assert.equal(resDefautConge.success, true, resDefautConge.message);
+  const tousCongesTest = await api.fetchConges({ annee: 2026, employeId: empActifTest.id, inclureRefuses: true });
+  const congeCreeTest = tousCongesTest.find((c) => c.id === resDefautConge.id);
+  assert.ok(congeCreeTest, 'fiche de congé retrouvée');
+  assert.equal(congeCreeTest.heure_debut, '07:45', 'heure_debut par défaut = 07:45 pour un CONGE');
+  assert.equal(congeCreeTest.heure_fin, '07:45', 'heure_fin par défaut = 07:45 pour un CONGE');
+
+  const resPermSansHeure = await api.creerConge(
+    {
+      employe_id: empActifTest.id,
+      categorie: 'PERMISSION',
+      motif_code: 'Hopitaly zanaka',
+      annee: 2026,
+      date_debut: '2026-11-16',
+      jours_demandes: 2,
+      statut: 'SOUMIS',
+    },
+    { utilisateur: 'admin', role: 'Administrateur' }
+  );
+  assert.equal(resPermSansHeure.success, true, resPermSansHeure.message);
+  const permCreeeTest = (await api.fetchConges({ annee: 2026, employeId: empActifTest.id, inclureRefuses: true }))
+    .find((c) => c.id === resPermSansHeure.id);
+  assert.equal(permCreeeTest.heure_debut, '', 'permission sans heure saisie reste vide');
+  assert.equal(permCreeeTest.heure_fin, '', 'permission sans heure de reprise saisie reste vide');
+
+  // Vérifier le rendu HTML de FicheAbsence : « Congé — 10 andro / 10 jour(s) », 07h45 x2, et aucun pied de page
+  const ficheWrapperEntry = path.join(tmp, 'ficheAbsenceRenderEntry.tsx');
+  fs.writeFileSync(
+    ficheWrapperEntry,
+    `import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { FicheAbsence } from ${JSON.stringify(path.resolve('src/components/conges/FicheAbsence.tsx'))};
+export function renderFicheHtml(conge: any) { return renderToStaticMarkup(<FicheAbsence conge={conge} />); }
+`
+  );
+  const ficheUiOut = path.join(tmp, 'ficheAbsenceUi.cjs');
+  esbuild.buildSync({
+    entryPoints: [ficheWrapperEntry],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    outfile: ficheUiOut,
+    nodePaths: [path.join(process.cwd(), 'node_modules')],
+    loader: { '.png': 'dataurl' },
+    logLevel: 'silent',
+  });
+  const { renderFicheHtml } = require(ficheUiOut);
+  const htmlFiche = renderFicheHtml({ ...congeCreeTest, id: 612, heure_debut: '', heure_fin: '' });
+  assert.ok(htmlFiche.includes('Congé — 10 andro / 10 jour(s)'), `Fangatahana attendu dans FicheAbsence : ${htmlFiche}`);
+  assert.equal((htmlFiche.match(/@ 07 Ora 45 mn/g) || []).length, 2, 'Ora départ et Ora reprise affichent toutes deux @ 07 Ora 45 mn (7h45) pour un Congé');
+  assert.ok(!htmlFiche.includes('Situation :') && !htmlFiche.includes('Fiche n°') && !htmlFiche.includes('Saisie le'), 'pied de page supprimé de FicheAbsence');
+
   console.log('Congés & Permissions : tests OK');
 })().catch((e) => {
   console.error('ÉCHEC —', e && e.stack ? e.stack : e);

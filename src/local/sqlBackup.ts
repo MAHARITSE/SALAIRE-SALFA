@@ -43,6 +43,18 @@ export function readStoredHeaderSnapshot(): StoredHeaderSnapshot | null {
   }
 }
 
+export function readStoredCongeHeaderSnapshot(): StoredHeaderSnapshot | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem('salfa_conge_entete_v1');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export const DEFAULT_ADMIN_BCRYPT = '$2y$10$YX/zKbv4VMuSaS3ddJB5MuBWGfTgOr6aIf7L4PEsva5y2hyHw0j/G'; // admin123
 export const DEFAULT_COMPTABLE_BCRYPT = '$2y$10$xFu0Kw7V7YsnIfrwPjOr1.C6.CfWtRq4Wyo.w/PX8cG36QN2.ezou'; // comptable123
 
@@ -505,12 +517,16 @@ export function buildRelationalSqlBackup(params: {
     );
     lines.push('');
 
-    // Entête bulletin
+    // Entêtes (id=1 : bulletins de paie, id=2 : congés & fiches d'absence)
     const hLines = hdr && Array.isArray(hdr.lines) && hdr.lines.length >= 7 ? hdr.lines : DEFAULT_HEADER_LINES;
-    lines.push('-- Entête des bulletins');
+    const hdrConge = readStoredCongeHeaderSnapshot();
+    const hcLines = hdrConge && Array.isArray(hdrConge.lines) && hdrConge.lines.length >= 7 ? hdrConge.lines : DEFAULT_HEADER_LINES;
+    lines.push("-- Entêtes des bulletins (id=1) et des fiches de congé (id=2)");
     lines.push('DELETE FROM `salfa_entete`;');
     lines.push(
-      `INSERT INTO \`salfa_entete\` (\`id\`, \`configuree\`, \`mode\`, \`ligne_1\`, \`ligne_2\`, \`ligne_3\`, \`ligne_4\`, \`ligne_5\`, \`ligne_6\`, \`ligne_7\`, \`image_finale\`, \`image_complete\`, \`logo_gauche\`, \`logo_droite\`) VALUES (1, ${hdr ? 1 : 0}, ${sqlEscapeString(hdr?.mode === 'personnalise' ? 'personnalise' : 'image', 20)}, ${sqlEscapeString(hLines[0], 255)}, ${sqlEscapeString(hLines[1], 255)}, ${sqlEscapeString(hLines[2], 255)}, ${sqlEscapeString(hLines[3], 255)}, ${sqlEscapeString(hLines[4], 255)}, ${sqlEscapeString(hLines[5], 255)}, ${sqlEscapeString(hLines[6], 255)}, ${sqlNullableString(hdr?.image)}, ${sqlNullableString(hdr?.fullImage)}, ${sqlNullableString(hdr?.logoLeft)}, ${sqlNullableString(hdr?.logoRight)});`
+      `INSERT INTO \`salfa_entete\` (\`id\`, \`configuree\`, \`mode\`, \`ligne_1\`, \`ligne_2\`, \`ligne_3\`, \`ligne_4\`, \`ligne_5\`, \`ligne_6\`, \`ligne_7\`, \`image_finale\`, \`image_complete\`, \`logo_gauche\`, \`logo_droite\`) VALUES\n` +
+      `  (1, ${hdr ? 1 : 0}, ${sqlEscapeString(hdr?.mode === 'personnalise' ? 'personnalise' : 'image', 20)}, ${sqlEscapeString(hLines[0], 255)}, ${sqlEscapeString(hLines[1], 255)}, ${sqlEscapeString(hLines[2], 255)}, ${sqlEscapeString(hLines[3], 255)}, ${sqlEscapeString(hLines[4], 255)}, ${sqlEscapeString(hLines[5], 255)}, ${sqlEscapeString(hLines[6], 255)}, ${sqlNullableString(hdr?.image)}, ${sqlNullableString(hdr?.fullImage)}, ${sqlNullableString(hdr?.logoLeft)}, ${sqlNullableString(hdr?.logoRight)}),\n` +
+      `  (2, ${hdrConge ? 1 : 0}, ${sqlEscapeString(hdrConge?.mode === 'personnalise' ? 'personnalise' : 'image', 20)}, ${sqlEscapeString(hcLines[0], 255)}, ${sqlEscapeString(hcLines[1], 255)}, ${sqlEscapeString(hcLines[2], 255)}, ${sqlEscapeString(hcLines[3], 255)}, ${sqlEscapeString(hcLines[4], 255)}, ${sqlEscapeString(hcLines[5], 255)}, ${sqlEscapeString(hcLines[6], 255)}, ${sqlNullableString(hdrConge?.image)}, ${sqlNullableString(hdrConge?.fullImage)}, ${sqlNullableString(hdrConge?.logoLeft)}, ${sqlNullableString(hdrConge?.logoRight)});`
     );
     lines.push('');
 

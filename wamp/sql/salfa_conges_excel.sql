@@ -229,7 +229,7 @@ INSERT IGNORE INTO `salfa_users` (`id`, `username`, `nom_complet`, `role`, `acti
 
 INSERT IGNORE INTO `salfa_revision` (`id`, `revision`, `conges_version`, `conges_loi_3ans`) VALUES (1, 1, 'controle-2026-10', 3);
 INSERT IGNORE INTO `salfa_config` (`id`, `configuree`, `jours_feries`) VALUES (1, 0, '');
-INSERT IGNORE INTO `salfa_entete` (`id`, `configuree`) VALUES (1, 0);
+INSERT IGNORE INTO `salfa_entete` (`id`, `configuree`) VALUES (1, 0), (2, 0);
 
 INSERT IGNORE INTO `salfa_bareme_anciennete` (`ordre`, `annees_min`, `annees_max`, `indice`, `description`) VALUES
   (1, 0, 1, 1.00, '0 à 1 an'),

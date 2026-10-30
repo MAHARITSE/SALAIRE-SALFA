@@ -249,5 +249,15 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-wamp-test-'));
   const histLocal = await localMod.localApi.fetchHistoriqueSauvegardesSqlLocale();
   assert.ok(histLocal.some(h => h.type === 'CLOTURE'), 'sauvegarde forcée enregistrée dans le journal SQL');
 
+  // Vérification WAMP PHP pour la fusion de salariés en doublon (bulletins clôturés rattachés + ordre FK)
+  const phpIndex = fs.readFileSync(path.join(process.cwd(), 'wamp/api/index.php'), 'utf8');
+  const phpVal = fs.readFileSync(path.join(process.cwd(), 'wamp/api/validation.php'), 'utf8');
+  const phpSchema = fs.readFileSync(path.join(process.cwd(), 'wamp/api/schema.php'), 'utf8');
+  assert.ok(phpIndex.includes("'fusionnerEmployes'"), 'wamp/api/index.php autorise fusionnerEmployes pour Administrateur');
+  assert.ok(phpVal.includes("$action === 'fusionnerEmployes'"), 'wamp/api/validation.php gère le rattachement des bulletins clôturés lors de la fusion');
+  assert.ok(phpIndex.includes("'congeHeader'") && phpIndex.includes('writeHeaderTable($db, $value, 2)'), 'wamp/api/index.php enregistre l’entête congé dans salfa_entete (id = 2)');
+  assert.ok(phpSchema.includes("'congeHeader' => loadRelationalHeader($db, 2)"), 'wamp/api/schema.php charge congeHeader depuis salfa_entete (id = 2)');
+  assert.ok(manualSql.sql.includes('(1, ') && manualSql.sql.includes('(2, ') && manualSql.sql.includes('INSERT INTO `salfa_entete`'), 'dump SQL exporte les deux lignes relationnelles (1 = bulletin, 2 = congé) de salfa_entete');
+
   console.log('Mode WAMP, Sauvegarde SQL forcée à la clôture & Icône application : OK');
 })().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => fs.rmSync(temp, { recursive: true, force: true }));

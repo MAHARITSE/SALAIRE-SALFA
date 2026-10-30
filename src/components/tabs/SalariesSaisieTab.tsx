@@ -11,8 +11,13 @@ import {
   cloturerMois,
   deverrouillerMois,
   fetchPeriodes,
+  fetchSuiteChronologiquePaie,
+  fetchDoublonsEmployes,
   getDerniereSauvegardeSql,
   ResultatSauvegardeSql,
+  SuiteChronologiquePaie,
+  GroupeDoublonEmploye,
+  ResultatFusionEmployes,
 } from '../../api';
 import { triggerSqlDownload } from '../../local/sqlBackup';
 import {
@@ -35,10 +40,14 @@ import {
   ChevronDown,
   FileSpreadsheet,
   Files,
+  GitMerge,
+  ArrowRight,
+  AlertTriangle,
 } from 'lucide-react';
 import { YearProps, YearSelect } from '../YearSelect';
 import { SaisieLotModal } from '../SaisieLotModal';
 import { EmployeModalForm } from '../EmployeModalForm';
+import { FusionEmployesModal } from '../FusionEmployesModal';
 
 const MOIS_LISTE = ['JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', 'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE'];
 
@@ -333,7 +342,11 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   const [paies, setPaies] = useState<PaieMensuelle[]>([]);
   const [verrouille, setVerrouille] = useState<boolean>(false);
   const [clotureBackupBanner, setClotureBackupBanner] = useState<ResultatSauvegardeSql | null>(null);
+  const [fusionBanner, setFusionBanner] = useState<ResultatFusionEmployes | null>(null);
+  const [chronoAlert, setChronoAlert] = useState<string | null>(null);
   const [periodes, setPeriodes] = useState<{ annee: number; mois: string; nb: number }[]>([]);
+  const [suiteChrono, setSuiteChrono] = useState<SuiteChronologiquePaie | null>(null);
+  const [doublonsGroupes, setDoublonsGroupes] = useState<GroupeDoublonEmploye[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [search, setSearch] = useState<string>('');
@@ -349,6 +362,8 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   const [accModalPaie, setAccModalPaie] = useState<PaieMensuelle | null>(null);
   const [historyModal, setHistoryModal] = useState<{ employe: Employe; paies: PaieMensuelle[] } | null>(null);
   const [showLotModal, setShowLotModal] = useState<boolean>(false);
+  const [showFusionModal, setShowFusionModal] = useState<boolean>(false);
+  const [fusionInitialEmpId, setFusionInitialEmpId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!openPrintMenu) return;
@@ -363,15 +378,20 @@ export const SalariesSaisieTab: React.FC<Props> = ({
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    const [emps, paiesData, per] = await Promise.all([
+    setChronoAlert(null);
+    const [emps, paiesData, per, suite, dbl] = await Promise.all([
       fetchEmployes(false),
       fetchPaiesMois(annee, mois),
       fetchPeriodes(),
+      fetchSuiteChronologiquePaie(annee, mois),
+      fetchDoublonsEmployes(),
     ]);
     setEmployes(emps);
     setPaies(paiesData.employes || []);
     setVerrouille(paiesData.verrouille || false);
     setPeriodes(per);
+    setSuiteChrono(suite);
+    setDoublonsGroupes(dbl);
     setLoading(false);
   }, [annee, mois]);
 
@@ -380,16 +400,63 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   }, [loadAll, refreshKey]);
 
   const empById = new Map<number, Employe>(employes.map((e) => [e.id, e]));
+  const idsEnDoublon = new Set<number>(
+    doublonsGroupes.flatMap((g) => [
+      Number(g.cibleSuggeree.employe.id),
+      ...g.doublons.map((d) => Number(d.employe.id)),
+    ])
+  );
+  const nbDoublons = doublonsGroupes.reduce((acc, g) => acc + g.doublons.length, 0);
 
   const handleInitMois = async () => {
     setActionLoading(true);
+    setChronoAlert(null);
     const res = await initMoisPaie(annee, mois);
     if (res.success) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('salfa-annees-updated'));
       }
       await loadAll();
-    } else alert("Erreur lors de l'initialisation du mois.");
+    } else {
+      setChronoAlert(res.message || "Erreur lors de l'initialisation du mois.");
+    }
+    setActionLoading(false);
+  };
+
+  const handleAjouterSalariesManquants = async () => {
+    setActionLoading(true);
+    setChronoAlert(null);
+    const res = await initMoisPaie(annee, mois, { inclureTousActifs: true });
+    if (res.success) {
+      await loadAll();
+    } else {
+      setChronoAlert(res.message || "Erreur lors de l'ajout des salariés manquants.");
+    }
+    setActionLoading(false);
+  };
+
+  const handleOuvrirProchainMoisChrono = async () => {
+    const prochain = suiteChrono?.prochainMoisChronologique;
+    if (!prochain) {
+      await handleInitMois();
+      return;
+    }
+    setActionLoading(true);
+    setChronoAlert(null);
+    const res = await initMoisPaie(prochain.annee, prochain.mois);
+    if (res.success) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('salfa-annees-updated'));
+      }
+      const memePeriode = prochain.annee === annee && prochain.mois === mois;
+      setAnnee(prochain.annee);
+      setMois(prochain.mois);
+      if (memePeriode) {
+        await loadAll();
+      }
+    } else {
+      setChronoAlert(res.message || "Erreur lors de l'ouverture du mois suivant.");
+    }
     setActionLoading(false);
   };
 
@@ -597,7 +664,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
           {!verrouille && missingCount > 0 && paies.length > 0 && (
             <button
               type="button"
-              onClick={handleInitMois}
+              onClick={handleAjouterSalariesManquants}
               disabled={actionLoading}
               className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold shadow-sm animate-pulse"
               title="Ajouter les salariés actifs qui n'ont pas encore de bulletin sur ce mois"
@@ -607,18 +674,45 @@ export const SalariesSaisieTab: React.FC<Props> = ({
             </button>
           )}
 
-          {!verrouille && (
+          {paies.length > 0 && suiteChrono?.prochainMoisChronologique ? (
             <button
               type="button"
-              onClick={handleInitMois}
+              onClick={handleOuvrirProchainMoisChrono}
               disabled={actionLoading}
               className="flex items-center gap-1.5 bg-sky-100 dark:bg-sky-900/30 hover:bg-sky-200 dark:hover:bg-sky-900/50 text-salfa-teal dark:text-sky-300 px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold"
-              title="Initialiser ou mettre à jour les bulletins du mois à partir des fiches salariés"
+              title={`Suite chronologique : ouvrir et initialiser ${suiteChrono.prochainMoisChronologique.mois} ${suiteChrono.prochainMoisChronologique.annee}`}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${actionLoading ? 'animate-spin' : ''}`} />
-              <span>Ouvrir / Initialiser</span>
+              <span>
+                Ouvrir {suiteChrono.prochainMoisChronologique.mois}{' '}
+                {suiteChrono.prochainMoisChronologique.annee}
+              </span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
-          )}
+          ) : !verrouille ? (
+            <button
+              type="button"
+              onClick={
+                suiteChrono && !suiteChrono.peutOuvrirCible
+                  ? handleOuvrirProchainMoisChrono
+                  : handleInitMois
+              }
+              disabled={actionLoading}
+              className="flex items-center gap-1.5 bg-sky-100 dark:bg-sky-900/30 hover:bg-sky-200 dark:hover:bg-sky-900/50 text-salfa-teal dark:text-sky-300 px-3 py-1.5 sm:py-2 rounded-lg text-xs font-bold"
+              title={
+                suiteChrono && !suiteChrono.peutOuvrirCible && suiteChrono.prochainMoisChronologique
+                  ? `Suite chronologique : ouvrir d'abord ${suiteChrono.prochainMoisChronologique.mois} ${suiteChrono.prochainMoisChronologique.annee}`
+                  : 'Ouvrir et initialiser ce mois dans la suite chronologique de l’état'
+              }
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${actionLoading ? 'animate-spin' : ''}`} />
+              <span>
+                {suiteChrono && !suiteChrono.peutOuvrirCible && suiteChrono.prochainMoisChronologique
+                  ? `Ouvrir ${suiteChrono.prochainMoisChronologique.mois} ${suiteChrono.prochainMoisChronologique.annee}`
+                  : 'Ouvrir / Initialiser'}
+              </span>
+            </button>
+          ) : null}
 
           {/* Bouton Imprimer État avec choix : État actif seul OU Tous les états */}
           <div ref={printMenuRef} className="relative">
@@ -733,7 +827,59 @@ export const SalariesSaisieTab: React.FC<Props> = ({
         </div>
       )}
 
-      {/* BARRE DE RECHERCHE + NOUVEAU SALARIÉ */}
+      {/* ALERTE SUITE CHRONOLOGIQUE */}
+      {chronoAlert && (
+        <div className="no-print bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2 font-semibold">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{chronoAlert}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {suiteChrono?.prochainMoisChronologique && (
+              <button
+                type="button"
+                onClick={handleOuvrirProchainMoisChrono}
+                className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-sm transition"
+              >
+                Ouvrir {suiteChrono.prochainMoisChronologique.mois}{' '}
+                {suiteChrono.prochainMoisChronologique.annee}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setChronoAlert(null)}
+              aria-label="Fermer l'alerte"
+              className="p-1 rounded hover:bg-amber-200/50 dark:hover:bg-amber-800/40"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* BANNIÈRE RÉSULTAT DE FUSION */}
+      {fusionBanner && (
+        <div className="no-print bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs text-emerald-900 dark:text-emerald-200">
+          <div className="flex items-center gap-2 font-semibold">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>
+              <b>{fusionBanner.message}</b> — {fusionBanner.paiesTransferees} bulletin(s) rattaché(s),{' '}
+              {fusionBanner.paiesDoublonsSupprimees} doublon(s) retiré(s), {fusionBanner.congesTransferes}{' '}
+              congé(s) rattaché(s).
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFusionBanner(null)}
+            aria-label="Fermer la notification de fusion"
+            className="p-1 rounded hover:bg-emerald-200/50 dark:hover:bg-emerald-800/40"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* BARRE DE RECHERCHE + FUSION DOUBLONS + NOUVEAU SALARIÉ */}
       <div className="no-print bg-white dark:bg-slate-800 rounded-xl p-3 sm:p-4 shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3">
         <div className="relative flex-1 min-w-0">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -746,17 +892,41 @@ export const SalariesSaisieTab: React.FC<Props> = ({
           />
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setEditingEmploye(null);
-            setShowEmpModal(true);
-          }}
-          className="flex items-center justify-center gap-2 bg-salfa-dark hover:bg-salfa-teal text-white px-4 py-2 rounded-lg font-bold text-xs sm:text-sm shadow-sm transition shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nouveau Salarié</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setFusionInitialEmpId(null);
+              setShowFusionModal(true);
+            }}
+            className={`flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg font-bold text-xs sm:text-sm shadow-sm transition ${
+              nbDoublons > 0
+                ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'
+            }`}
+            title="Fusionner deux fiches salariés (ex. doublon de matricule) en conservant tout l'historique"
+          >
+            <GitMerge className="w-4 h-4" />
+            <span>Fusionner salariés</span>
+            {nbDoublons > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-white text-amber-800 text-[10px] font-extrabold">
+                {nbDoublons} doublon{nbDoublons > 1 ? 's' : ''}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setEditingEmploye(null);
+              setShowEmpModal(true);
+            }}
+            className="flex items-center justify-center gap-2 bg-salfa-dark hover:bg-salfa-teal text-white px-4 py-2 rounded-lg font-bold text-xs sm:text-sm shadow-sm transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nouveau Salarié</span>
+          </button>
+        </div>
       </div>
 
       {/* ÉTAT COMPLET EXCEL (32 COLONNES) */}
@@ -817,7 +987,15 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                 ) : rows.length === 0 ? (
                   <tr>
                     <td colSpan={ETAT_COLUMNS.length + 1} className="p-8 text-center">
-                      <EmptyState search={search} mois={mois} annee={annee} verrouille={verrouille} onInit={handleInitMois} />
+                      <EmptyState
+                        search={search}
+                        mois={mois}
+                        annee={annee}
+                        verrouille={verrouille}
+                        suiteChrono={suiteChrono}
+                        onInit={handleInitMois}
+                        onInitProchainChrono={handleOuvrirProchainMoisChrono}
+                      />
                     </td>
                   </tr>
                 ) : (
@@ -941,6 +1119,21 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                                       <Baby className="w-2.5 h-2.5" />½
                                     </span>
                                   )}
+                                  {emp && idsEnDoublon.has(Number(emp.id)) && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setFusionInitialEmpId(emp.id);
+                                        setShowFusionModal(true);
+                                      }}
+                                      title="Doublon détecté — cliquez pour fusionner cette fiche salarié"
+                                      className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-extrabold transition"
+                                    >
+                                      <GitMerge className="w-2.5 h-2.5" />
+                                      DOUBLON
+                                    </button>
+                                  )}
                                 </div>
                               ) : (
                                 cellValue(p, c)
@@ -978,6 +1171,20 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                                   title="Modifier la fiche salarié (informations / mise en inactif)"
                                 >
                                   <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setFusionInitialEmpId(emp.id);
+                                    setShowFusionModal(true);
+                                  }}
+                                  className={`p-1 rounded transition ${
+                                    idsEnDoublon.has(Number(emp.id))
+                                      ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 hover:bg-amber-200'
+                                      : 'hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-400'
+                                  }`}
+                                  title="Fusionner ce salarié avec une autre fiche (doublon)"
+                                >
+                                  <GitMerge className="w-3.5 h-3.5" />
                                 </button>
                               </>
                             )}
@@ -1081,9 +1288,26 @@ export const SalariesSaisieTab: React.FC<Props> = ({
           onSaved={async () => {
             const wasCreate = !editingEmploye;
             setShowEmpModal(false);
-            if (wasCreate && !verrouille) {
+            if (wasCreate && !verrouille && paies.length > 0) {
               await initMoisPaie(annee, mois);
             }
+            await loadAll();
+          }}
+        />
+      )}
+
+      {showFusionModal && (
+        <FusionEmployesModal
+          employes={employes}
+          initialEmployeId={fusionInitialEmpId}
+          onClose={() => {
+            setShowFusionModal(false);
+            setFusionInitialEmpId(null);
+          }}
+          onMerged={async (res) => {
+            setShowFusionModal(false);
+            setFusionInitialEmpId(null);
+            setFusionBanner(res);
             await loadAll();
           }}
         />
@@ -1187,24 +1411,95 @@ const EtatImpression: React.FC<{ etats: EtatMoisImprimable[] }> = ({ etats }) =>
 );
 
 // ------------------------------------------------------------------------------
-// État vide : mois non initialisé
+// État vide : mois non initialisé (respect strict de la suite chronologique)
 // ------------------------------------------------------------------------------
-const EmptyState: React.FC<{ search: string; mois: string; annee: number; verrouille: boolean; onInit: () => void }> = ({ search, mois, annee, verrouille, onInit }) => (
-  <div className="bg-white dark:bg-slate-800 rounded-xl p-6 text-center border dark:border-slate-700 space-y-3">
-    {search ? (
-      <div className="text-sm text-slate-500">Aucun salarié ne correspond à la recherche.</div>
-    ) : (
-      <>
-        <div className="text-sm text-slate-600 dark:text-slate-300">Aucun bulletin pour <b>{mois} {annee}</b>.</div>
-        {!verrouille && (
-          <button onClick={onInit} className="inline-flex items-center gap-2 bg-sky-100 dark:bg-sky-900/30 hover:bg-sky-200 text-salfa-teal dark:text-sky-300 px-4 py-2 rounded-lg text-xs font-bold">
-            <RefreshCw className="w-4 h-4" />Ouvrir / Initialiser le mois
-          </button>
-        )}
-      </>
-    )}
-  </div>
-);
+const EmptyState: React.FC<{
+  search: string;
+  mois: string;
+  annee: number;
+  verrouille: boolean;
+  suiteChrono: SuiteChronologiquePaie | null;
+  onInit: () => void;
+  onInitProchainChrono: () => void;
+}> = ({ search, mois, annee, verrouille, suiteChrono, onInit, onInitProchainChrono }) => {
+  const horsSuite = Boolean(suiteChrono && !suiteChrono.peutOuvrirCible);
+  const prochain = suiteChrono?.prochainMoisChronologique;
+  const precedent = suiteChrono?.moisPrecedentCible;
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl p-6 text-center border dark:border-slate-700 space-y-3">
+      {search ? (
+        <div className="text-sm text-slate-500">Aucun salarié ne correspond à la recherche.</div>
+      ) : horsSuite ? (
+        <div className="max-w-xl mx-auto space-y-3">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-extrabold">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            Suite chronologique obligatoire
+          </div>
+          <div className="text-sm text-slate-700 dark:text-slate-200">
+            Aucun bulletin pour <b>{mois} {annee}</b>. Le mois précédent{' '}
+            {precedent ? (
+              <b>
+                ({precedent.mois} {precedent.annee})
+              </b>
+            ) : null}{' '}
+            n&apos;est pas encore ouvert.
+          </div>
+          {suiteChrono?.dernierMoisEtat && prochain && (
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              Dernier état initialisé :{' '}
+              <b>
+                {suiteChrono.dernierMoisEtat.mois} {suiteChrono.dernierMoisEtat.annee}
+              </b>{' '}
+              → prochain mois chronologique à ouvrir :{' '}
+              <b>
+                {prochain.mois} {prochain.annee}
+              </b>
+            </div>
+          )}
+          {prochain && (
+            <button
+              type="button"
+              onClick={onInitProchainChrono}
+              className="inline-flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>
+                Aller à &amp; Ouvrir {prochain.mois} {prochain.annee}
+              </span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="text-sm text-slate-600 dark:text-slate-300">
+            Aucun bulletin pour <b>{mois} {annee}</b>.
+          </div>
+          {precedent?.initialise && (
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              Suite chronologique directe de l&apos;état de{' '}
+              <b>
+                {precedent.mois} {precedent.annee}
+              </b>
+              .
+            </div>
+          )}
+          {!verrouille && (
+            <button
+              type="button"
+              onClick={onInit}
+              className="inline-flex items-center gap-2 bg-sky-100 dark:bg-sky-900/30 hover:bg-sky-200 text-salfa-teal dark:text-sky-300 px-4 py-2 rounded-lg text-xs font-bold"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Ouvrir / Initialiser le mois ({mois} {annee})
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
 
 // ------------------------------------------------------------------------------
 // MODALE - HISTORIQUE DES PAIES D'UN SALARIÉ

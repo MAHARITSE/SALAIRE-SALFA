@@ -233,7 +233,7 @@ function ensureSalfaInitialized(PDO $db): void {
 
     $db->exec("INSERT IGNORE INTO `salfa_revision` (`id`, `revision`) VALUES (1, 1)");
     $db->exec("INSERT IGNORE INTO `salfa_config` (`id`, `configuree`, `jours_feries`) VALUES (1, 0, '')");
-    $db->exec("INSERT IGNORE INTO `salfa_entete` (`id`, `configuree`) VALUES (1, 0)");
+    $db->exec("INSERT IGNORE INTO `salfa_entete` (`id`, `configuree`) VALUES (1, 0), (2, 0)");
 
     if ((int)$db->query("SELECT COUNT(*) FROM `salfa_bareme_anciennete`")->fetchColumn() === 0) {
         $db->exec("INSERT INTO `salfa_bareme_anciennete` (`ordre`, `annees_min`, `annees_max`, `indice`, `description`) VALUES
@@ -549,8 +549,10 @@ function loadRelationalConfig(PDO $db): ?array {
     ];
 }
 
-function loadRelationalHeader(PDO $db): ?array {
-    $h = $db->query("SELECT * FROM `salfa_entete` WHERE `id` = 1")->fetch(PDO::FETCH_ASSOC);
+function loadRelationalHeader(PDO $db, int $id = 1): ?array {
+    $st = $db->prepare("SELECT * FROM `salfa_entete` WHERE `id` = ?");
+    $st->execute([$id]);
+    $h = $st->fetch(PDO::FETCH_ASSOC);
     if (!$h || (int)$h['configuree'] === 0) return null;
     return [
         'mode' => (string)$h['mode'] === 'personnalise' ? 'personnalise' : 'image',
@@ -576,7 +578,8 @@ function loadRelationalSnapshot(PDO $db): array {
         'revision' => $rev,
         'store' => loadRelationalStore($db),
         'config' => loadRelationalConfig($db),
-        'header' => loadRelationalHeader($db),
+        'header' => loadRelationalHeader($db, 1),
+        'congeHeader' => loadRelationalHeader($db, 2),
     ];
 }
 
@@ -940,24 +943,27 @@ function writeConfigTables(PDO $db, array $cfg): void {
     }
 }
 
-function writeHeaderTable(PDO $db, array $hdr): void {
+function writeHeaderTable(PDO $db, array $hdr, int $id = 1): void {
     $lines = is_array($hdr['lines'] ?? null) ? array_values($hdr['lines']) : [];
-    $st = $db->prepare("UPDATE `salfa_entete` SET
-        `configuree` = 1,
-        `mode` = ?,
-        `ligne_1` = ?,
-        `ligne_2` = ?,
-        `ligne_3` = ?,
-        `ligne_4` = ?,
-        `ligne_5` = ?,
-        `ligne_6` = ?,
-        `ligne_7` = ?,
-        `image_finale` = ?,
-        `image_complete` = ?,
-        `logo_gauche` = ?,
-        `logo_droite` = ?
-        WHERE `id` = 1");
+    $st = $db->prepare("INSERT INTO `salfa_entete`
+        (`id`, `configuree`, `mode`, `ligne_1`, `ligne_2`, `ligne_3`, `ligne_4`, `ligne_5`, `ligne_6`, `ligne_7`, `image_finale`, `image_complete`, `logo_gauche`, `logo_droite`)
+        VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            `configuree` = 1,
+            `mode` = VALUES(`mode`),
+            `ligne_1` = VALUES(`ligne_1`),
+            `ligne_2` = VALUES(`ligne_2`),
+            `ligne_3` = VALUES(`ligne_3`),
+            `ligne_4` = VALUES(`ligne_4`),
+            `ligne_5` = VALUES(`ligne_5`),
+            `ligne_6` = VALUES(`ligne_6`),
+            `ligne_7` = VALUES(`ligne_7`),
+            `image_finale` = VALUES(`image_finale`),
+            `image_complete` = VALUES(`image_complete`),
+            `logo_gauche` = VALUES(`logo_gauche`),
+            `logo_droite` = VALUES(`logo_droite`)");
     $st->execute([
+        $id,
         ($hdr['mode'] ?? 'image') === 'personnalise' ? 'personnalise' : 'image',
         substr((string)($lines[0] ?? ''), 0, 255),
         substr((string)($lines[1] ?? ''), 0, 255),

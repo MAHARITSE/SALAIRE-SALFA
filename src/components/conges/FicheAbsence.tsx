@@ -3,12 +3,12 @@
 // (FICHE D'ABSENCE 2026.docx). Les libellés malgaches, l'ordre des motifs et la
 // colonne « Voalazan'ny FITSIPIKA ANATINY manan-kery » sont repris du document.
 // ==============================================================================
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CongeAbsence, MOTIFS_ABSENCE, MotifAbsence, trouverMotif, fmtJours, LIBELLES_STATUT,
   calculerDateFin, calculerDateRetourDepuisFin,
 } from '../../local/conges';
-import { loadBulletinHeader } from '../../bulletin/header';
+import { loadCongeHeader } from '../../bulletin/header';
 
 export interface RecapFiche {
   annee: number;
@@ -76,8 +76,9 @@ export const dateRetourFiche = (conge: Pick<CongeAbsence, 'date_debut' | 'date_f
   return fin ? calculerDateRetourDepuisFin(fin) : '';
 };
 
-const heureDocx = (h: string): string => {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(String(h || '').trim());
+const heureDocx = (h: string, categorie?: string): string => {
+  const brut = String(h || '').trim() || (categorie === 'CONGE' ? '07:45' : '');
+  const m = /^(\d{1,2})[:hH](\d{2})$/.exec(brut);
   return m ? `@ ${m[1]} Ora ${m[2]} mn` : '@ ……… Ora ……… mn';
 };
 
@@ -132,6 +133,17 @@ export interface FicheAbsenceProps {
 }
 
 export const FicheAbsence: React.FC<FicheAbsenceProps> = ({ conge, recap, compact = false }) => {
+  const [headerImage, setHeaderImage] = useState(() => loadCongeHeader().image);
+  useEffect(() => {
+    const sync = () => setHeaderImage(loadCongeHeader().image);
+    window.addEventListener('salfa-conge-header-updated', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('salfa-conge-header-updated', sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
   const blocs = blocsFiche();
   const motif = trouverMotif(conge.motif_code);
   const categorieFiche =
@@ -163,7 +175,7 @@ export const FicheAbsence: React.FC<FicheAbsenceProps> = ({ conge, recap, compac
   return (
     <div className={`fiche-sheet ${compact ? 'fiche-compact' : ''}`}>
       <div className="fiche-entete">
-        <img src={loadBulletinHeader().image} alt="Entête SALFA" className="fiche-entete-img" />
+        <img src={headerImage} alt="Entête SALFA" className="fiche-entete-img" />
       </div>
 
       <div className="fiche-titre-wrap">
@@ -187,7 +199,7 @@ export const FicheAbsence: React.FC<FicheAbsenceProps> = ({ conge, recap, compac
         <div>
           <span className="fiche-cle">Fangatahana</span>
           <span className="fiche-points"> :</span> {objet}
-          {jours ? ` — ${fmtJours(jours)} andro / jour(s)` : ''}
+          {jours ? ` — ${fmtJours(jours)} andro / ${fmtJours(jours)} jour(s)` : ''}
         </div>
       </div>
 
@@ -262,11 +274,11 @@ export const FicheAbsence: React.FC<FicheAbsenceProps> = ({ conge, recap, compac
             <td className="fiche-date">{dateFr(conge.date_demande)}</td>
             <td className="fiche-date">
               {periodeAbsenceDocx(conge)}
-              <div className="fiche-heure">{heureDocx(conge.heure_debut)}</div>
+              <div className="fiche-heure">{heureDocx(conge.heure_debut, conge.categorie)}</div>
             </td>
             <td className="fiche-date">
               {dateFr(dateRetourFiche(conge))}
-              <div className="fiche-heure">{heureDocx(conge.heure_fin)}</div>
+              <div className="fiche-heure">{heureDocx(conge.heure_fin, conge.categorie)}</div>
             </td>
           </tr>
         </tbody>
@@ -310,12 +322,6 @@ export const FicheAbsence: React.FC<FicheAbsenceProps> = ({ conge, recap, compac
           </tr>
         </tbody>
       </table>
-
-      <div className="fiche-pied">
-        <span>Situation : {LIBELLES_STATUT[conge.statut]}</span>
-        <span>Fiche n° {conge.id} — imputation {conge.imputation === 'CONGE' ? 'congé' : conge.imputation === 'PERMISSION' ? 'permission' : 'sans décompte'}</span>
-        <span>{conge.date_saisie ? `Saisie le ${dateFr(conge.date_saisie.slice(0, 10))}${conge.saisie_par ? ` par ${conge.saisie_par}` : ''}` : ''}</span>
-      </div>
     </div>
   );
 };

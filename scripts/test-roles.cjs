@@ -243,10 +243,131 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'salfa-roles-'));
     assert.equal(resAjout2027.success, true, 'Ajout de l’année 2027 accepté');
     assert.deepEqual(await m.fetchAnneesBase('paie'), [2026, 2027], 'L’année 2027 ajoutée apparaît immédiatement dans les années de la base');
 
+    // =========================================================================
+    // TEST SUITE CHRONOLOGIQUE DE L'ÉTAT (Ouvrir / Initialiser le mois)
+    // =========================================================================
+    // Dernier état initialisé = OCTOBRE 2026 -> prochain chronologique = NOVEMBRE 2026
+    const suiteAvantDec = await m.fetchSuiteChronologiquePaie(2026, 'DECEMBRE');
+    assert.equal(suiteAvantDec.peutOuvrirCible, false, 'DECEMBRE 2026 ne peut pas être ouvert avant NOVEMBRE 2026');
+    assert.deepEqual(suiteAvantDec.dernierMoisEtat, { annee: 2026, mois: 'OCTOBRE' });
+    assert.deepEqual(suiteAvantDec.prochainMoisChronologique, { annee: 2026, mois: 'NOVEMBRE' });
+
+    const sautDecInterdit = await m.initMoisPaie(2026, 'DECEMBRE');
+    assert.equal(sautDecInterdit.success, false, 'Saut chronologique refusé (DECEMBRE 2026 avant NOVEMBRE 2026)');
+    assert.equal(sautDecInterdit.code, 'HORS_SUITE_CHRONOLOGIQUE');
+    assert.equal(sautDecInterdit.prochainMois, 'NOVEMBRE');
+    assert.equal(sautDecInterdit.prochaineAnnee, 2026);
+    assert.equal((await m.fetchPaiesMois(2026, 'DECEMBRE')).employes.length, 0, 'Aucun bulletin créé hors suite chronologique');
+
+    const sautJanInterdit = await m.initMoisPaie(2027, 'JANVIER');
+    assert.equal(sautJanInterdit.success, false, 'Saut chronologique refusé (JANVIER 2027 avant NOVEMBRE & DECEMBRE 2026)');
+
+    // Ouverture chronologique : NOVEMBRE 2026 -> DECEMBRE 2026 -> JANVIER 2027, puis refus de MARS 2027 avant FEVRIER 2027
+    const initNov2026 = await m.initMoisPaie(2026, 'NOVEMBRE');
+    assert.equal(initNov2026.success, true, 'NOVEMBRE 2026 s’ouvre juste après OCTOBRE 2026');
+    assert.ok(initNov2026.initializedCount > 0);
+
+    const initDec2026 = await m.initMoisPaie(2026, 'DECEMBRE');
+    assert.equal(initDec2026.success, true, 'DECEMBRE 2026 s’ouvre juste après NOVEMBRE 2026');
+    assert.ok(initDec2026.initializedCount > 0);
+
+    const initJan2027 = await m.initMoisPaie(2027, 'JANVIER');
+    assert.equal(initJan2027.success, true, 'JANVIER 2027 s’ouvre juste après DECEMBRE 2026');
+    assert.ok(initJan2027.initializedCount > 0);
+
+    const sautMars2027 = await m.initMoisPaie(2027, 'MARS');
+    assert.equal(sautMars2027.success, false, 'MARS 2027 refusé tant que FEVRIER 2027 n’est pas ouvert');
+    assert.equal(sautMars2027.prochainMois, 'FEVRIER');
+    assert.equal(sautMars2027.prochaineAnnee, 2027);
+
+    // =========================================================================
+    // TEST FUSION DE DOUBLONS SALARIÉS (cas réel Mat 54 vs Mat 61 LUCIENNE RAZAFITENDRY MICHELINE)
+    // =========================================================================
+    const tousEmpsAvant = await m.fetchEmployes(false);
+    const emp54 = tousEmpsAvant.find((e) => Number(e.numero_matricule) === 54);
+    assert.ok(emp54, 'Mat 54 LUCIENNE RAZAFITENDRY MICHELINE présent');
+
+    // Créer le doublon Mat 61 (même nom & même CNaPS 992413003084, sans RIB, avec AOUT 2024 clôturé + NOVEMBRE 2026 en doublon)
+    const okCreate61 = await m.createEmploye({
+      numero_matricule: 6100,
+      nom_prenoms: emp54.nom_prenoms,
+      numero_cnaps: emp54.numero_cnaps,
+      categorie: emp54.categorie,
+      jobs: emp54.jobs,
+      date_embauche: emp54.date_embauche,
+      base_aj: emp54.base_aj,
+      logement_transport: emp54.logement_transport,
+      rendement: emp54.rendement,
+      responsabilite_representation: 0,
+      rib: '',
+      mode_paiement: 'ESPECES',
+      actif: 1,
+    });
+    assert.equal(okCreate61, true, 'Création du doublon test réussie');
+    const emp61 = (await m.fetchEmployes(false)).find((e) => Number(e.numero_matricule) === 6100);
+    assert.ok(emp61);
+
+    // Ajouter sur le doublon : un bulletin historique exclusif (AOUT 2024 clôturé) + un bulletin en collision (NOVEMBRE 2026 ouvert) + un congé 2024
+    await m.initPaieEmploye(emp61.id, 2024, 'AOUT');
+    await m.cloturerMois(2024, 'AOUT', true);
+    await m.initPaieEmploye(emp61.id, 2026, 'NOVEMBRE');
+    const paieNov61 = (await m.fetchPaiesMois(2026, 'NOVEMBRE')).employes.find((p) => p.employe_id === emp61.id);
+    assert.ok(paieNov61);
+    await m.savePaieSaisie(paieNov61.id, 25000, 0);
+    await m.creerConge({
+      employe_id: emp61.id,
+      categorie: 'CONGE',
+      motif_code: 'CONGE_ANNUEL',
+      date_debut: '2024-08-05',
+      date_fin: '2024-08-08',
+      jours_demandes: 4,
+      statut: 'VALIDE',
+    });
+
+    // Détection automatique : Mat 54 (avec RIB et plus de bulletins) est suggéré comme fiche principale à conserver
+    const groupesDbl = await m.fetchDoublonsEmployes();
+    const grpLucienne = groupesDbl.find(
+      (g) =>
+        Number(g.cibleSuggeree.employe.id) === Number(emp54.id) &&
+        g.doublons.some((d) => Number(d.employe.id) === Number(emp61.id))
+    );
+    assert.ok(grpLucienne, 'Le doublon LUCIENNE RAZAFITENDRY MICHELINE est détecté automatiquement avec Mat 54 comme cible suggérée');
+
+    const apercu = await m.apercevoirFusionEmployes(emp54.id, emp61.id);
+    assert.ok(apercu);
+    assert.deepEqual(apercu.periodesTransferees, ['AOUT 2024']);
+    assert.equal(apercu.periodesEnDoublon.some((d) => d.periode === 'NOVEMBRE 2026' && d.avanceSource === 25000), true);
+
+    // Un Comptable ne doit pas pouvoir fusionner de salariés
+    const sessionComptableTmp = await m.apiLogin('comptable', 'comptable123');
+    assert.ok(sessionComptableTmp);
+    await assert.rejects(() => m.fusionnerEmployes(emp54.id, emp61.id), /Accès refusé/);
+    await m.apiLogin('admin', 'admin123');
+
+    // Exécuter la fusion (avec cumul de l'avance du mois ouvert NOVEMBRE 2026)
+    const resFusion = await m.fusionnerEmployes(emp54.id, emp61.id, { cumulerRetenuesMoisOuverts: true });
+    assert.equal(resFusion.success, true, 'La fusion de Mat 6100 dans Mat 54 réussit');
+    assert.equal(resFusion.paiesTransferees, 1, 'AOUT 2024 transféré vers Mat 54');
+    assert.equal(resFusion.paiesDoublonsSupprimees, 1, 'Doublon NOVEMBRE 2026 supprimé');
+    assert.ok(resFusion.congesTransferes >= 1, 'Congé rattaché à Mat 54');
+
+    // Vérifier qu'il ne reste plus qu'une seule fiche (Mat 54) avec AOUT 2024 verrouillé + NOVEMBRE 2026 dédoublonné
+    assert.equal((await m.fetchEmployes(false)).some((e) => Number(e.id) === Number(emp61.id)), false, 'La fiche doublon a été supprimée');
+    const hist54 = await m.fetchEmployePaies(emp54.id);
+    const aout2024Rattache = hist54.find((p) => p.annee === 2024 && p.mois === 'AOUT');
+    assert.ok(aout2024Rattache && Number(aout2024Rattache.verrouille) === 1, 'AOUT 2024 clôturé est rattaché intact à Mat 54');
+    const nov2026Apres = (await m.fetchPaiesMois(2026, 'NOVEMBRE')).employes.filter(
+      (p) => p.nom_prenoms === emp54.nom_prenoms
+    );
+    assert.equal(nov2026Apres.length, 1, 'Un seul bulletin subsiste sur NOVEMBRE 2026 après fusion');
+    assert.ok(Number(nov2026Apres[0].avance) >= 25000, 'L’avance saisie sur le doublon ouvert a été reportée sur Mat 54');
+
     // Vérification de non-régression UI
     const srcTab = fs.readFileSync(path.join(process.cwd(), 'src/components/tabs/SalariesSaisieTab.tsx'), 'utf8');
     assert.equal(srcTab.includes('Vue synthèse'), false, 'Le bouton Vue synthèse doit être supprimé');
     assert.equal(srcTab.includes('Salariés sans bulletin sur'), false, 'La section Salariés sans bulletin doit être supprimée');
+    assert.equal(srcTab.includes('FusionEmployesModal'), true, 'La modale de fusion salariés est branchée dans SalariesSaisieTab');
+    assert.equal(srcTab.includes('fetchSuiteChronologiquePaie'), true, 'La suite chronologique est branchée dans SalariesSaisieTab');
     const blocMois = srcTab.slice(srcTab.indexOf('Mois initialisés :'), srcTab.indexOf('EtatImpression'));
     assert.equal(blocMois.includes('{p.mois} {p.annee}'), false, 'Mois initialisés ne doit plus afficher l’année sur chaque bouton');
     assert.equal(blocMois.includes('periodes.map'), false, 'Mois initialisés ne boucle plus sur toutes les années mélangées');

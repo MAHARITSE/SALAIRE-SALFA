@@ -1,7 +1,7 @@
 import type { JsonStore } from './local/store';
 import { setRemoteStore, clearRemoteStore, getStore } from './local/store';
 import { setRemoteConfig, loadConfig } from './local/config';
-import { setRemoteHeader } from './bulletin/header';
+import { setRemoteHeader, setRemoteCongeHeader } from './bulletin/header';
 import { UserSession, CompteUtilisateur } from './types';
 import {
   buildRelationalSqlBackup,
@@ -16,7 +16,7 @@ import {
   formatSqlStamp,
 } from './local/sqlBackup';
 
-interface Snapshot { revision: number; store: JsonStore; config: any; header: any }
+interface Snapshot { revision: number; store: JsonStore; config: any; header: any; congeHeader?: any }
 let revision: number | null = null;
 let csrf = '';
 let chain: Promise<unknown> = Promise.resolve();
@@ -55,7 +55,7 @@ function enqueue<T>(operation: () => Promise<T>): Promise<T> {
 }
 function apply(s: Snapshot) {
   revision = Number(s.revision); current = s;
-  setRemoteStore(s.store); setRemoteConfig(s.config); setRemoteHeader(s.header);
+  setRemoteStore(s.store); setRemoteConfig(s.config); setRemoteHeader(s.header); setRemoteCongeHeader(s.congeHeader ?? null);
 }
 export async function remoteLogin(username: string, password: string): Promise<UserSession | null> {
   try {
@@ -70,7 +70,7 @@ export function remoteLogout(): Promise<void> {
   return enqueue(async () => {
     await request('logout', {});
     current = null; revision = null; csrf = ''; stale = false;
-    clearRemoteStore(); setRemoteConfig(null); setRemoteHeader(null);
+    clearRemoteStore(); setRemoteConfig(null); setRemoteHeader(null); setRemoteCongeHeader(null);
   });
 }
 export const remoteHealth = async () => { try { return (await request('health')).service === 'salfa-wamp-v1'; } catch { return false; } };
@@ -128,7 +128,7 @@ export function remoteWrite<T>(action: string, fn: () => Promise<T>, fallback: T
     }
   });
 }
-export function remoteSaveSetting(kind: 'config' | 'header', value: unknown): Promise<void> {
+export function remoteSaveSetting(kind: 'config' | 'header' | 'congeHeader', value: unknown): Promise<void> {
   return enqueue(async () => {
     if (!current || revision === null) throw new Error('Session expirée. Reconnectez-vous.');
     if (stale) throw new Error('Les données ont changé sur un autre poste. Rechargez la page.');

@@ -2,13 +2,30 @@ import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { WAMP } from '../runtime';
 import { remoteSaveSetting } from '../wampClient';
-import { BulletinHeaderConfig, defaultBulletinHeader, loadBulletinHeader, readHeaderImage, renderPersonalisedHeader, saveBulletinHeader } from '../bulletin/header';
+import {
+  BulletinHeaderConfig,
+  defaultBulletinHeader,
+  defaultCongeHeader,
+  loadBulletinHeader,
+  loadCongeHeader,
+  readHeaderImage,
+  renderPersonalisedHeader,
+  saveBulletinHeader,
+  saveCongeHeader,
+} from '../bulletin/header';
 
 const LABELS = ['Nom principal', 'Traduction / sous-titre', 'Service de santé', 'Traduction du service', 'Établissement et coordonnées', 'NIF et STAT', 'E-mail'];
 const inputClass = 'w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm';
 
-export const BulletinHeaderModal: React.FC<{ onClose: () => void; onSaved: (config: BulletinHeaderConfig) => void }> = ({ onClose, onSaved }) => {
-  const [draft, setDraft] = useState<BulletinHeaderConfig>(loadBulletinHeader);
+export const BulletinHeaderModal: React.FC<{
+  target?: 'bulletin' | 'conge';
+  onClose: () => void;
+  onSaved: (config: BulletinHeaderConfig) => void;
+}> = ({ target = 'bulletin', onClose, onSaved }) => {
+  const estConge = target === 'conge';
+  const [draft, setDraft] = useState<BulletinHeaderConfig>(() =>
+    estConge ? loadCongeHeader() : loadBulletinHeader()
+  );
   const [preview, setPreview] = useState('');
   const [preparing, setPreparing] = useState(true);
   const [error, setError] = useState('');
@@ -46,12 +63,36 @@ export const BulletinHeaderModal: React.FC<{ onClose: () => void; onSaved: (conf
       setError('Impossible de préparer cet entête. Vérifiez les images choisies.'); setPreparing(false); return;
     }
     const next = { ...draft, image };
-    try { if (WAMP) await remoteSaveSetting('header', next); else saveBulletinHeader(next); onSaved(next); }
-    catch (e) { setError(WAMP ? (e instanceof Error ? e.message : 'Enregistrement serveur impossible.') : 'Enregistrement impossible : espace de stockage insuffisant ou navigateur en mode privé. Essayez des images plus légères.'); setPreparing(false); }
+    try {
+      if (WAMP) {
+        await remoteSaveSetting(estConge ? 'congeHeader' : 'header', next);
+      } else if (estConge) {
+        saveCongeHeader(next);
+      } else {
+        saveBulletinHeader(next);
+      }
+      onSaved(next);
+    } catch (e) {
+      setError(WAMP ? (e instanceof Error ? e.message : 'Enregistrement serveur impossible.') : 'Enregistrement impossible : espace de stockage insuffisant ou navigateur en mode privé. Essayez des images plus légères.');
+      setPreparing(false);
+    }
   };
   return <div className="fixed inset-0 z-50 bg-black/50 p-3 flex items-center justify-center no-print" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
     <div role="dialog" aria-modal="true" aria-labelledby="bulletin-header-title" className="w-full max-w-3xl max-h-[95vh] overflow-y-auto rounded-xl bg-white dark:bg-slate-800 shadow-xl p-4 sm:p-6 space-y-4">
-      <div className="flex justify-between items-start gap-3"><div><h2 id="bulletin-header-title" className="text-lg font-bold">Modifier l’entête des bulletins</h2><p className="text-sm text-slate-500 dark:text-slate-300">Le réglage s’applique à tous les bulletins, y compris les PDF en lot. {WAMP ? 'Il est conservé sur le serveur.' : 'Il est conservé dans ce navigateur.'}</p></div><button type="button" aria-label="Fermer" onClick={onClose} className="p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700"><X className="w-5 h-5" /></button></div>
+      <div className="flex justify-between items-start gap-3">
+        <div>
+          <h2 id="bulletin-header-title" className="text-lg font-bold">
+            {estConge ? 'Modifier l’entête du congé (Fiche d’absence)' : 'Modifier l’entête des bulletins'}
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-300">
+            {estConge
+              ? 'Le réglage s’applique à toutes les fiches de congé / permission (aperçu, impression et PDF). '
+              : 'Le réglage s’applique à tous les bulletins, y compris les PDF en lot. '}
+            {WAMP ? 'Il est conservé sur le serveur.' : 'Il est conservé dans ce navigateur.'}
+          </p>
+        </div>
+        <button type="button" aria-label="Fermer" onClick={onClose} className="p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-700"><X className="w-5 h-5" /></button>
+      </div>
       <fieldset><legend className="text-sm font-bold mb-2">Mode d’entête</legend><div className="flex flex-wrap gap-4 text-sm">
         <label className="flex items-center gap-2"><input type="radio" name="mode-entete" checked={draft.mode === 'image'} onChange={() => setDraft(old => ({ ...old, mode: 'image' }))} /> Image complète</label>
         <label className="flex items-center gap-2"><input type="radio" name="mode-entete" checked={draft.mode === 'personnalise'} onChange={() => setDraft(old => ({ ...old, mode: 'personnalise' }))} /> Textes et logos personnalisés</label>
@@ -63,7 +104,7 @@ export const BulletinHeaderModal: React.FC<{ onClose: () => void; onSaved: (conf
       </div>}
       <div><p className="text-sm font-bold mb-2">Aperçu de l’entête</p><div className="bg-white border rounded p-2 flex justify-center min-h-20">{preview && <img src={preview} alt="Aperçu de l’entête" className="max-w-full max-h-32 object-contain" />}</div></div>
       {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p>}
-      <div className="flex flex-wrap justify-between gap-2"><button type="button" onClick={() => { setDraft(defaultBulletinHeader()); setError(''); }} className="px-3 py-2 text-sm rounded-lg border dark:border-slate-600">Restaurer l’entête fourni</button><div className="flex gap-2"><button type="button" onClick={onClose} className="px-3 py-2 text-sm rounded-lg border dark:border-slate-600">Annuler</button><button type="button" onClick={save} disabled={preparing || uploading || !preview} className="px-4 py-2 text-sm rounded-lg bg-salfa-dark text-white font-bold disabled:opacity-50">Enregistrer</button></div></div>
+      <div className="flex flex-wrap justify-between gap-2"><button type="button" onClick={() => { setDraft(estConge ? defaultCongeHeader() : defaultBulletinHeader()); setError(''); }} className="px-3 py-2 text-sm rounded-lg border dark:border-slate-600">Restaurer l’entête fourni</button><div className="flex gap-2"><button type="button" onClick={onClose} className="px-3 py-2 text-sm rounded-lg border dark:border-slate-600">Annuler</button><button type="button" onClick={save} disabled={preparing || uploading || !preview} className="px-4 py-2 text-sm rounded-lg bg-salfa-dark text-white font-bold disabled:opacity-50">Enregistrer</button></div></div>
     </div>
   </div>;
 };
