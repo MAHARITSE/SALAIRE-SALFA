@@ -366,6 +366,9 @@
     break-after: page;
     page-break-after: always;
   }
+  /* Garder le format de la décharge jusqu'à la fin du document : le retour
+     à une page anonyme après la dernière section peut créer une feuille vide. */
+  body:has(.bulletin-decharge-page) { page: bulletin-decharge; }
   .bulletin-decharge-page {
     page: bulletin-decharge;
     display: block !important;
@@ -373,12 +376,14 @@
     color: #000 !important;
     background: #fff !important;
     font: 9pt/1.2 Arial, sans-serif;
-    break-after: page;
-    page-break-after: always;
+    /* Séparer les décharges par un saut AVANT, jamais après la dernière. */
+    break-before: page;
+    page-break-before: always;
+    break-after: auto;
+    page-break-after: auto;
     break-inside: avoid-page;
     page-break-inside: avoid;
   }
-  .bulletin-decharge-page:last-child { break-after: auto; page-break-after: auto; }
   .bulletin-decharge-page h1 {
     margin: 0 0 2.5mm;
     padding: 0 0 1.2mm;
