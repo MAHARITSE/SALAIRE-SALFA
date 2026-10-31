@@ -315,6 +315,7 @@ export const SaisieLotModal: React.FC<Props> = ({
                       ? `lot-option-${matches[highlight].paie.id}`
                       : undefined
                   }
+                  autoCapitalize="characters"
                   value={query}
                   onFocus={() => {
                     if (!selected && searchTerm) setOpen(true);

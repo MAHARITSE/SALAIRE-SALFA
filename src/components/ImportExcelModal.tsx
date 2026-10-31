@@ -929,6 +929,7 @@ export const ImportExcelModal: React.FC<Props> = ({
 
                     <input
                       type="text"
+                      autoCapitalize="characters"
                       value={rechercheApercu}
                       onChange={(e) => setRechercheApercu(e.target.value.toLocaleUpperCase('fr-FR'))}
                       placeholder="Filtrer par matricule, nom, fonction…"

@@ -34,6 +34,14 @@ try {
     bulletinTab.indexOf('className="bulletin-decharge-page"'),
   ];
   assert.ok(ordreLivre.every((index, i) => index >= 0 && (i === 0 || index > ordreLivre[i - 1])), 'le livret place couverture, bulletins, page blanche et décharge dans cet ordre');
+  const cssImpression = fs.readFileSync('src/index.css', 'utf8');
+  const pdfLivre = fs.readFileSync('src/pdf/bulletinsPdf.ts', 'utf8');
+  assert.match(cssImpression, /\.bulletin-booklet-cover\s*\{[^}]*display:\s*block\s*!important/s, 'la couverture est visible à l’impression');
+  assert.match(cssImpression, /\.bulletin-decharge-page\s*\{[^}]*display:\s*block\s*!important/s, 'la décharge est visible à l’impression');
+  assert.match(pdfLivre, /drawCover\(doc, mois, annee\)[\s\S]*drawBulletinPage\(doc, p\)[\s\S]*drawCashDischargePages\(doc, ordered, mois, annee\)/, 'le PDF contient la couverture, les bulletins et la décharge');
+  assert.match(pdfLivre, /drawBulletinPage\(doc, p\)[\s\S]*doc\.addPage\('a4', 'landscape'\);[^\n]*\n\s*drawCashDischargePages/, 'une page blanche sépare les bulletins de la décharge PDF');
+  assert.match(bulletinTab, /FICHE DECHARGE MOIS DE/);
+  assert.match(pdfLivre, /FICHE DECHARGE MOIS DE/);
   assert.equal(NB_EXEMPLAIRES_BULLETIN, 2, 'le nombre d’exemplaires est partagé entre les parcours impression et PDF');
   assert.match(bulletinTab, /PDF 2 ex\./);
   assert.match(bulletinTab, /Imprimer 2 ex\./);

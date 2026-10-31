@@ -231,6 +231,7 @@ export const FusionEmployesModal: React.FC<FusionEmployesModalProps> = ({
           <div className="flex items-center gap-2">
             <input
               type="text"
+              autoCapitalize="characters"
               value={filtreEmployes}
               onChange={(e) => setFiltreEmployes(e.target.value.toLocaleUpperCase('fr-FR'))}
               placeholder="Filtrer la liste déroulante par matricule, nom ou N° CNaPS…"

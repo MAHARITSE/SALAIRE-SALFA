@@ -887,6 +887,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
           <input
             type="text"
             placeholder="Rechercher par matricule, nom, fonction, catégorie..."
+            autoCapitalize="characters"
             value={search}
             onChange={(e) => setSearch(e.target.value.toLocaleUpperCase('fr-FR'))}
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white text-sm uppercase focus:ring-2 focus:ring-salfa-sky outline-none"

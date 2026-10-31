@@ -457,6 +457,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
           <div className="relative flex-1 min-w-[180px] sm:max-w-md">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
+              autoCapitalize="characters"
               value={recherche}
               onChange={(e) => setRecherche(e.target.value.toLocaleUpperCase('fr-FR'))}
               placeholder="Rechercher un matricule, un nom, une fonction, un motif…"

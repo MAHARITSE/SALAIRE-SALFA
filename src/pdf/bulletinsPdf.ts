@@ -293,20 +293,20 @@ function drawCover(doc: jsPDF, mois: string, annee: number): void {
   doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, PAGE_W, PAGE_H, 'F');
 
-  const maxHeaderW = 140;
-  const maxHeaderH = 34;
+  const maxHeaderW = 132;
+  const maxHeaderH = 30;
   const headerScale = Math.min(maxHeaderW / properties.width, maxHeaderH / properties.height);
   const headerW = properties.width * headerScale;
   const headerH = properties.height * headerScale;
-  doc.addImage(image, properties.fileType, 18, 8, headerW, headerH);
+  doc.addImage(image, properties.fileType, 23, 5, headerW, headerH);
 
   // Reprise du modèle de couverture fourni : entête SALFA en haut, période en grand dessous.
   doc.setTextColor(0, 0, 0);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(25);
-  doc.text('BULLETIN DE PAIE SALAIRE', 18, 82);
-  doc.setFontSize(23);
-  doc.text(`Mois de : ${mois} ${annee}`, 18, 100);
+  doc.setFontSize(32);
+  doc.text('BULLETIN DE PAIE SALAIRE', 26, 92);
+  doc.setFontSize(32);
+  doc.text(`Mois de : ${mois} ${annee}`, 26, 110);
 }
 
 function drawCashDischargePages(doc: jsPDF, paies: PaieMensuelle[], mois: string, annee: number): void {
@@ -326,7 +326,7 @@ function drawCashDischargePages(doc: jsPDF, paies: PaieMensuelle[], mois: string
     doc.setDrawColor(0, 0, 0);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11.5);
-    doc.text(`FICHE DECHARGE PRIME MOIS DE ${mois} ${annee}`, pageW / 2, titleY, { align: 'center' });
+    doc.text(`FICHE DECHARGE MOIS DE ${mois} ${annee}`, pageW / 2, titleY, { align: 'center' });
 
     const drawCell = (x: number, y: number, width: number, height: number, text: string, align: 'left' | 'center', isHeader = false) => {
       doc.setLineWidth(0.25);
@@ -339,7 +339,7 @@ function drawCashDischargePages(doc: jsPDF, paies: PaieMensuelle[], mois: string
     };
 
     let x = marginX;
-    drawCell(x, tableTop, colWidths[0], headerH, 'N°', 'center', true);
+    drawCell(x, tableTop, colWidths[0], headerH, 'MAT', 'center', true);
     x += colWidths[0];
     drawCell(x, tableTop, colWidths[1], headerH, 'Noms et Prenom', 'center', true);
     x += colWidths[1];

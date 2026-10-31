@@ -114,6 +114,7 @@ export const InactifsModal: React.FC<InactifsModalProps> = ({ onClose, onChanged
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
+              autoCapitalize="characters"
               value={search}
               onChange={(e) => setSearch(e.target.value.toLocaleUpperCase('fr-FR'))}
               placeholder="Rechercher par matricule, nom, fonction ou date..."
