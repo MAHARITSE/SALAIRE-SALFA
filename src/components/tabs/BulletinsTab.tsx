@@ -151,7 +151,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
                   <Users className="w-4 h-4 text-emerald-600 shrink-0" />
                   <div>
                     <div>Tous les bulletins ({filtered.length})</div>
-                    <div className="text-[10px] font-normal text-slate-400">2 ex. par bulletin · Livret complet {mois} {annee}</div>
+                    <div className="text-[10px] font-normal text-slate-400">Couverture · Bulletins · Page blanche · Décharge &gt; 5 000 Ar</div>
                   </div>
                 </button>
               </div>
@@ -193,7 +193,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
                   <Users className="w-4 h-4 text-salfa-teal shrink-0" />
                   <div>
                     <div>Imprimer tous les bulletins ({filtered.length})</div>
-                    <div className="text-[10px] font-normal text-slate-400">2 ex. par bulletin A4 · couverture, bulletins, page blanche, décharge</div>
+                    <div className="text-[10px] font-normal text-slate-400">Couverture · Bulletins · Page blanche · Décharge &gt; 5 000 Ar</div>
                   </div>
                 </button>
               </div>
@@ -205,6 +205,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
       <div className="no-print grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 space-y-2 max-h-[70vh] flex flex-col">
           <input
+            autoCapitalize="characters"
             value={search}
             onChange={e => setSearch(e.target.value.toLocaleUpperCase('fr-FR'))}
             placeholder="Rechercher matricule, nom, fonction..."
@@ -310,11 +311,11 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
               <div className="bulletin-booklet-blank" aria-hidden="true" />
               {paiesDechargePages.map((paiesDecharge, pageIndex) => (
                 <section key={`decharge-page-${pageIndex}`} className="bulletin-decharge-page">
-                  <h1>FICHE DECHARGE PRIME MOIS DE {mois} {annee}</h1>
+                  <h1>FICHE DECHARGE MOIS DE {mois} {annee}</h1>
                   <table className="bulletin-decharge-table">
                     <thead>
                       <tr>
-                        <th>N°</th>
+                        <th>MAT</th>
                         <th>Noms et Prenom</th>
                         <th>Emargement</th>
                       </tr>

@@ -328,9 +328,9 @@
     page: bulletin-cover;
     display: block !important;
     box-sizing: border-box;
-    width: 297mm;
-    height: 210mm;
-    padding: 8mm 18mm;
+    width: 100%;
+    height: 209mm;
+    padding: 5mm 23mm;
     color: #000 !important;
     background: #fff !important;
     break-after: page;
@@ -338,28 +338,28 @@
   }
   .bulletin-booklet-cover img {
     display: block;
-    width: 140mm;
-    height: 34mm;
+    width: 132mm;
+    height: 30mm;
     object-fit: contain;
     object-position: left top;
   }
-  .bulletin-booklet-cover-title { margin-top: 35mm; }
+  .bulletin-booklet-cover-title { margin: 46mm 0 0 3mm; }
   .bulletin-booklet-cover-title h1 {
     margin: 0 0 4mm;
-    font: bold 25pt/1.15 Arial, sans-serif;
+    font: bold 32pt/1.15 Arial, sans-serif;
     color: #000 !important;
   }
   .bulletin-booklet-cover-title p {
     margin: 0;
-    font: bold 23pt/1.15 Arial, sans-serif;
+    font: bold 32pt/1.15 Arial, sans-serif;
     color: #000 !important;
   }
   .bulletin-booklet-blank {
     page: bulletin-blank;
     display: block !important;
     box-sizing: border-box;
-    width: 297mm;
-    height: 210mm;
+    width: 100%;
+    height: 209mm;
     background: #fff !important;
     break-before: page;
     page-break-before: always;

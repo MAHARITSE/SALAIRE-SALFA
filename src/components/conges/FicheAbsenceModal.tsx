@@ -383,6 +383,7 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
               <label className={etiquette}>Salarié (Anarana &amp; Fanampin’anarana)</label>
               <input
                 className={`${champ} mb-1.5 uppercase`}
+                autoCapitalize="characters"
                 value={recherche}
                 onChange={(e) => setRecherche(e.target.value.toLocaleUpperCase('fr-FR'))}
                 placeholder="Rechercher un nom, un matricule, une fonction…"
