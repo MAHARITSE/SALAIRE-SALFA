@@ -261,6 +261,13 @@ if (empty($_SESSION['user']) || time() - ($_SESSION['last'] ?? 0) > 3600) {
     session_destroy();
     answer(401, ['error' => 'Session expirée. Reconnectez-vous.']);
 }
+// Vérifier le compte réel, pas uniquement le rôle conservé au moment de la connexion.
+$currentUserQuery = $db->prepare('SELECT id, role, actif FROM salfa_users WHERE id = ?');
+$currentUserQuery->execute([(int)($_SESSION['user']['id'] ?? 0)]);
+if (!sessionUserStillAllowed($_SESSION['user'], $currentUserQuery->fetch(PDO::FETCH_ASSOC))) {
+    session_destroy();
+    answer(401, ['error' => 'Compte désactivé ou droits modifiés. Reconnectez-vous.']);
+}
 $_SESSION['last'] = time();
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !hash_equals($_SESSION['csrf'] ?? '', $_SERVER['HTTP_X_SALFA_CSRF'] ?? '')) {
     answer(403, ['error' => 'Session invalide. Reconnectez-vous.']);

@@ -89,14 +89,14 @@ let configCache: PaieConfig | null = null;
 let remoteConfig = false;
 export function setRemoteConfig(config: Partial<PaieConfig> | null): void {
   remoteConfig = true;
-  configCache = {
+  configCache = normalizeNumbers({
     ...DEFAULT_CONFIG,
     ...(config || {}),
-    baremeAnciennete: config?.baremeAnciennete || [...DEFAULT_CONFIG.baremeAnciennete],
-    baremeIrsa: config?.baremeIrsa || [...DEFAULT_CONFIG.baremeIrsa],
+    baremeAnciennete: sanitizeBaremeAnciennete(config?.baremeAnciennete),
+    baremeIrsa: sanitizeBaremeIrsa(config?.baremeIrsa),
     congies: sanitizeCongesConfig(config?.congies),
     iconeApp: typeof config?.iconeApp === 'string' ? config.iconeApp : '',
-  };
+  });
 }
 
 function sanitizeBaremeAnciennete(raw: any): BaremeAncienneteConfig[] {
@@ -106,7 +106,7 @@ function sanitizeBaremeAnciennete(raw: any): BaremeAncienneteConfig[] {
     const min = Number(r.min);
     const max = Number(r.max);
     const indice = Number(r.indice);
-    if (isNaN(min) || isNaN(max) || isNaN(indice)) continue;
+    if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(indice)) continue;
     if (min < 0 || max < min || indice <= 0) continue;
     cleaned.push({ min: Math.floor(min), max: Math.floor(max), indice: Math.round(indice * 100) / 100 });
   }
@@ -123,7 +123,7 @@ function sanitizeBaremeIrsa(raw: any): TrancheIrsaConfig[] {
     const min = Number(r.min);
     const max = r.max === null || r.max === undefined || r.max === '' ? null : Number(r.max);
     const taux = Number(r.taux);
-    if (isNaN(min) || (max !== null && isNaN(max)) || isNaN(taux)) continue;
+    if (!Number.isFinite(min) || (max !== null && !Number.isFinite(max)) || !Number.isFinite(taux)) continue;
     if (min < 0 || taux < 0 || taux > 100) continue;
     if (max !== null && max <= min) continue;
     cleaned.push({ min: Math.floor(min), max: max === null ? null : Math.floor(max), taux: Math.round(taux * 100) / 100 });
@@ -131,6 +131,22 @@ function sanitizeBaremeIrsa(raw: any): TrancheIrsaConfig[] {
   if (cleaned.length === 0) return [...DEFAULT_BAREME_IRSA];
   cleaned.sort((a, b) => a.min - b.min);
   return cleaned;
+}
+
+/** Même validation pour le chargement local, les réglages MySQL et la sauvegarde. */
+function normalizeNumbers(cfg: PaieConfig): PaieConfig {
+  const bounded = (value: unknown, fallback: number, min = 0, max = Number.MAX_SAFE_INTEGER) => {
+    const n = value === null || value === undefined || value === '' ? NaN : Number(value);
+    return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
+  };
+  cfg.cnapsSalariale = bounded(cfg.cnapsSalariale, DEFAULT_CONFIG.cnapsSalariale, 0, 100);
+  cfg.cnapsPatronale = bounded(cfg.cnapsPatronale, DEFAULT_CONFIG.cnapsPatronale, 0, 100);
+  cfg.tauxMaternite = bounded(cfg.tauxMaternite, DEFAULT_CONFIG.tauxMaternite, 0, 100);
+  cfg.dureeMaterniteMois = Math.floor(bounded(cfg.dureeMaterniteMois, DEFAULT_CONFIG.dureeMaterniteMois, 1, 12));
+  for (const key of ['deductionEnfant', 'minIrsa', 'arrondiIrsaBase', 'arrondiNet', 'plafondEspeces'] as const) {
+    cfg[key] = bounded(cfg[key], DEFAULT_CONFIG[key]);
+  }
+  return cfg;
 }
 
 export function loadConfig(): PaieConfig {
@@ -161,16 +177,7 @@ export function loadConfig(): PaieConfig {
     congies: sanitizeCongesConfig(rawCongies),
     iconeApp: typeof loaded.iconeApp === 'string' ? loaded.iconeApp : '',
   };
-  // sécuriser les nombres
-  merged.cnapsSalariale = Number(merged.cnapsSalariale) || DEFAULT_CONFIG.cnapsSalariale;
-  merged.cnapsPatronale = Number(merged.cnapsPatronale) || DEFAULT_CONFIG.cnapsPatronale;
-  merged.deductionEnfant = Number(merged.deductionEnfant) || 0;
-  merged.minIrsa = Number(merged.minIrsa) || 0;
-  merged.arrondiIrsaBase = Number(merged.arrondiIrsaBase) || 0;
-  merged.arrondiNet = Number(merged.arrondiNet) || 0;
-  merged.plafondEspeces = Number(merged.plafondEspeces) || 0;
-  merged.tauxMaternite = Number(merged.tauxMaternite) || DEFAULT_CONFIG.tauxMaternite;
-  merged.dureeMaterniteMois = Number(merged.dureeMaterniteMois) || DEFAULT_CONFIG.dureeMaterniteMois;
+  normalizeNumbers(merged);
 
   configCache = merged;
   return merged;
@@ -187,39 +194,22 @@ export function saveConfig(cfg: Partial<PaieConfig>): PaieConfig {
   if (cfg.congies) nextRaw.congies = sanitizeCongesConfig({ ...cfg.congies, versionCalendrier: 3 });
   if (cfg.iconeApp !== undefined) nextRaw.iconeApp = typeof cfg.iconeApp === 'string' ? cfg.iconeApp : '';
 
-  // re-sanitize nombres
-  nextRaw.cnapsSalariale = Number(nextRaw.cnapsSalariale) || 0;
-  nextRaw.cnapsPatronale = Number(nextRaw.cnapsPatronale) || 0;
-  nextRaw.deductionEnfant = Number(nextRaw.deductionEnfant) || 0;
-  nextRaw.minIrsa = Number(nextRaw.minIrsa) || 0;
-  nextRaw.arrondiIrsaBase = Number(nextRaw.arrondiIrsaBase) || 0;
-  nextRaw.arrondiNet = Number(nextRaw.arrondiNet) || 0;
-  nextRaw.plafondEspeces = Number(nextRaw.plafondEspeces) || 0;
-  nextRaw.tauxMaternite = Number(nextRaw.tauxMaternite) || 50;
-  nextRaw.dureeMaterniteMois = Number(nextRaw.dureeMaterniteMois) || 3;
-
-  configCache = nextRaw;
-  try {
-    if (!remoteConfig) localStorage.setItem(CONFIG_KEY, JSON.stringify(nextRaw));
-  } catch (e) {
-    console.error('[CONFIG] Sauvegarde config impossible.', e);
+  normalizeNumbers(nextRaw);
+  // Ne publier le nouveau cache qu'après confirmation de l'écriture locale.
+  if (!remoteConfig) {
+    try { localStorage.setItem(CONFIG_KEY, JSON.stringify(nextRaw)); }
+    catch { throw new Error('Paramètres non enregistrés : stockage du navigateur indisponible ou plein.'); }
   }
+  configCache = nextRaw;
   return nextRaw;
 }
 
 export function resetConfig(): PaieConfig {
-  const previousIcon = configCache?.iconeApp || '';
-  configCache = {
+  return saveConfig({
     ...DEFAULT_CONFIG,
-    baremeAnciennete: [...DEFAULT_CONFIG.baremeAnciennete],
-    baremeIrsa: [...DEFAULT_CONFIG.baremeIrsa.map(t => ({ ...t }))],
+    baremeAnciennete: DEFAULT_BAREME_ANCIENNETE.map(b => ({ ...b })),
+    baremeIrsa: DEFAULT_BAREME_IRSA.map(b => ({ ...b })),
     congies: { ...DEFAULT_CONGES_CONFIG },
-    iconeApp: previousIcon,
-  };
-  try {
-    if (!remoteConfig) localStorage.setItem(CONFIG_KEY, JSON.stringify(configCache));
-  } catch (e) {
-    /* ignore */
-  }
-  return configCache;
+    iconeApp: loadConfig().iconeApp || '',
+  });
 }

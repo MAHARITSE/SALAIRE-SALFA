@@ -4,7 +4,8 @@
 import React, { useState, useEffect } from 'react';
 import { Employe } from '../types';
 import { createEmploye, updateEmploye } from '../api';
-import { calculerAnciennete } from '../local/calcul';
+import { calculerAnciennete, obtenirIndiceAnciennete } from '../local/calcul';
+import { loadConfig } from '../local/config';
 import { X, Award, Info, UserX, UserCheck } from 'lucide-react';
 
 const fmt = (val: number | undefined | null) =>
@@ -117,27 +118,15 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
   ).sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
 
   const ancYears = calculerAnciennete(form.date_embauche);
-  const getIndice = (y: number) => {
-    if (y < 2) return 1.00;
-    if (y < 4) return 1.09;
-    if (y < 6) return 1.18;
-    if (y < 8) return 1.27;
-    if (y < 10) return 1.36;
-    if (y < 12) return 1.45;
-    if (y < 14) return 1.53;
-    if (y < 16) return 1.60;
-    if (y < 18) return 1.65;
-    if (y < 20) return 1.68;
-    return 1.70;
-  };
-  const indice = getIndice(ancYears);
+  const cfg = loadConfig();
+  const indice = obtenirIndiceAnciennete(ancYears);
   const baseReval = Math.round(Number(form.base_aj || 0) * indice * 100) / 100;
   const baseBruteNormale =
     Number(form.base_aj || 0) +
     Number(form.logement_transport || 0) +
     Number(form.rendement || 0) +
     Number(form.responsabilite_representation || 0);
-  const baseBrutAffichee = form.conge_maternite ? baseBruteNormale / 2.0 : baseBruteNormale;
+  const baseBrutAffichee = form.conge_maternite ? baseBruteNormale * cfg.tauxMaternite / 100 : baseBruteNormale;
 
   const MOIS_LIB = ['JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', 'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE'];
   const periodeMaternite = (() => {
@@ -148,7 +137,7 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
     const m = parseInt(parts[1], 10) - 1;
     if (!y || m < 0) return null;
     const debut = MOIS_LIB[m] + ' ' + y;
-    const finIdx = y * 12 + m + 2;
+    const finIdx = y * 12 + m + cfg.dureeMaterniteMois - 1;
     const fin = MOIS_LIB[finIdx % 12] + ' ' + Math.floor(finIdx / 12);
     return { debut, fin };
   })();
@@ -417,7 +406,7 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
               />
               <div className="text-xs">
                 <span className="font-extrabold text-pink-900 dark:text-pink-300 block">
-                  Congé de Maternité (3 mois — base brute à 50%)
+                  Congé de Maternité ({cfg.dureeMaterniteMois} mois — base brute à {cfg.tauxMaternite}%)
                 </span>
                 <span className="text-slate-600 dark:text-slate-400 block">
                   La personne est <b>mise en évidence</b> et sa base brute passe à{' '}
@@ -441,7 +430,7 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
                 </div>
                 <div className="flex items-end">
                   <div className="w-full rounded-lg bg-white/70 dark:bg-slate-800/60 border border-pink-200 dark:border-pink-800 px-3 py-2 text-[11px] text-pink-900 dark:text-pink-200">
-                    <b>Durée :</b> 3 mois (mois du début inclus).
+                    <b>Durée :</b> {cfg.dureeMaterniteMois} mois (mois du début inclus).
                     {periodeMaternite && (
                       <div className="mt-0.5 font-mono">
                         Période : <b>{periodeMaternite.debut}</b> → <b>{periodeMaternite.fin}</b>

@@ -5,22 +5,27 @@
   "version": "1.0.0",
   "description": "Logiciel de Paie Mensuelle CLINIQUE SALFA TANAMBAO — 100% local (navigateur), déployable sur Cloudflare Pages",
   "scripts": {
-    "dev": "[ -d node_modules ] || npm install --quiet; vite",
-    "build": "[ -d node_modules ] || npm install --quiet; vite build",
-    "build:wamp": "[ -d node_modules ] || npm install --quiet; vite build --mode wamp --base=./",
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "build:wamp": "npm run typecheck && vite build --mode wamp --base=./",
     "sql:conges": "node scripts/generer_sql_conges_wamp.cjs",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
     "deploy:pages": "npm run build && wrangler pages deploy dist --project-name salfa-web-paie",
-    "deploy:workers": "npm run build && wrangler deploy"
+    "deploy:workers": "npm run build && wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-tests.cjs",
+    "test:sql": "python3 scripts/test_sql_paies_cloturees.py"
   },
   "dependencies": {
-    "jspdf": "^2.5.2",
-    "jspdf-autotable": "^3.8.3",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "lucide-react": "^1.16.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.5.4",
     "postcss": "^8.5.26",

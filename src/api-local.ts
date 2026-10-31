@@ -7,7 +7,7 @@
 
 import { Employe, PaieMensuelle, TotauxMois, ComparaisonNet, UserSession, CompteUtilisateur, CompteConnexionPublic } from './types';
 import { getStore, saveStore, storeEstSynchronise, nextEmployeId, nextPaieId, nextCongeId, nextUtilisateurId, nowStamp } from './local/store';
-import { calculerPaieEmploye, calculerAnciennete, estEnCongeMaternite } from './local/calcul';
+import { calculerPaieEmploye, calculerAnciennete, estEmployeEnCongeMaternite } from './local/calcul';
 import { hashPassword } from './local/hash';
 import { loadConfig } from './local/config';
 import { correspondRecherche, normaliserRecherche } from './local/recherche';
@@ -35,6 +35,18 @@ import {
 
 export { getDerniereSauvegardeSql };
 export type { EntreeHistoriqueSql, ResultatSauvegardeSql };
+
+/** Restaurer la vue en mémoire si la persistance locale échoue. */
+function sauvegarderOuRestaurer(store: ReturnType<typeof getStore>, avant: ReturnType<typeof getStore>): boolean {
+  if (saveStore()) return true;
+  for (const key of Object.keys(store)) delete (store as any)[key];
+  Object.assign(store, avant);
+  return false;
+}
+
+function periodePaieValide(annee: number, mois: string): boolean {
+  return Number.isInteger(annee) && annee >= 1990 && annee <= 2100 && MOIS_FR.includes(mois);
+}
 
 // ------------------------------------------------------------------------------
 // AUTHENTIFICATION & CONTRÔLE D'ACCÈS PAR RÔLE (locale)
@@ -390,6 +402,7 @@ export async function createEmploye(employe: Partial<Employe>): Promise<boolean>
   exigerAdmin();
   const store = getStore();
   const mat = Number(employe.numero_matricule);
+  if (!Number.isInteger(mat) || mat <= 0 || !String(employe.nom_prenoms || '').trim()) return false;
   if (store.employes.some((e: any) => Number(e.numero_matricule) === mat)) {
     return false;
   }
@@ -435,11 +448,12 @@ export async function updateEmploye(
 ): Promise<boolean> {
   exigerAdmin();
   const store = getStore();
+  const avant = JSON.parse(JSON.stringify(store));
   const idx = store.employes.findIndex((e: any) => Number(e.id) === Number(id));
   if (idx === -1) return false;
 
   const mat = Number(employe.numero_matricule);
-  if (!Number.isFinite(mat) || mat <= 0) return false;
+  if (!Number.isInteger(mat) || mat <= 0) return false;
   if (store.employes.some((e: any) => Number(e.numero_matricule) === mat && Number(e.id) !== Number(id))) {
     return false;
   }
@@ -537,7 +551,7 @@ export async function updateEmploye(
       }
 
       if (salaireOuReglementModifie && indexChronoPaie(pAnnee, pMois) >= seuilRecalculPaie) {
-        const enMat = updated.conge_maternite === 1 || estEnCongeMaternite(updated.date_debut_maternite, pAnnee, pMois);
+        const enMat = estEmployeEnCongeMaternite(updated, pAnnee, pMois);
         const ribEff = updated.mode_paiement === 'ESPECES' && !updated.rib ? '' : updated.rib;
         const calc = calculerPaieEmploye(
           {
@@ -611,12 +625,13 @@ export async function updateEmploye(
   if (nouvelActif === 0) {
     retirerPaiesOuvertesDepuisInactif(store, id, dateInactif);
   }
-  return saveStore();
+  return sauvegarderOuRestaurer(store, avant);
 }
 
 export async function toggleActifEmploye(id: number, actif: boolean, dateInactif?: string): Promise<boolean> {
   exigerAdmin();
   const store = getStore();
+  const avant = JSON.parse(JSON.stringify(store));
   const idx = store.employes.findIndex((e: any) => Number(e.id) === id);
   if (idx === -1) return false;
   store.employes[idx].actif = actif ? 1 : 0;
@@ -627,8 +642,7 @@ export async function toggleActifEmploye(id: number, actif: boolean, dateInactif
     store.employes[idx].date_inactif = dt;
     retirerPaiesOuvertesDepuisInactif(store, id, dt);
   }
-  saveStore();
-  return true;
+  return sauvegarderOuRestaurer(store, avant);
 }
 
 // ------------------------------------------------------------------------------
@@ -887,7 +901,7 @@ function construirePaie(
   const cnapsEffectif = String(emp.numero_cnaps || (dernier ? dernier.numero_cnaps : '') || '').trim();
 
   const annees = calculerAnciennete(emp.date_embauche, a, m);
-  const enMaternite = emp.conge_maternite === 1 || estEnCongeMaternite(emp.date_debut_maternite, a, m);
+  const enMaternite = estEmployeEnCongeMaternite(emp, a, m);
   const empCalc = {
     base_aj: emp.base_aj,
     logement_transport: emp.logement_transport,
@@ -950,8 +964,11 @@ export async function initPaieEmploye(
 ): Promise<{ success: boolean; created: boolean }> {
   exigerAdmin();
   const store = getStore();
+  const avant = JSON.parse(JSON.stringify(store));
   const a = Number(annee);
   const m = String(mois).toUpperCase();
+  if (!periodePaieValide(a, m)) return { success: false, created: false };
+  if (store.paies.some(p => Number(p.annee) === a && String(p.mois).toUpperCase() === m && Number(p.verrouille) === 1)) return { success: false, created: false };
   const emp = (store.employes || []).find((e: any) => Number(e.id) === Number(employeId));
   if (!emp) return { success: false, created: false };
 
@@ -965,7 +982,7 @@ export async function initPaieEmploye(
 
   const paiesParEmploye = indexPaiesParEmploye(store);
   store.paies.push(construirePaie(emp, a, m, paiesParEmploye));
-  saveStore();
+  if (!sauvegarderOuRestaurer(store, avant)) return { success: false, created: false };
   return { success: true, created: true };
 }
 
@@ -985,8 +1002,10 @@ export async function initMoisPaie(
 ): Promise<ResultatInitMoisPaie> {
   exigerAdmin();
   const store = getStore();
+  const avant = JSON.parse(JSON.stringify(store));
   const a = Number(annee);
   const m = String(mois).toUpperCase();
+  if (!periodePaieValide(a, m)) return { success: false, initializedCount: 0, message: 'Période invalide.' };
 
   // 1. Vérification stricte de la suite chronologique de l'état (M - 1 doit être initialisé)
   const suite = calculerSuiteChronologiqueInterne(store, a, m);
@@ -1069,7 +1088,7 @@ export async function initMoisPaie(
         store.annees = Array.from(setAnnees).sort((x, y) => x - y);
       }
     }
-    saveStore();
+    if (!sauvegarderOuRestaurer(store, avant)) return { success: false, initializedCount: 0, message: 'Échec de sauvegarde locale.' };
   }
   return { success: true, initializedCount: count };
 }
@@ -1646,7 +1665,10 @@ export async function savePaieSaisie(
   accessoires?: any
 ): Promise<{ success: boolean; updated?: PaieMensuelle }> {
   exigerAdmin();
+  if (!Number.isFinite(avance) || !Number.isFinite(med) || avance < 0 || med < 0) return { success: false };
+  if (accessoires && ['augmentation_divers', 'prime_de_garde', 'anciennete2', 'risque', 'repr_rec'].some(k => accessoires[k] !== undefined && (!Number.isFinite(Number(accessoires[k])) || Number(accessoires[k]) < 0))) return { success: false };
   const store = getStore();
+  const avant = JSON.parse(JSON.stringify(store));
   const idx = store.paies.findIndex((p: any) => Number(p.id) === id);
   if (idx === -1) {
     return { success: false };
@@ -1654,6 +1676,16 @@ export async function savePaieSaisie(
   const row = store.paies[idx];
   if (Number(row.verrouille) === 1) {
     return { success: false };
+  }
+
+  // Saisir une retenue seule ne doit pas recalculer les gains / impôts importés.
+  // Utiliser exactement le même chemin protégé que la saisie en lot.
+  if (accessoires === undefined) {
+    const result = await enregistrerSaisieLot(Number(row.annee), String(row.mois), [{
+      paieId: Number(row.id), avance, med,
+      avanceInitiale: Number(row.avance || 0), medInitial: Number(row.med || 0),
+    }]);
+    return result.success ? { success: true, updated: enrichirLignePaieConges(store, store.paies[idx]) } : { success: false };
   }
 
   const acc = accessoires || {
@@ -1711,7 +1743,7 @@ export async function savePaieSaisie(
   };
 
   store.paies[idx] = updated;
-  saveStore();
+  if (!sauvegarderOuRestaurer(store, avant)) return { success: false };
   return { success: true, updated: enrichirLignePaieConges(store, updated) };
 }
 
@@ -1726,7 +1758,9 @@ export async function savePaieReglement(
   montant: number
 ): Promise<{ success: boolean; updated?: PaieMensuelle }> {
   exigerAdmin();
+  if (!['virement', 'especes'].includes(champ) || !Number.isFinite(montant) || montant < 0) return { success: false };
   const store = getStore();
+  const avant = JSON.parse(JSON.stringify(store));
   const idx = store.paies.findIndex((p: any) => Number(p.id) === Number(id));
   if (idx === -1) return { success: false };
   const row = store.paies[idx];
@@ -1734,6 +1768,8 @@ export async function savePaieReglement(
 
   const net = Math.max(0, Number(row.net || 0));
   const val = Math.max(0, Math.round(Number(montant || 0) * 100) / 100);
+
+  if (val > net) return { success: false };
 
   let virement: number;
   let especes: number;
@@ -1752,15 +1788,17 @@ export async function savePaieReglement(
     date_modification: nowStamp(),
   };
   store.paies[idx] = updated;
-  saveStore();
+  if (!sauvegarderOuRestaurer(store, avant)) return { success: false };
   return { success: true, updated: enrichirLignePaieConges(store, updated) };
 }
 
 export async function cloturerMois(annee: number, mois: string, skipAutoSqlBackup = false): Promise<boolean> {
   exigerAdmin();
   const store = getStore();
+  const avant = JSON.parse(JSON.stringify(store));
   const a = Number(annee);
   const m = String(mois).toUpperCase();
+  if (!periodePaieValide(a, m)) return false;
   let touched = 0;
   for (const p of store.paies) {
     if (Number(p.annee) === a && String(p.mois).toUpperCase() === m) {
@@ -1769,7 +1807,8 @@ export async function cloturerMois(annee: number, mois: string, skipAutoSqlBacku
       touched++;
     }
   }
-  if (touched) saveStore();
+  if (!touched) return false;
+  if (!sauvegarderOuRestaurer(store, avant)) return false;
   if (!skipAutoSqlBackup) {
     await exporterSauvegardeSqlLocale({
       type: 'CLOTURE',
@@ -1785,8 +1824,10 @@ export async function deverrouillerMois(annee: number, mois: string, userRole: s
   exigerAdmin();
   if (userRole !== 'Administrateur') return false;
   const store = getStore();
+  const avant = JSON.parse(JSON.stringify(store));
   const a = Number(annee);
   const m = String(mois).toUpperCase();
+  if (!periodePaieValide(a, m)) return false;
   let touched = 0;
   for (const p of store.paies) {
     if (Number(p.annee) === a && String(p.mois).toUpperCase() === m) {
@@ -1795,7 +1836,8 @@ export async function deverrouillerMois(annee: number, mois: string, userRole: s
       touched++;
     }
   }
-  if (touched) saveStore();
+  if (!touched) return false;
+  if (!sauvegarderOuRestaurer(store, avant)) return false;
   return true;
 }
 
@@ -1975,10 +2017,15 @@ export async function importerClasseur(
 ): Promise<ImportRapport> {
   exigerAdmin();
   const store = getStore();
+  const avant = JSON.parse(JSON.stringify(store));
 
   if (options.mode === 'remplacement') {
-    store.employes = [];
-    store.paies = [];
+    // Un remplacement ne doit jamais effacer une période clôturée, ni orpheliner les congés.
+    const protegees = new Set(store.paies.filter(p => Number(p.verrouille) === 1)
+      .map(p => `${Number(p.annee)}|${String(p.mois).toUpperCase()}`));
+    store.paies = store.paies.filter(p => protegees.has(`${Number(p.annee)}|${String(p.mois).toUpperCase()}`));
+    const employesProteges = new Set([...store.paies, ...(store.conges || [])].map(p => Number(p.employe_id)));
+    store.employes = store.employes.filter(e => employesProteges.has(Number(e.id)));
   }
 
   const ecraserFiches = options.mettreAJourFiches !== false;
@@ -2113,7 +2160,7 @@ export async function importerClasseur(
     /* ignore */
   }
 
-  saveStore();
+  if (!sauvegarderOuRestaurer(store, avant)) throw new Error('Import non enregistré : stockage du navigateur indisponible ou plein.');
   return rapport;
 }
 
@@ -2894,6 +2941,7 @@ export async function importerConges(
   options: { mode: 'fusion' | 'remplacement'; ajusterSoldes: boolean }
 ): Promise<CongeImportRapport> {
   const store = getStore();
+  const avant = JSON.parse(JSON.stringify(store));
   if (!storeEstSynchronise()) {
     return { importees: 0, ignores: 0, ajustements: 0, nonTrouves: [], messages: ['Les données ont changé dans un autre onglet. Rechargez la page.'] };
   }
@@ -3006,7 +3054,7 @@ export async function importerConges(
     }
   }
 
-  if (!saveStore()) return { ...rapport, importees: 0, ajustements: 0, messages: [...rapport.messages, 'Import non sauvegardé.'] };
+  if (!sauvegarderOuRestaurer(store, avant)) return { ...rapport, importees: 0, ajustements: 0, messages: [...rapport.messages, 'Import non sauvegardé.'] };
   if (rapport.importees) rapport.messages.push(`${rapport.importees} fiche(s) reprise(s). Vérifiez les soldes avant toute décision.`);
   return rapport;
 }
@@ -3044,7 +3092,7 @@ export async function exporterSauvegardeSqlLocale(options: {
     congesOnly,
     date: dateNow,
   });
-  const size = typeof Blob !== 'undefined' ? new Blob([sql]).size : Buffer.byteLength(sql, 'utf8');
+  const size = typeof Blob !== 'undefined' ? new Blob([sql]).size : new TextEncoder().encode(sql).byteLength;
   const downloaded = options.telecharger === false ? false : triggerSqlDownload(filename, sql);
 
   const entree: EntreeHistoriqueSql = {

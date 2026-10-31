@@ -1,5 +1,6 @@
 // npm install ; node scripts/test-workbook.cjs
 const assert = require('node:assert/strict');
+const { isDeepStrictEqual } = require('node:util');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -21,10 +22,13 @@ try {
   assert.equal(seed.employes.filter(e => e.actif).length, 48);
   assert.equal(seed.employes.length, 50);
   assert.equal(seed.paies.length, 470);
+  const ecarts = [];
   for (const row of result.paies) {
     const reference = seed.paies.find(p => p.numero_matricule === row.numero_matricule && p.mois === row.mois && p.annee === row.annee);
     assert.ok(reference);
-    for (const key of Object.keys(row)) assert.deepEqual(row[key], reference[key], `${row.mois} ${row.numero_matricule}: ${key}`);
+    for (const key of Object.keys(row)) {
+      if (!isDeepStrictEqual(row[key], reference[key])) ecarts.push({ periode: `${row.mois} ${row.annee}`, matricule: row.numero_matricule, champ: key, classeur: row[key], donneesInitiales: reference[key] });
+    }
     assert.equal(seed.employes.find(e => e.id === reference.employe_id).numero_matricule, row.numero_matricule);
   }
   assert.ok(result.avertissements.some(w => w.includes('OCTOBRE')));
@@ -48,5 +52,7 @@ try {
   store.resetStore();
   assert.equal(store.loadStore().employes[0].nom_prenoms, seed.employes[0].nom_prenoms);
   assert.equal(store.loadStore().paies.length, 470);
-  console.log('Classeur, données initiales et migration : OK');
+  console.log('Migration et réinitialisation du stockage : OK');
+  assert.deepEqual(ecarts, [], 'Les valeurs Excel et les données initiales divergent (aucune correction financière automatique).');
+  console.log('Classeur et données initiales : OK');
 } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
