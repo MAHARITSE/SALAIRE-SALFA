@@ -32,23 +32,26 @@ function getBaremeIrsa(): TrancheIrsaConfig[] {
   return DEFAULT_BAREME_IRSA;
 }
 
-export function calculerAnciennete(dateEmbauche: string, anneeRef: number = new Date().getFullYear()): number {
-  if (!dateEmbauche) return 0;
-  try {
-    let y = 0;
-    if (dateEmbauche.includes('-')) {
-      y = parseInt(dateEmbauche.split('-')[0], 10);
-    } else if (dateEmbauche.includes('/')) {
-      const parts = dateEmbauche.split('/');
-      y = parseInt(parts[2] || parts[0], 10);
-    }
-    if (y > 1900 && y <= anneeRef) {
-      return Math.max(0, anneeRef - y);
-    }
-  } catch {
-    // ignore
-  }
-  return 0;
+/**
+ * Années acquises au mois anniversaire de l'embauche (le jour est ignoré).
+ * moisRef : numéro de mois 1..12 ou nom du mois de paie ; mois courant par défaut.
+ */
+export function calculerAnciennete(
+  dateEmbauche: string,
+  anneeRef: number = new Date().getFullYear(),
+  moisRef: number | string = new Date().getMonth() + 1
+): number {
+  const date = String(dateEmbauche || '').trim();
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(date);
+  const fr = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(date);
+  if (!iso && !fr) return 0;
+  const annee = Number(iso ? iso[1] : fr![3]);
+  const mois = Number(iso ? iso[2] : fr![2]);
+  const jour = Number(iso ? iso[3] : fr![1]);
+  const moisReference = typeof moisRef === 'number' ? moisRef : moisToIndex(moisRef) + 1;
+  if (!Number.isInteger(anneeRef) || !Number.isInteger(moisReference) || moisReference < 1 || moisReference > 12) return 0;
+  if (annee <= 1900 || mois < 1 || mois > 12 || jour < 1 || jour > new Date(annee, mois, 0).getDate()) return 0;
+  return Math.max(0, anneeRef - annee - (moisReference < mois ? 1 : 0));
 }
 
 const MOIS_INDEX: Record<string, number> = {
@@ -57,7 +60,7 @@ const MOIS_INDEX: Record<string, number> = {
 };
 
 export function moisToIndex(mois: string): number {
-  const m = String(mois || '').toUpperCase();
+  const m = String(mois || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
   return MOIS_INDEX[m] !== undefined ? MOIS_INDEX[m] : -1;
 }
 
@@ -103,6 +106,18 @@ export function obtenirIndiceAnciennete(annees: number): number {
   return 1.70;
 }
 
+/** Anniversaire acquis pendant la période, avec indication du changement de palier. */
+export function changementAncienneteDuMois(dateEmbauche: string, annee: number, mois: number | string) {
+  const m = typeof mois === 'number' ? mois : moisToIndex(mois) + 1;
+  if (!Number.isInteger(m) || m < 1 || m > 12) return null;
+  const annees = calculerAnciennete(dateEmbauche, annee, m);
+  const avant = calculerAnciennete(dateEmbauche, m === 1 ? annee - 1 : annee, m === 1 ? 12 : m - 1);
+  if (annees <= avant) return null;
+  const indiceAvant = obtenirIndiceAnciennete(avant);
+  const indice = obtenirIndiceAnciennete(annees);
+  return { avant, annees, indiceAvant, indice, changementPalier: indice !== indiceAvant };
+}
+
 // Version qui prend un bareme custom (pour prévisualisation admin)
 export function obtenirIndiceAncienneteAvecBareme(annees: number, bareme: BaremeAncienneteConfig[]): number {
   const ans = typeof annees === 'number' ? annees : 0;
@@ -117,8 +132,8 @@ export function obtenirIndiceAncienneteAvecBareme(annees: number, bareme: Bareme
   return 1.70;
 }
 
-export function evaluerBaseRevalorisee(baseInitiale: number, dateEmbauche: string, anneeRef: number = new Date().getFullYear()) {
-  const annees = calculerAnciennete(dateEmbauche, anneeRef);
+export function evaluerBaseRevalorisee(baseInitiale: number, dateEmbauche: string, anneeRef: number = new Date().getFullYear(), moisRef: number | string = new Date().getMonth() + 1) {
+  const annees = calculerAnciennete(dateEmbauche, anneeRef, moisRef);
   const indice = obtenirIndiceAnciennete(annees);
   const baseRevalorisee = Math.round(baseInitiale * indice * 100) / 100;
   return {

@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { Employe } from '../types';
 import { createEmploye, updateEmploye } from '../api';
+import { calculerAnciennete } from '../local/calcul';
 import { X, Award, Info, UserX, UserCheck } from 'lucide-react';
 
 const fmt = (val: number | undefined | null) =>
@@ -115,17 +116,7 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
     )
   ).sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
 
-  const calculateAncYear = (d: string) => {
-    if (!d) return 0;
-    try {
-      const y = parseInt(d.split('-')[0] || d.split('/')[2] || '0', 10);
-      if (y > 1900 && y <= new Date().getFullYear()) return Math.max(0, new Date().getFullYear() - y);
-    } catch {
-      /* ignore */
-    }
-    return 0;
-  };
-  const ancYears = calculateAncYear(form.date_embauche);
+  const ancYears = calculerAnciennete(form.date_embauche);
   const getIndice = (y: number) => {
     if (y < 2) return 1.00;
     if (y < 4) return 1.09;
@@ -470,6 +461,7 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
             <div>
               Ancienneté : <b>{ancYears} ans</b> | Indice : <b>x{indice.toFixed(2)}</b>
             </div>
+            <div className="text-[11px]">L’ancienneté augmente au mois anniversaire de l’embauche.</div>
             <div>
               Base revalorisée : <b className="text-sm">{fmt(baseReval)}</b>
             </div>
