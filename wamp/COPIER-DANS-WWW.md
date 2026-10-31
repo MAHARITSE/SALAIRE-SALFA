@@ -36,6 +36,9 @@ jamais le dossier `wamp\` complet, ni le fichier SQL, ni `salfa-config.php`.
 
 Le dossier et le ZIP prêts à copier incluent désormais :
 
+- la pagination du livret s’arrête sur la **dernière fiche de décharge**, sans
+  saut de page forcé après celle-ci ; la page blanche de reliure **avant** la
+  décharge est conservée ;
 - l’ancienneté calculée au **mois anniversaire** de l’embauche ;
 - un **bleu ciel soutenu** sur les lignes des salariés atteignant leur anniversaire
   d’ancienneté pendant le mois affiché, avec un badge **« Nouveau palier »** lorsque
