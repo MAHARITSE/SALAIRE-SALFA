@@ -167,6 +167,35 @@ Reproduction du classeur Excel, en plein écran et imprimable :
 - Rapports & comparaisons, exports Excel (xlsx) et JSON
 - Conformité CGI Madagascar (IRSA) et calcul CNaPS
 
+### Calcul de l’ancienneté
+
+L’ancienneté augmente au **mois anniversaire de l’embauche**, et non en janvier.
+Le jour d’embauche n’intervient pas dans ce calcul mensuel : une embauche le
+15 décembre 2020 donne 5 ans de janvier à novembre 2026, puis 6 ans en décembre.
+Le calcul utilise le mois et l’année du bulletin ; la fiche salarié utilise la
+période courante. Le barème de revalorisation suit ce nombre d’années, mais reste
+informatif : il ne remplace pas le montant saisi ou importé dans `anciennete2`.
+Les données historiques importées explicitement et les bulletins verrouillés ne
+sont pas recalculés automatiquement.
+
+Les lignes dont l’ancienneté augmente au cours du mois affiché sont repérées
+par un **bleu ciel soutenu**, avec un badge « Ancienneté +1 an ». Si l’indice du
+barème change aussi, le badge indique **« Nouveau palier »**. Le calcul du repère
+utilise la date d’embauche et la période affichée, pas la date du poste ni une
+ancienneté historique importée. Il ne modifie aucun montant de paie. La sélection
+d’une ligne reste ambre et le badge demeure visible.
+
+Les en-têtes marqués **↕** permettent un tri croissant, puis décroissant, puis
+le retour à l’ordre initial : état de paie, historique salarié, saisie en lot,
+rapports et comparaisons, suivi des congés et fiches d’absence. Le tri utilise
+les montants bruts et les dates réelles, sans modifier les données enregistrées.
+L’état détaillé des congés trie les **blocs salariés** par identité, soldes annuels
+ou soldes restants ; les lignes internes restent chronologiques. Les exports
+Excel de l’état de paie et des rapports suivent le tri affiché.
+
+Vérifications : `node scripts/test-anciennete.cjs` et
+`node scripts/test-reperes-tri.cjs`.
+
 ## Données du classeur fourni
 
 Les données initiales proviennent de `SALAIRE SALFA 2026.xlsm` : 48 salariés

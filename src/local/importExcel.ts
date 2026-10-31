@@ -1204,7 +1204,7 @@ export function analyserClasseurDetaille(
         nombre_annees:
           map.nombre_annees !== undefined && row[map.nombre_annees] !== null && row[map.nombre_annees] !== ''
             ? Math.round(toNumber(row[map.nombre_annees]))
-            : calculerAnciennete(dateEmb, annee),
+            : calculerAnciennete(dateEmb, annee, mois || ''),
         enfant_a_charge: map.enfant_a_charge !== undefined ? Math.round(toNumber(row[map.enfant_a_charge])) : 0,
         base_aj: map.base_aj !== undefined ? toNumber(row[map.base_aj]) : 0,
         logement_transport: map.logt_trsp !== undefined ? toNumber(row[map.logt_trsp]) : 0,

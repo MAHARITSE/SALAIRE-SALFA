@@ -1,3 +1,7 @@
+import { SortableHeader, useTableSort } from '../SortableHeader';
+import { dateSortValue } from '../../local/tableSort';
+import { changementAncienneteDuMois, moisToIndex } from '../../local/calcul';
+import { AncienneteBadge, AncienneteLegende } from '../AncienneteRepere';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Employe, PaieMensuelle, UserSession } from '../../types';
@@ -527,9 +531,15 @@ export const SalariesSaisieTab: React.FC<Props> = ({
 
   // Filtrage recherche
   const q = normaliserRecherche(search);
-  const rows = paies.filter((p) =>
+  const filteredRows = paies.filter((p) =>
     correspondRecherche(q, p.numero_matricule, p.nom_prenoms, p.jobs, p.categorie)
   );
+
+  const tableSort = useTableSort(filteredRows, Object.fromEntries(ETAT_COLUMNS.map(c => [c.key,
+    c.key === 'dateEmb' ? (p: PaieMensuelle) => dateSortValue(p.date_embauche) : c.rawValue,
+  ])));
+  const rows = tableSort.rows;
+  const nbAnniversaires = rows.filter(p => changementAncienneteDuMois(p.date_embauche, annee, mois)).length;
 
   // Salariés actifs qui n'ont pas encore de ligne de paie ce mois-ci
   const paieEmpIds = new Set(paies.map((p) => p.employe_id));
@@ -931,6 +941,8 @@ export const SalariesSaisieTab: React.FC<Props> = ({
         </div>
       </div>
 
+      <AncienneteLegende count={nbAnniversaires} />
+
       {/* ÉTAT COMPLET EXCEL (32 COLONNES) */}
       <div className="no-print block bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="overflow-auto max-h-[70vh] thin-scrollbar">
@@ -961,7 +973,8 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                         ? 'bg-violet-100/90 dark:bg-violet-950/60 text-violet-900 dark:text-violet-200'
                         : '';
                     return (
-                      <th
+                      <SortableHeader
+                        column={c.key} sort={tableSort}
                         key={c.key}
                         className={`py-2 px-2 whitespace-nowrap border-r border-slate-200 dark:border-slate-600 text-${c.align} ${
                           c.key === 'base_aj' ? 'normal-case' : ''
@@ -975,7 +988,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                       >
                         {c.label}
                         {c.editable && !verrouille ? ' ✎' : ''}
-                      </th>
+                      </SortableHeader>
                     );
                   })}
                   <th className="py-2 px-2 text-center whitespace-nowrap bg-slate-100 dark:bg-slate-700">ACTIONS</th>
@@ -1006,6 +1019,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                   rows.map((p, rowIdx) => {
                     const emp = empById.get(Number(p.employe_id));
                     const mat = emp ? emp.conge_maternite === 1 || emp.conge_maternite === true : false;
+                    const anniversaire = changementAncienneteDuMois(p.date_embauche, annee, mois);
                     const isSelected = selectedPaieId === p.id;
                     const hasSelection = selectedPaieId !== null;
                     const selectedBorder = isSelected
@@ -1020,6 +1034,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                     return (
                       <tr
                         key={p.id}
+                        data-anciennete={anniversaire ? 'true' : undefined}
                         aria-selected={isSelected}
                         data-selected={isSelected ? 'true' : undefined}
                         onClick={() => setSelectedPaieId((prev) => (prev === p.id ? null : p.id))}
@@ -1182,6 +1197,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                               {idx === 1 ? (
                                 <div className="flex items-center gap-1.5">
                                   <span>{cellValue(p, c)}</span>
+                                  {anniversaire && <AncienneteBadge changement={anniversaire} />}
                                   {mat && (
                                     <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-pink-600 text-white font-extrabold">
                                       <Baby className="w-2.5 h-2.5" />½
@@ -1587,6 +1603,11 @@ const EmptyState: React.FC<{
 interface HistoryModalProps { employe: Employe; paies: PaieMensuelle[]; onClose: () => void; }
 
 const EmployeHistoryModal: React.FC<HistoryModalProps> = ({ employe, paies, onClose }) => {
+  const historySort = useTableSort(paies, {
+    periode: p => p.annee * 12 + moisToIndex(p.mois),
+    ...Object.fromEntries(['base_aj', 'salaire_brut', 'cnaps', 'irsa', 'avance', 'med', 'net', 'virement', 'especes', 'conge_pris_mois', 'conge_restant', 'verrouille'].map(key => [key, (p: PaieMensuelle) => Number(p[key as keyof PaieMensuelle] || 0)])),
+  });
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden border dark:border-slate-700 modal-mobile max-h-[95dvh] flex flex-col">
@@ -1601,10 +1622,10 @@ const EmployeHistoryModal: React.FC<HistoryModalProps> = ({ employe, paies, onCl
           {paies.length === 0 ? <div className="text-center py-8 text-slate-500 text-sm">Aucun bulletin.</div> : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:hidden">
-                {paies.map((p) => (<div key={p.id} className="border dark:border-slate-700 rounded-xl p-3 bg-slate-50 dark:bg-slate-700/50"><div className="flex justify-between items-center"><span className="font-bold text-salfa-dark dark:text-white text-sm">{p.mois} {p.annee}</span><span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${p.verrouille === 1 ? 'bg-slate-200 dark:bg-slate-600' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300'}`}>{p.verrouille === 1 ? 'Clôturé' : 'Modifiable'}</span></div><div className="grid grid-cols-2 gap-2 mt-2 text-xs dark:text-slate-300"><div>Brut: <span className="font-mono font-bold">{fmt(p.salaire_brut)}</span></div><div>NET: <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmt(p.net)}</span></div><div>Avance: <span className="font-mono text-red-600">{fmt(p.avance)}</span></div><div>Congé restant: <span className="font-mono font-bold text-violet-700 dark:text-violet-300">{fmtJoursCourt(p.conge_restant)} j</span></div></div></div>))}
+                {historySort.rows.map((p) => (<div key={p.id} className="border dark:border-slate-700 rounded-xl p-3 bg-slate-50 dark:bg-slate-700/50"><div className="flex justify-between items-center"><span className="font-bold text-salfa-dark dark:text-white text-sm">{p.mois} {p.annee}</span><span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${p.verrouille === 1 ? 'bg-slate-200 dark:bg-slate-600' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300'}`}>{p.verrouille === 1 ? 'Clôturé' : 'Modifiable'}</span></div><div className="grid grid-cols-2 gap-2 mt-2 text-xs dark:text-slate-300"><div>Brut: <span className="font-mono font-bold">{fmt(p.salaire_brut)}</span></div><div>NET: <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmt(p.net)}</span></div><div>Avance: <span className="font-mono text-red-600">{fmt(p.avance)}</span></div><div>Congé restant: <span className="font-mono font-bold text-violet-700 dark:text-violet-300">{fmtJoursCourt(p.conge_restant)} j</span></div></div></div>))}
               </div>
               <div className="hidden lg:block overflow-x-auto thin-scrollbar">
-                <table className="w-full text-left border-collapse min-w-[960px]"><thead><tr className="bg-slate-50 dark:bg-slate-700 border-b dark:border-slate-600 text-xs font-bold uppercase text-slate-600 dark:text-slate-300"><th className="py-2 px-3">Période</th><th className="py-2 px-3 text-right normal-case">Base</th><th className="py-2 px-3 text-right">Brut</th><th className="py-2 px-3 text-right">CNaPS</th><th className="py-2 px-3 text-right">IRSA</th><th className="py-2 px-3 text-right">AVANCE</th><th className="py-2 px-3 text-right">MED</th><th className="py-2 px-4 text-right">NET</th><th className="py-2 px-3 text-right">VIREMENT</th><th className="py-2 px-3 text-right">ESPÈCES</th><th className="py-2 px-3 text-right">Congé pris</th><th className="py-2 px-3 text-right">Congé restant</th><th className="py-2 px-3 text-center">Statut</th></tr></thead><tbody className="divide-y dark:divide-slate-700 text-sm dark:text-slate-200">{paies.map((p) => (<tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="py-2 px-3 font-bold">{p.mois} {p.annee}</td><td className="py-2 px-3 text-right font-mono">{fmt(p.base_aj)}</td><td className="py-2 px-3 text-right font-mono font-semibold">{fmt(p.salaire_brut)}</td><td className="py-2 px-3 text-right font-mono text-xs">{fmt(p.cnaps)}</td><td className="py-2 px-3 text-right font-mono text-xs">{fmt(p.irsa)}</td><td className="py-2 px-3 text-right font-mono text-red-600">{fmt(p.avance)}</td><td className="py-2 px-3 text-right font-mono text-red-600">{fmt(p.med)}</td><td className="py-2 px-4 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmt(p.net)}</td><td className="py-2 px-3 text-right font-mono text-sky-700 dark:text-sky-300">{fmt(p.virement)}</td><td className="py-2 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300">{fmt(p.especes)}</td><td className="py-2 px-3 text-right font-mono text-violet-700 dark:text-violet-300">{Number(p.conge_pris_mois || 0) ? `${fmtJoursCourt(p.conge_pris_mois)} j` : '—'}</td><td className="py-2 px-3 text-right font-mono font-bold text-violet-700 dark:text-violet-300">{fmtJoursCourt(p.conge_restant)} j</td><td className="py-2 px-3 text-center text-xs">{p.verrouille === 1 ? <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 font-semibold">Clôturé</span> : <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 font-semibold">Modifiable</span>}</td></tr>))}</tbody></table>
+                <table className="w-full text-left border-collapse min-w-[960px]"><thead><tr className="bg-slate-50 dark:bg-slate-700 border-b dark:border-slate-600 text-xs font-bold uppercase text-slate-600 dark:text-slate-300"><SortableHeader column="periode" sort={historySort} className="py-2 px-3">Période</SortableHeader><SortableHeader column="base_aj" sort={historySort} className="py-2 px-3 text-right normal-case">Base</SortableHeader><SortableHeader column="salaire_brut" sort={historySort} className="py-2 px-3 text-right">Brut</SortableHeader><SortableHeader column="cnaps" sort={historySort} className="py-2 px-3 text-right">CNaPS</SortableHeader><SortableHeader column="irsa" sort={historySort} className="py-2 px-3 text-right">IRSA</SortableHeader><SortableHeader column="avance" sort={historySort} className="py-2 px-3 text-right">AVANCE</SortableHeader><SortableHeader column="med" sort={historySort} className="py-2 px-3 text-right">MED</SortableHeader><SortableHeader column="net" sort={historySort} className="py-2 px-4 text-right">NET</SortableHeader><SortableHeader column="virement" sort={historySort} className="py-2 px-3 text-right">VIREMENT</SortableHeader><SortableHeader column="especes" sort={historySort} className="py-2 px-3 text-right">ESPÈCES</SortableHeader><SortableHeader column="conge_pris_mois" sort={historySort} className="py-2 px-3 text-right">Congé pris</SortableHeader><SortableHeader column="conge_restant" sort={historySort} className="py-2 px-3 text-right">Congé restant</SortableHeader><SortableHeader column="verrouille" sort={historySort} className="py-2 px-3 text-center">Statut</SortableHeader></tr></thead><tbody className="divide-y dark:divide-slate-700 text-sm dark:text-slate-200">{historySort.rows.map((p) => (<tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50"><td className="py-2 px-3 font-bold">{p.mois} {p.annee}</td><td className="py-2 px-3 text-right font-mono">{fmt(p.base_aj)}</td><td className="py-2 px-3 text-right font-mono font-semibold">{fmt(p.salaire_brut)}</td><td className="py-2 px-3 text-right font-mono text-xs">{fmt(p.cnaps)}</td><td className="py-2 px-3 text-right font-mono text-xs">{fmt(p.irsa)}</td><td className="py-2 px-3 text-right font-mono text-red-600">{fmt(p.avance)}</td><td className="py-2 px-3 text-right font-mono text-red-600">{fmt(p.med)}</td><td className="py-2 px-4 text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmt(p.net)}</td><td className="py-2 px-3 text-right font-mono text-sky-700 dark:text-sky-300">{fmt(p.virement)}</td><td className="py-2 px-3 text-right font-mono text-emerald-700 dark:text-emerald-300">{fmt(p.especes)}</td><td className="py-2 px-3 text-right font-mono text-violet-700 dark:text-violet-300">{Number(p.conge_pris_mois || 0) ? `${fmtJoursCourt(p.conge_pris_mois)} j` : '—'}</td><td className="py-2 px-3 text-right font-mono font-bold text-violet-700 dark:text-violet-300">{fmtJoursCourt(p.conge_restant)} j</td><td className="py-2 px-3 text-center text-xs">{p.verrouille === 1 ? <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-600 font-semibold">Clôturé</span> : <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 font-semibold">Modifiable</span>}</td></tr>))}</tbody></table>
               </div>
             </>
           )}

@@ -1,3 +1,5 @@
+import { SortableHeader, useTableSort } from '../SortableHeader';
+import { dateSortValue } from '../../local/tableSort';
 // ==============================================================================
 // ONGLET 5 — CONGÉS & PERMISSIONS (Fiches d'absence)
 // Gestion des congés du personnel pour le comptable (gestionnaire) : saisie des
@@ -205,6 +207,34 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
         (Number(a.employe.numero_matricule) || 0) - (Number(b.employe.numero_matricule) || 0)
       );
   }, [employes, soldes, congesFiltresRecherche, rechercheNormalisee, inclureInactifs]);
+
+  const ficheAccessors = {
+    mat: (c: CongeAbsence) => Number(c.numero_matricule),
+    nom: (c: CongeAbsence) => c.nom_prenoms,
+    motif: (c: CongeAbsence) => `${LIBELLES_CATEGORIE[c.categorie]} ${c.motif_libelle}`,
+    debut: (c: CongeAbsence) => dateSortValue(c.date_debut),
+    retour: (c: CongeAbsence) => c.categorie === 'AJUSTEMENT' ? null : dateSortValue(dateRetourFiche(c)),
+    jours: (c: CongeAbsence) => joursAffiches(c),
+    imputation: (c: CongeAbsence) => c.imputation,
+    remplacant: (c: CongeAbsence) => c.remplacant,
+    statut: (c: CongeAbsence) => LIBELLES_STATUT[c.statut],
+  };
+  const fichesSort = useTableSort(listeFiltree, ficheAccessors);
+  const attenteSort = useTableSort(enAttente, ficheAccessors);
+  const coursSort = useTableSort(congesEnCours, {
+    mat: ({ fiche, employe }) => Number(employe?.numero_matricule || fiche.numero_matricule),
+    nom: ({ fiche, employe }) => employe?.nom_prenoms || fiche.nom_prenoms,
+    debut: ({ fiche }) => dateSortValue(fiche.date_debut),
+    fin: ({ fiche }) => dateSortValue(fiche.date_fin),
+    retour: ({ fiche }) => dateSortValue(dateRetourFiche(fiche)),
+    motif: ({ fiche }) => fiche.motif_libelle,
+  });
+  const soldesSort = useTableSort(soldesListe, {
+    mat: ({ employe }) => Number(employe.numero_matricule),
+    nom: ({ employe }) => employe.nom_prenoms,
+    ...Object.fromEntries(['titreActif', 'resteTitreActif', 'pris', 'attente', 'restant', 'permPris', 'permRestant', 'examenJours'].map(key => [key, ({ solde }: typeof soldesListe[number]) => Number(solde?.[key as keyof SoldeSaisie] || 0)])),
+    ...Object.fromEntries(anneesLoi.map(a => [`titre${a}`, ({ solde }: typeof soldesListe[number]) => solde?.droitsParTitre?.[a] ?? 0])),
+  });
 
   // --------------------------------------------------------------------- actions
   const signaler = (res: { success: boolean; message?: string; avertissement?: string }, succes: string) => {
@@ -501,6 +531,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
         </div>
 
         <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          En-têtes ↕ : tri croissant, décroissant, puis ordre initial. <br />
           <b>Règle des congés SALFA</b> : <b>{encadre(Math.min(30, config.joursCongeParAn))} jours de congé maximum tous les ans</b>, chaque année ({anneesLoi.join(', ')}) étant{' '}
           <b>gérée indépendamment</b> (aucun report ni cumul d'une année sur l'autre), et <b>{encadre(config.joursPermissionParAn)} jours de permission</b> par an.{' '}
           <b>Les personnes inactives n'ont plus aucun droit aux congés (0 j).</b>
@@ -535,8 +566,9 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             ) : (
               <div className="table-responsive thin-scrollbar">
                 <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-100 dark:bg-slate-700"><tr><SortableHeader className="py-2 px-3" column="nom" sort={attenteSort}>Salarié</SortableHeader><SortableHeader className="py-2 px-3" column="motif" sort={attenteSort}>Motif</SortableHeader><SortableHeader className="py-2 px-3" column="debut" sort={attenteSort}>Période</SortableHeader><SortableHeader className="py-2 px-3" column="statut" sort={attenteSort}>Situation</SortableHeader><th className="py-2 px-3">Actions</th></tr></thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {enAttente.map((c) => (
+                    {attenteSort.rows.map((c) => (
                       <tr key={c.id} className="hover:bg-amber-50/40 dark:hover:bg-amber-900/10">
                         <td className="py-2 px-3 w-[220px]">
                           <div className="font-bold text-slate-800 dark:text-slate-100">{c.nom_prenoms}</div>
@@ -619,16 +651,16 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
                 <table className="w-full text-left border-collapse text-xs">
                   <thead className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 uppercase text-[9px]">
                     <tr>
-                      <th className="px-2 py-2 text-center">Mat.</th>
-                      <th className="px-2 py-2">Salarié</th>
-                      <th className="px-2 py-2 text-center">Début du congé</th>
-                      <th className="px-2 py-2 text-center">Fin du congé</th>
-                      <th className="px-2 py-2 text-center">Date de prise de service</th>
-                      <th className="px-2 py-2">Motif</th>
+                      <SortableHeader column="mat" sort={coursSort} className="px-2 py-2 text-center">Mat.</SortableHeader>
+                      <SortableHeader column="nom" sort={coursSort} className="px-2 py-2">Salarié</SortableHeader>
+                      <SortableHeader column="debut" sort={coursSort} className="px-2 py-2 text-center">Début du congé</SortableHeader>
+                      <SortableHeader column="fin" sort={coursSort} className="px-2 py-2 text-center">Fin du congé</SortableHeader>
+                      <SortableHeader column="retour" sort={coursSort} className="px-2 py-2 text-center">Date de prise de service</SortableHeader>
+                      <SortableHeader column="motif" sort={coursSort} className="px-2 py-2">Motif</SortableHeader>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {congesEnCours.map(({ fiche, employe }) => (
+                    {coursSort.rows.map(({ fiche, employe }) => (
                       <tr key={`conge-en-cours-${fiche.id}`} className="hover:bg-sky-50/40 dark:hover:bg-sky-900/10">
                         <td className="px-2 py-2 text-center font-bold">{employe?.numero_matricule || fiche.numero_matricule}</td>
                         <td className="px-2 py-2">
@@ -660,24 +692,24 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
               <table className="w-full text-left border-collapse text-[11px]">
                 <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 uppercase text-[9px]">
                   <tr>
-                    <th className="px-2 py-2 text-center">Mat</th>
-                    <th className="px-2 py-2">Nom &amp; fonction</th>
+                    <SortableHeader column="mat" sort={soldesSort} className="px-2 py-2 text-center">Mat</SortableHeader>
+                    <SortableHeader column="nom" sort={soldesSort} className="px-2 py-2">Nom &amp; fonction</SortableHeader>
                     {anneesLoi.map((a) => (
-                      <th key={a} className="px-2 py-2 text-right" title={`Reliquat de congé sur le Titre ${a}`}>Titre {a}</th>
+                      <SortableHeader column={`titre${a}`} sort={soldesSort} key={a} className="px-2 py-2 text-right" title={`Reliquat de congé sur le Titre ${a}`}>Titre {a}</SortableHeader>
                     ))}
-                    <th className="px-2 py-2 text-center">Titre actif</th>
-                    <th className="px-2 py-2 text-right">Reste Titre</th>
-                    <th className="px-2 py-2 text-right">Pris {annee}</th>
-                    <th className="px-2 py-2 text-right">Attente</th>
-                    <th className="px-2 py-2 text-right">Cumul ({config.nbAnneesCumul} ans)</th>
-                    <th className="px-2 py-2 text-right">Perm. prise</th>
-                    <th className="px-2 py-2 text-right">Perm. reste</th>
-                    <th className="px-2 py-2 text-center">Examens</th>
+                    <SortableHeader column="titreActif" sort={soldesSort} className="px-2 py-2 text-center">Titre actif</SortableHeader>
+                    <SortableHeader column="resteTitreActif" sort={soldesSort} className="px-2 py-2 text-right">Reste Titre</SortableHeader>
+                    <SortableHeader column="pris" sort={soldesSort} className="px-2 py-2 text-right">Pris {annee}</SortableHeader>
+                    <SortableHeader column="attente" sort={soldesSort} className="px-2 py-2 text-right">Attente</SortableHeader>
+                    <SortableHeader column="restant" sort={soldesSort} className="px-2 py-2 text-right">Cumul ({config.nbAnneesCumul} ans)</SortableHeader>
+                    <SortableHeader column="permPris" sort={soldesSort} className="px-2 py-2 text-right">Perm. prise</SortableHeader>
+                    <SortableHeader column="permRestant" sort={soldesSort} className="px-2 py-2 text-right">Perm. reste</SortableHeader>
+                    <SortableHeader column="examenJours" sort={soldesSort} className="px-2 py-2 text-center">Examens</SortableHeader>
                     <th className="px-2 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {soldesListe.map(({ employe, solde }) => (
+                  {soldesSort.rows.map(({ employe, solde }) => (
                     <tr key={employe.id} className={solde!.restant < 0 ? 'bg-red-50/60 dark:bg-red-900/10' : ''}>
                       <td className="px-2 py-1.5 text-center font-bold text-salfa-dark dark:text-white">{employe.numero_matricule}</td>
                       <td className="px-2 py-1.5">
@@ -758,20 +790,20 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
               <table className="w-full text-left border-collapse text-[11px]">
                 <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-200 uppercase text-[9px]">
                   <tr>
-                    <th className="px-2 py-2 text-center">Mat</th>
-                    <th className="px-2 py-2">Salarié</th>
-                    <th className="px-2 py-2">Type / motif</th>
-                    <th className="px-2 py-2">Période (Du … au …)</th>
-                    <th className="px-2 py-2 text-center">Daty fiverenana miasa</th>
-                    <th className="px-2 py-2 text-right">Jours</th>
-                    <th className="px-2 py-2 text-center">Imputation</th>
-                    <th className="px-2 py-2">Remplaçant</th>
-                    <th className="px-2 py-2">Situation</th>
+                    <SortableHeader column="mat" sort={fichesSort} className="px-2 py-2 text-center">Mat</SortableHeader>
+                    <SortableHeader column="nom" sort={fichesSort} className="px-2 py-2">Salarié</SortableHeader>
+                    <SortableHeader column="motif" sort={fichesSort} className="px-2 py-2">Type / motif</SortableHeader>
+                    <SortableHeader column="debut" sort={fichesSort} className="px-2 py-2">Période (Du … au …)</SortableHeader>
+                    <SortableHeader column="retour" sort={fichesSort} className="px-2 py-2 text-center">Daty fiverenana miasa</SortableHeader>
+                    <SortableHeader column="jours" sort={fichesSort} className="px-2 py-2 text-right">Jours</SortableHeader>
+                    <SortableHeader column="imputation" sort={fichesSort} className="px-2 py-2 text-center">Imputation</SortableHeader>
+                    <SortableHeader column="remplacant" sort={fichesSort} className="px-2 py-2">Remplaçant</SortableHeader>
+                    <SortableHeader column="statut" sort={fichesSort} className="px-2 py-2">Situation</SortableHeader>
                     <th className="px-2 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {listeFiltree.map((c) => {
+                  {fichesSort.rows.map((c) => {
                     const retour = c.categorie === 'AJUSTEMENT' ? '' : dateRetourFiche(c);
                     return (
                     <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/40">

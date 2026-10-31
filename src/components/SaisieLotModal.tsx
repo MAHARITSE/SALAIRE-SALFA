@@ -1,3 +1,4 @@
+import { SortableHeader, useTableSort } from './SortableHeader';
 import React, { useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, Banknote, CheckCircle2, Pill, Plus, Search, Trash2, X,
@@ -62,6 +63,11 @@ export const SaisieLotModal: React.FC<Props> = ({
   const montantRef = useRef<HTMLInputElement>(null);
 
   const estAvance = typeSaisie === 'avance';
+  const tableSort = useTableSort(lignes, {
+    salarie: l => l.nom,
+    actuelle: l => estAvance ? l.avanceInitiale : l.medInitial,
+    montant: l => l.montant,
+  });
   const libelleCourt = estAvance ? 'Avance' : 'Médicament';
   const libellePluriel = estAvance ? 'Avances sur salaire' : 'Médicaments (Pharmacie)';
 
@@ -462,11 +468,11 @@ export const SaisieLotModal: React.FC<Props> = ({
             <table className="w-full min-w-[480px] text-sm">
               <thead className="bg-slate-100 dark:bg-slate-700 text-xs uppercase text-slate-600 dark:text-slate-300">
                 <tr>
-                  <th className="text-left p-2.5">Salarié</th>
-                  <th className="text-right p-2.5">{libelleCourt} actuelle</th>
-                  <th className="text-right p-2.5">
+                  <SortableHeader column="salarie" sort={tableSort} className="text-left p-2.5">Salarié</SortableHeader>
+                  <SortableHeader column="actuelle" sort={tableSort} className="text-right p-2.5">{libelleCourt} actuelle</SortableHeader>
+                  <SortableHeader column="montant" sort={tableSort} className="text-right p-2.5">
                     {estAvance ? 'Nouvelle avance' : 'Nouveau médicament'}
-                  </th>
+                  </SortableHeader>
                   <th className="p-2.5 text-center">Actions</th>
                 </tr>
               </thead>
@@ -478,7 +484,7 @@ export const SaisieLotModal: React.FC<Props> = ({
                     </td>
                   </tr>
                 ) : (
-                  lignes.map((l) => (
+                  tableSort.rows.map((l) => (
                     <tr key={l.paieId} className="border-t dark:border-slate-600">
                       <td className="p-2.5">
                         <b>{l.matricule}</b> — {l.nom}

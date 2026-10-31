@@ -589,3 +589,25 @@
 
 /* À l'écran, la feuille reste lisible en thème sombre comme sur papier. */
 .dark .fiche-sheet { color: #111; }
+
+/* Repère d'ancienneté : fond opaque, y compris sur les cellules figées.
+   La sélection ambre reste prioritaire ; le badge conserve l'information. */
+@media screen {
+  tr[data-anciennete="true"]:not([aria-selected="true"]) > td {
+    background-color: #7dd3fc !important;
+    color: #0c2340 !important;
+    border-bottom-color: #38bdf8;
+  }
+  tr[data-anciennete="true"]:not([aria-selected="true"]):hover > td {
+    background-color: #38bdf8 !important;
+  }
+  .dark tr[data-anciennete="true"]:not([aria-selected="true"]) > td {
+    background-color: #075985 !important;
+    color: #f0f9ff !important;
+  }
+  .dark tr[data-anciennete="true"]:not([aria-selected="true"]):hover > td {
+    background-color: #0369a1 !important;
+  }
+  .anciennete-card { background-color: #7dd3fc; }
+  .dark .anciennete-card { background-color: #075985; }
+}

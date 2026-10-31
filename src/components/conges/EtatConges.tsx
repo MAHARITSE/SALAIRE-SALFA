@@ -1,3 +1,4 @@
+import { SortableHeader, useTableSort } from '../SortableHeader';
 // ==============================================================================
 // ÉTAT « CONTRÔLE DES CONGÉS ET PERMISSIONS » — SALFA
 // Reproduction, à l'écran et sur papier, du classeur de suivi de la société :
@@ -308,6 +309,17 @@ export const EtatCongesEcran: React.FC<{
   const { groupes, colonnes } = colonnesEtat(etat.annees);
   const largeur = colonnes.reduce((s, c) => s + c.width, 0);
   const setAnnees = new Set(etat.annees.map((a) => `an${a}`));
+  // Trier les blocs salariés, jamais les lignes chronologiques à l'intérieur d'un bloc.
+  const accessors = {
+    mat: (p: ParcoursConges) => p.numero_matricule,
+    nom: (p: ParcoursConges) => p.nom_prenoms,
+    fonction: (p: ParcoursConges) => p.fonction,
+    conge_restant: (p: ParcoursConges) => p.soldeActuel,
+    perm_restant: (p: ParcoursConges) => p.permissionActuelle,
+    ...Object.fromEntries(etat.annees.map(a => [`an${a}`, (p: ParcoursConges) => p.bilans[a]?.fin ?? null])),
+  };
+  const tableSort = useTableSort(etat.parcours, accessors);
+
 
   return (
     <div className="table-responsive thin-scrollbar etat-scroll max-h-[65vh]">
@@ -332,7 +344,8 @@ export const EtatCongesEcran: React.FC<{
               const estColAnneeEditable = setAnnees.has(String(c.cle)) && Boolean(onSaisirOuverture);
               const estColJoursEditable = (c.cle === 'jours_conge' || c.cle === 'perm_jours') && Boolean(onModifierJours);
               return (
-                <th
+                <SortableHeader
+                  column={c.cle} sort={tableSort} sortable={c.cle in accessors}
                   key={c.cle}
                   title={
                     estColAnneeEditable
@@ -358,7 +371,7 @@ export const EtatCongesEcran: React.FC<{
                       modifiable
                     </span>
                   )}
-                </th>
+                </SortableHeader>
               );
             })}
           </tr>
@@ -367,7 +380,7 @@ export const EtatCongesEcran: React.FC<{
           {etat.parcours.length === 0 && (
             <tr><td colSpan={colonnes.length} className="py-10 text-center text-slate-500 text-sm">Aucun salarié à afficher.</td></tr>
           )}
-          {etat.parcours.map((p) => {
+          {tableSort.rows.map((p) => {
             const lignes = p.lignes.length ? p.lignes : [];
             if (!lignes.length) return null;
 

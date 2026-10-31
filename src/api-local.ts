@@ -531,7 +531,7 @@ export async function updateEmploye(
     if (Number(p.verrouille) !== 1) {
       const pAnnee = Number(p.annee);
       const pMois = String(p.mois).toUpperCase();
-      p.nombre_annees = calculerAnciennete(updated.date_embauche, pAnnee);
+      p.nombre_annees = calculerAnciennete(updated.date_embauche, pAnnee, pMois);
       if (String(oldEmp.rib || '').trim() !== String(updated.rib || '').trim() || (!p.rib && updated.rib)) {
         p.rib = updated.rib;
       }
@@ -886,7 +886,7 @@ function construirePaie(
   const ribEffectif = String(emp.rib || (dernier ? dernier.rib : '') || '').trim();
   const cnapsEffectif = String(emp.numero_cnaps || (dernier ? dernier.numero_cnaps : '') || '').trim();
 
-  const annees = calculerAnciennete(emp.date_embauche, a);
+  const annees = calculerAnciennete(emp.date_embauche, a, m);
   const enMaternite = emp.conge_maternite === 1 || estEnCongeMaternite(emp.date_debut_maternite, a, m);
   const empCalc = {
     base_aj: emp.base_aj,
