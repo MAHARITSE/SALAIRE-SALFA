@@ -25,6 +25,20 @@ Aucun Node.js / npm n'est nécessaire sur le serveur.
 Ne copiez dans `www` **que** le dossier `Salaire_salfa` prêt à l'emploi :
 jamais le dossier `wamp\` complet, ni le fichier SQL, ni `salfa-config.php`.
 
+## Mettre à jour une installation existante
+
+1. Faire une sauvegarde de la base MySQL et conserver le fichier de configuration
+   existant (normalement `C:\wamp64\salfa-config.php`).
+2. Copier le contenu du dossier `wamp\Salaire_salfa\` mis à jour dans
+   `C:\wamp64\www\Salaire_salfa\`, en acceptant le remplacement des fichiers.
+   On peut aussi extraire `wamp\Salaire_salfa.zip` dans un dossier temporaire
+   puis copier le contenu de `Salaire_salfa` au même endroit.
+3. Ne pas réimporter les fichiers SQL et ne pas relancer l'installation initiale :
+   ces opérations ne sont pas nécessaires pour une mise à jour de l'application.
+   Actualiser ensuite le navigateur avec **Ctrl+F5**.
+
+La base MySQL et la configuration du serveur ne sont pas contenues dans le ZIP.
+
 ## Régénérer le dossier après une modification du code (poste de développement)
 
 ```bat
