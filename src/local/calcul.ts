@@ -77,7 +77,7 @@ export function estEnCongeMaternite(
   if (parts.length < 2) return false;
   const yDebut = parseInt(parts[0], 10);
   const mDebut = parseInt(parts[1], 10); // 1..12
-  if (!yDebut || !mDebut) return false;
+  if (!yDebut || mDebut < 1 || mDebut > 12 || !Number.isInteger(annee)) return false;
 
   const cfg = loadConfig();
   const duree = Number(cfg.dureeMaterniteMois) || 3;
@@ -87,6 +87,12 @@ export function estEnCongeMaternite(
   const demandeIndex = Number(annee) * 12 + mIdx;
 
   return demandeIndex >= debutIndex && demandeIndex <= debutIndex + duree - 1;
+}
+
+/** Une date planifiée borne la réduction ; le simple drapeau ne la prolonge pas indéfiniment. */
+export function estEmployeEnCongeMaternite(employe: { conge_maternite?: number | boolean; date_debut_maternite?: string | null }, annee: number, mois: string): boolean {
+  if (employe.date_debut_maternite) return estEnCongeMaternite(employe.date_debut_maternite, annee, mois);
+  return employe.conge_maternite === 1 || employe.conge_maternite === true;
 }
 
 export function obtenirIndiceAnciennete(annees: number): number {
@@ -257,7 +263,7 @@ export function calculerPaieEmploye(
   const cfg = loadConfig();
   const isMaternite = employe.conge_maternite === 1 || employe.conge_maternite === true || accessoires.conge_maternite === 1 || accessoires.conge_maternite === true;
   const base_brute_normale = base_aj + logt_trsp + rendement + resp_repres;
-  const coeffMaternite = Math.max(0, Math.min(100, Number(cfg.tauxMaternite || 50))) / 100;
+  const coeffMaternite = Math.max(0, Math.min(100, Number(cfg.tauxMaternite ?? 50))) / 100;
   const salaire_brut = Math.round((isMaternite ? base_brute_normale * coeffMaternite : base_brute_normale) * 100) / 100;
 
   const tauxCnapsSalariale = (Number(cfg.cnapsSalariale || 0)) / 100;
@@ -289,7 +295,7 @@ export function calculerPaieEmploye(
 
   const plafond = Number(cfg.plafondEspeces) || 0;
   if (rib && rib.length >= 5) {
-    especes = plafond > 0 ? Math.min(plafond, net_a_payer) : net_a_payer;
+    especes = Math.min(Math.max(0, plafond), net_a_payer);
     virement = Math.max(0.0, net_a_payer - (especes as number));
   } else {
     virement = null;

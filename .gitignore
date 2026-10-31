@@ -13,3 +13,8 @@ salfa_data_backup*.json
 # Configuration WAMP locale et adresse du serveur
 salfa-config.php
 wamp/serveur.local.txt
+
+# Fichiers locaux de vérification / compilation
+__pycache__/
+*.py[cod]
+*.tsbuildinfo

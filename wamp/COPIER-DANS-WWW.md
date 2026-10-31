@@ -19,8 +19,15 @@ Aucun Node.js / npm n'est nécessaire sur le serveur.
      - **Comptable** : `comptable` / `comptable123`
    - Si votre MySQL WampServer utilise un mot de passe personnalisé, un formulaire **Configuration MySQL WampServer** s'affiche directement dans la fenêtre de connexion pour l'enregistrer en un clic.
 4. Importer les données historiques dans phpMyAdmin (base `salfa_paie`, onglet *Importer*) :
-   - `wamp/sql/salfa_donnees_excel_2022-2026.sql` (base complète : 70 salariés + paies 2022–2026 + 129 soldes annuels 2024–2026 + 83 fiches historiques), **ou**
+   - `wamp/sql/salfa_donnees_excel_2022-2026.sql` (base complète : 70 salariés + paies 2022–2026 + 129 soldes annuels 2024–2026 + 83 fiches historiques). **Tous les bulletins fournis sont déjà clôturés à l’import** (`verrouille = 1` : 2 390 bulletins, 51 mois, toutes années confondues), **ou**
    - `wamp/sql/salfa_conges_excel.sql` (soldes annuels + historique de congés seuls, sans écraser les paies existantes).
+
+Le SQL complet est un **import initial qui remplace les données des tables métier**,
+pas un simple script de clôture d’une base existante. Sauvegardez votre base avant
+son import ; ne le réimportez pas sur une base de travail pour seulement clôturer
+les mois, car les saisies postérieures seraient remplacées. Les montants du fichier
+fourni restent inchangés. Le SQL dédié aux congés ne touche pas au statut des paies.
+Les futurs mois créés dans l’application restent ouverts jusqu’à leur clôture normale.
 
 Ne copiez dans `www` **que** le dossier `Salaire_salfa` prêt à l'emploi :
 jamais le dossier `wamp\` complet, ni le fichier SQL, ni `salfa-config.php`.

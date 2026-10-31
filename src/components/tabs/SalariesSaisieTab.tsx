@@ -1018,7 +1018,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                 ) : (
                   rows.map((p, rowIdx) => {
                     const emp = empById.get(Number(p.employe_id));
-                    const mat = emp ? emp.conge_maternite === 1 || emp.conge_maternite === true : false;
+                    const mat = Number(p.conge_maternite) === 1;
                     const anniversaire = changementAncienneteDuMois(p.date_embauche, annee, mois);
                     const isSelected = selectedPaieId === p.id;
                     const hasSelection = selectedPaieId !== null;
@@ -1200,7 +1200,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                                   {anniversaire && <AncienneteBadge changement={anniversaire} />}
                                   {mat && (
                                     <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-pink-600 text-white font-extrabold">
-                                      <Baby className="w-2.5 h-2.5" />½
+                                      <Baby className="w-2.5 h-2.5" />MAT
                                     </span>
                                   )}
                                   {emp && idsEnDoublon.has(Number(emp.id)) && (

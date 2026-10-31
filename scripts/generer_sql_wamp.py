@@ -4,6 +4,9 @@
 `CONTROLE CONGE A JOUR SALFA 2026.xlsx` (cases vides = 0), ainsi que les fiches
 historiques conservées pour les anciens salariés.
 
+Tous les bulletins fournis sont importés clôturés (`verrouille = 1`),
+sans modifier les montants ni le statut des nouveaux mois créés dans l’application.
+
 Usage : python3 scripts/generer_sql_wamp.py
 """
 
@@ -160,6 +163,7 @@ def main() -> None:
         "-- Structure : 100 % relationnelle en colonnes et lignes (AUCUN JSON dans MySQL)",
         f"-- Contenu : {len(employes)} salariés, {len(paies)} bulletins de paie ({detail_annees}),",
         f"--           {len(comparaison_net)} comparaisons de net, {len(conges)} fiches de congé/permission.",
+        "-- Tous les bulletins importés sont clôturés (verrouille = 1), toutes années confondues.",
         "-- Comptes par défaut inclus dans `salfa_users` :",
         "--   * admin / admin123 (Administrateur)",
         "--   * comptable / comptable123 (Comptable)",
@@ -488,7 +492,8 @@ def main() -> None:
                 f"{sql_num(p.get('accessoir', 0))}, {sql_num(p.get('brut', 0))}, {sql_num(p.get('avance', 0))}, "
                 f"{sql_num(p.get('med', 0))}, {sql_num(p.get('net', 0))}, {sql_num(p.get('virement'))}, "
                 f"{sql_num(p.get('especes'))}, {sql_str(p.get('rib', ''), 80)}, "
-                f"{1 if p.get('verrouille') else 0}, {1 if p.get('conge_maternite') else 0}, "
+                # Les données historiques fournies doivent être clôturées dès l’import.
+                f"1, {1 if p.get('conge_maternite') else 0}, "
                 f"{sql_str(p.get('date_debut_maternite', ''), 20)}, {sql_str(p.get('date_modification', ''), 32)}){fin}"
             )
         lignes.append("")

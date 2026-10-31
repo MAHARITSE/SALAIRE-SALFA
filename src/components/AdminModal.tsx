@@ -126,7 +126,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
   // Config live pour prévisualisation
   const cfgLive: PaieConfig = useMemo(() => ({
     ...initial,
-    tauxMaternite: Number(tauxMaternite) || 50,
+    tauxMaternite: Number(tauxMaternite),
     dureeMaterniteMois: Number(dureeMaternite) || 3,
     cnapsSalariale: Number(cnapsSalariale) || 0,
     cnapsPatronale: Number(cnapsPatronale) || 0,
@@ -244,8 +244,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
       alert('Barème ancienneté invalide : max < min.');
       return;
     }
-    const cfg: PaieConfig = saveConfig({
-      tauxMaternite: Number(tauxMaternite) || 50,
+    let cfg: PaieConfig;
+    try { cfg = saveConfig({
+      tauxMaternite: Number(tauxMaternite),
       dureeMaterniteMois: Number(dureeMaternite) || 3,
       cnapsSalariale: Number(cnapsSalariale) || 0,
       cnapsPatronale: Number(cnapsPatronale) || 0,
@@ -258,7 +259,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
       baremeAnciennete: [...baremeAnciennete].sort((a, b) => a.min - b.min),
       congies: { ...congies, reportAutorise: false },
       iconeApp,
-    });
+    }); } catch (e) { alert(e instanceof Error ? e.message : 'Sauvegarde impossible.'); return; }
     if (WAMP) { try { await remoteSaveSetting('config', cfg); } catch (e) { alert(e instanceof Error ? e.message : 'Sauvegarde serveur impossible.'); window.location.reload(); return; } }
     applyAppFavicon(cfg.iconeApp || '');
     setTauxMaternite(cfg.tauxMaternite);
@@ -281,7 +282,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
 
   const handleReset = async () => {
     if (!window.confirm("Réinitialiser tous les paramètres de calcul aux valeurs par défaut (Loi Madagascar) ?")) return;
-    const def = resetConfig();
+    let def: PaieConfig;
+    try { def = resetConfig(); } catch (e) { alert(e instanceof Error ? e.message : 'Réinitialisation impossible.'); return; }
     if (WAMP) { try { await remoteSaveSetting('config', def); } catch (e) { alert(e instanceof Error ? e.message : 'Sauvegarde serveur impossible.'); window.location.reload(); return; } }
     setTauxMaternite(def.tauxMaternite);
     setDureeMaternite(def.dureeMaterniteMois);

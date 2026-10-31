@@ -7,6 +7,30 @@ Application **100 % locale** (client-side / React + Vite + TypeScript), déploya
 de données distante** : toutes les données sont stockées dans le `localStorage` du navigateur,
 initialisées à partir du fichier embarqué `src/data/salfa_data.json`.
 
+## Audit et vérifications
+
+Voir le [rapport technique du 31 octobre 2026](docs/AUDIT-2026-10-31.md) : correctifs,
+écarts historiques non corrigés automatiquement et limites de validation WAMP.
+
+```sh
+npm ci
+npm run typecheck
+npm test
+npm run test:sql
+# Avec PHP installé :
+php wamp/test-validation.php
+```
+
+**État connu :** `npm test` signale encore la divergence de ventilation du matricule
+28 en octobre 2026 entre le classeur et les données initiales (11 suites sur 12
+réussissent). `npm audit` signale encore la dépendance Excel `xlsx`. Ces alertes
+ne doivent pas être ignorées ou présentées comme des vérifications réussies.
+
+**Confidentialité :** la variante locale embarque des données nominatives de paie.
+Ne pas la publier sur un site accessible au public pour y protéger des salaires
+par les seuls comptes locaux. Préférer le mode WAMP avec serveur, comptes dédiés,
+HTTPS et restrictions réseau après recette.
+
 ---
 
 ## 🚀 Déploiement sur Cloudflare

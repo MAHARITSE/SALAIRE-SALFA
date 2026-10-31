@@ -15,3 +15,26 @@ check(lockedSafe($store, $unlocked, 'deverrouillerMois', 'Administrateur'), 'dev
 $unlocked['paies'][0]['avance'] = 500;
 check(!lockedSafe($store, $unlocked, 'deverrouillerMois', 'Administrateur'), 'modification pendant deverrouillage');
 echo "Validation serveur et verrouillage : OK\n";
+
+foreach (['INCONNU', 'OCTOBRE '] as $month) {
+    $bad = $store; $bad['paies'][0]['mois'] = $month;
+    check(!validStore($bad), 'mois invalide');
+}
+foreach ([0, 1800, 2200, 2026.5] as $year) {
+    $bad = $store; $bad['paies'][0]['annee'] = $year;
+    check(!validStore($bad), 'annee invalide');
+}
+$bad = $store; $bad['employes'][0] = null;
+check(!validStore($bad), 'ligne salarie malformee');
+$bad = $store; $bad['paies'][0]['id'] = 1.5;
+check(!validStore($bad), 'id fractionnaire');
+$bad = $store; $bad['paies'][0]['net'] = 'pas un montant';
+check(!validStore($bad), 'montant non numerique');
+$bad = $store; $bad['paies'][0]['net'] = INF;
+check(!validStore($bad), 'montant infini');
+$user = ['id'=>1, 'role'=>'Administrateur', 'actif'=>1];
+check(sessionUserStillAllowed($user, $user), 'session active');
+check(!sessionUserStillAllowed($user, false), 'compte supprime');
+check(!sessionUserStillAllowed($user, array_merge($user, ['actif'=>0])), 'session desactivee');
+check(!sessionUserStillAllowed($user, array_merge($user, ['role'=>'Comptable'])), 'role revoque');
+echo "Validation des periodes, montants et revocation de session : OK\n";
