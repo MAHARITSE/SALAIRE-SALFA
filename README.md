@@ -211,7 +211,7 @@ Réservé à l'**Administrateur**, dans **1. Salariés, Saisie & État de paie**
 - les champs absents de la fiche (état civil, CIN, service, nature/durée du contrat, lieux, date d'effet, signature…) restent à compléter dans l'éditeur ;
 - les rubriques groupées **logement/transport** et **responsabilité/représentation** ne sont pas ventilées automatiquement vers les indemnités séparées du contrat ;
 - aperçu du contrat, **impression A4 portrait**, export **PDF** et **Word (.docx)** ;
-- un contrat incomplet peut être exporté comme **projet** : il porte la mention « PROJET — À COMPLÉTER AVANT SIGNATURE » et affiche **`-`** pour chaque information manquante ;
+- un contrat incomplet reste signalé dans l’éditeur et par le nom du fichier exporté ; le document affiche **`-`** pour chaque information manquante, sans mention de projet ;
 - les compléments saisis dans l'éditeur ne modifient ni la fiche salarié ni la paie et ne sont pas conservés après fermeture : téléchargez le contrat pour le garder.
 
 Le modèle Word est dérivé de `CONTRAT DE TRAVAIL SALFA.docx` sans réécrire les clauses.

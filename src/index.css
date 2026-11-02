@@ -722,18 +722,14 @@
   .contrat-print .contrat-entete { break-inside: avoid; page-break-inside: avoid; }
   .contrat-print .contrat-titre { break-after: avoid; page-break-after: avoid; }
   .contrat-print .contrat-article h3 { break-after: avoid; page-break-after: avoid; }
-  .contrat-print .contrat-multi .contrat-section {
-    break-after: page;
-    page-break-after: always;
-  }
-  .contrat-print .contrat-multi .contrat-section:last-child {
-    break-after: auto;
-    page-break-after: auto;
+  .contrat-print .contrat-multi .contrat-section + .contrat-section {
+    break-before: page;
+    page-break-before: always;
   }
   /* La signature reste groupée, mais utilise la place disponible sur la page courante. */
 }
 
-@media (max-width: 640px) {
+@media screen and (max-width: 640px) {
   .contrat-sheet { padding: 8mm 6mm 12mm; font-size: 10pt; }
   .contrat-entete { gap: 3mm; }
   .contrat-logo { width: 14mm; height: 18mm; }

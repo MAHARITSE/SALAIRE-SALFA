@@ -270,7 +270,6 @@ export function construireContrat(donnees: ContratDonnees): ContratDocument {
   const blocs: BlocContrat[] = [
     { type: 'titre', texte: 'CONTRAT DE TRAVAIL' },
   ];
-  if (mentionProjet) blocs.push({ type: 'mention', texte: mentionProjet });
   blocs.push(
     { type: 'paragraphe', texte: `Entre la SAMPAN’ASA LOTERANA MOMBA NY FAHASALAMANA (SALFA), dénommée, l’employeur, représenté par ${v('representant')}` },
     champ('nom_prenoms', `${labelCivilite} :`, valeurTexte(donnees.nom_prenoms) || PLACEHOLDER_CONTRAT),
@@ -326,7 +325,7 @@ export function valeursModeleContrat(doc: ContratDocument): Record<string, strin
   const nature = valeurTexte(d.nature_contrat);
   const duree = valeurTexte(d.duree_contrat) || (nature === 'CDI' ? 'Durée indéterminée' : '');
   return {
-    mention_projet: doc.mentionProjet,
+    mention_projet: '',
     representant: v('representant'),
     identite: [valeurTexte(d.civilite), valeurTexte(d.nom_prenoms)].filter(Boolean).join(' ') || PLACEHOLDER_CONTRAT,
     date_naissance: formaterDateContrat(d.date_naissance),

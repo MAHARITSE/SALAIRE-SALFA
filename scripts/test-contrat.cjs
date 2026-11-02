@@ -127,7 +127,9 @@ try {
   }
   const sortieProjet = docx.remplirModeleDocx(modeleBytes, projetValeurs);
   const xmlProjet = strFromU8(unzipSync(sortieProjet)['word/document.xml']);
-  assert.ok(xmlProjet.includes(model.MENTION_PROJET_CONTRAT));
+  assert.ok(!xmlProjet.includes(model.MENTION_PROJET_CONTRAT), 'le Word incomplet ne doit pas afficher la mention projet');
+  assert.ok(!xmlProjet.includes('{{mention_projet}}'));
+  assert.ok(!projetInitial.blocs.some(b => b.type === 'mention'), 'la mention projet ne figure pas dans le contenu imprimé');
   assert.ok(xmlProjet.includes('>-</w:t>'), 'le DOCX projet doit contenir des tirets pour les champs manquants');
   assert.ok(!xmlProjet.includes('À compléter'), 'le DOCX projet ne doit plus afficher l’ancien libellé de champ manquant');
 
@@ -151,7 +153,7 @@ try {
   assert.ok(doc.internal.getNumberOfPages() >= 2, 'le contrat doit tenir sur plusieurs pages A4 portrait');
   const joint = textes.map(t => t.s).join(' ').replace(/\s+/g, ' ');
   assert.ok(joint.includes('CONTRAT DE TRAVAIL'));
-  assert.ok(joint.includes(model.MENTION_PROJET_CONTRAT.replace('—', '-')) || joint.includes(model.MENTION_PROJET_CONTRAT));
+  assert.ok(!joint.includes('À COMPLÉTER AVANT SIGNATURE'), 'aucune mention projet sur le PDF');
   assert.ok(joint.includes('La jouissance du congé payé annuel'));
   assert.ok(joint.includes('Le tribunal compétent est celui du lieu d’exécution du travail'.replace('’', "'")));
   assert.ok(textes.some(t => t.s === '-'), 'le PDF projet doit afficher des tirets pour les champs manquants');
@@ -181,6 +183,9 @@ try {
   assert.ok(modal.includes('<option value="">{PLACEHOLDER_CONTRAT}</option>'), 'la nature du contrat utilise le même tiret pour le choix vide');
   assert.ok(!modal.includes('À compléter'), 'l’éditeur de contrat ne doit plus afficher l’ancien libellé de champ manquant');
   assert.ok(modal.includes('createPortal'));
+  assert.match(modal, /contrats\.map\(\(c, idx\)[\s\S]*?<ContratApercu contrat=\{c\}/, 'chaque contrat imprimé doit comporter son propre en-tête');
+  assert.match(css, /\.contrat-section \+ \.contrat-section\s*\{[^}]*break-before:\s*page/s, 'le saut précède uniquement les contrats suivants');
+  assert.ok(!/\.contrat-multi \.contrat-section\s*\{[^}]*break-after:\s*page/s.test(css), 'pas de saut après le dernier contrat');
   assert.ok(css.includes('body:has(.contrat-print) #root { display: none !important; }'));
   assert.ok(css.includes('@page contrat-impression { size: A4 portrait;'));
   assert.ok(!/\.contrat-print\s+\.contrat-signature-bloc\s*\{[^}]*page-break-before:\s*always/s.test(css), 'aucun saut forcé avant la signature');

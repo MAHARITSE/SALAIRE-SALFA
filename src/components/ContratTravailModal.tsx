@@ -98,25 +98,13 @@ export const ContratApercu: React.FC<{
 }> = ({ contrat, contrats }) => {
   if (contrats) {
     return (
-      <article className="contrat-sheet contrat-multi" aria-label="Aperçu des contrats de travail">
-        <header className="contrat-entete">
-          <img src={logoContrat} alt="Logo SALFA" className="contrat-logo" />
-          <div className="contrat-entete-texte">
-            <strong>FIANGONANA LOTERANA MALAGASY</strong>
-            <span>(EGLISE LUTHERIENNE MALGACHE - MALAGASY LUTHERAN CHURCH)</span>
-            <strong>SAMPAN’ASA LOTERANA MOMBA NY FAHASALAMANA</strong>
-            <span>DEPARTEMENT DE SANTE – HEALTH DEPARTMENT — SALFA</span>
-            <span>DISPENSAIRE TANAMBAO - TOBY BETELA TOLIARA BP: 99 Tél:94 416 56</span>
-            <span>NIF: 5000767080 — STAT: 851 125 120 120 001 36</span>
-            <span>E-mail: salfa.tulear@moov.mg</span>
-          </div>
-        </header>
+      <div className="contrat-multi" aria-label="Aperçu des contrats de travail">
         {contrats.map((c, idx) => (
           <section key={idx} className="contrat-section">
-            <BlocsContrat contrat={c} />
+            <ContratApercu contrat={c} />
           </section>
         ))}
-      </article>
+      </div>
     );
   }
   if (!contrat) return null;
@@ -539,7 +527,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
 
           <div className="px-4 sm:px-6 py-3 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2 shrink-0">
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mr-auto">
-              {validation.complets ? 'Contrat complet — à vérifier avant signature.' : 'Les exports incomplets portent la mention « PROJET ».'}
+              {validation.complets ? 'Contrat complet — à vérifier avant signature.' : 'Des champs restent à compléter avant signature.'}
             </p>
             {error && <p className="w-full text-xs text-red-600 dark:text-red-400">{error}</p>}
           </div>
