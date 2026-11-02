@@ -158,8 +158,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
   const [impressionScope, setImpressionScope] = useState<'un' | 'tous'>('un');
   const [openImpressionMenu, setOpenImpressionMenu] = useState<boolean>(false);
   const [openPdfMenu, setOpenPdfMenu] = useState<boolean>(false);
-  const impressionMenuRef = useRef<HTMLDivElement | null>(null);
-  const pdfMenuRef = useRef<HTMLDivElement | null>(null);
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number; type: 'impression' | 'pdf' } | null>(null);
 
   const emp = tries.find(e => Number(e.id) === Number(selectedId)) || null;
   const donnees = emp ? drafts[emp.id] || initialiserContratDepuisEmploye(emp, paieParEmp.get(Number(emp.id))) : null;
@@ -188,11 +187,11 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
   useEffect(() => {
     if (!openImpressionMenu && !openPdfMenu) return;
     const close = (e: MouseEvent) => {
-      if (impressionMenuRef.current && !impressionMenuRef.current.contains(e.target as Node)) {
+      // Fermer quand on clique sur le backdrop (n'importe où en dehors des menus)
+      if (!(e.target as Element).closest('[data-menu-wrapper]')) {
         setOpenImpressionMenu(false);
-      }
-      if (pdfMenuRef.current && !pdfMenuRef.current.contains(e.target as Node)) {
         setOpenPdfMenu(false);
+        setMenuPos(null);
       }
     };
     document.addEventListener('mousedown', close);
@@ -471,92 +470,38 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
             </p>
             {error && <p className="w-full text-xs text-red-600 dark:text-red-400">{error}</p>}
             {/* Impression : un seul contrat ou tous les contrats */}
-            <div ref={impressionMenuRef} className="relative">
-              <button
-                type="button"
-                disabled={!peutExporter || busy !== null}
-                onClick={() => setOpenImpressionMenu((v) => !v)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-bold disabled:opacity-50"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Imprimer</span>
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-              {openImpressionMenu && (
-                <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1 z-40">
-                  <button
-                    type="button"
-                    onClick={() => { setOpenImpressionMenu(false); imprimer('un'); }}
-                    className="w-full px-3.5 py-2.5 text-left text-xs font-semibold hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
-                  >
-                    <FileSignature className="w-4 h-4 text-salfa-teal shrink-0" />
-                    <div>
-                      <div>Imprimer le contrat actuel</div>
-                      <div className="text-[10px] font-normal text-slate-400">
-                        Salarié sélectionné uniquement
-                      </div>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setOpenImpressionMenu(false); imprimer('tous'); }}
-                    className="w-full px-3.5 py-2.5 text-left text-xs font-semibold border-t border-slate-100 dark:border-slate-700 hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
-                  >
-                    <Files className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <div>
-                      <div>Imprimer tous les contrats</div>
-                      <div className="text-[10px] font-normal text-slate-400">
-                        Un contrat par salarié, sauts de page
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              type="button"
+              disabled={!peutExporter || busy !== null}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setMenuPos({ x: rect.left, y: rect.bottom, type: 'impression' });
+                setOpenImpressionMenu(true);
+                setOpenPdfMenu(false);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-bold disabled:opacity-50"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Imprimer</span>
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
 
             {/* Export PDF : un seul contrat ou tous les contrats */}
-            <div ref={pdfMenuRef} className="relative">
-              <button
-                type="button"
-                disabled={!emp || busy !== null}
-                onClick={() => setOpenPdfMenu((v) => !v)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-50"
-              >
-                <FileDown className="w-4 h-4" />
-                <span>{busy === 'pdf' ? 'PDF…' : 'PDF'}</span>
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-              {openPdfMenu && (
-                <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1 z-40">
-                  <button
-                    type="button"
-                    onClick={() => { setOpenPdfMenu(false); exporterPdf('un'); }}
-                    className="w-full px-3.5 py-2.5 text-left text-xs font-semibold hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
-                  >
-                    <FileSignature className="w-4 h-4 text-salfa-teal shrink-0" />
-                    <div>
-                      <div>PDF du contrat actuel</div>
-                      <div className="text-[10px] font-normal text-slate-400">
-                        Salarié sélectionné uniquement
-                      </div>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setOpenPdfMenu(false); exporterPdf('tous'); }}
-                    className="w-full px-3.5 py-2.5 text-left text-xs font-semibold border-t border-slate-100 dark:border-slate-700 hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
-                  >
-                    <Files className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <div>
-                      <div>PDF de tous les contrats</div>
-                      <div className="text-[10px] font-normal text-slate-400">
-                        Un fichier PDF par salarié
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              type="button"
+              disabled={!emp || busy !== null}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setMenuPos({ x: rect.left, y: rect.bottom, type: 'pdf' });
+                setOpenPdfMenu(true);
+                setOpenImpressionMenu(false);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-50"
+            >
+              <FileDown className="w-4 h-4" />
+              <span>{busy === 'pdf' ? 'PDF…' : 'PDF'}</span>
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
             <button type="button" onClick={() => exporter('docx')} disabled={!peutExporter || busy !== null}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-salfa-dark hover:bg-salfa-teal text-white text-sm font-bold disabled:opacity-50">
               <FileType2 className="w-4 h-4" /> {busy === 'docx' ? 'Word…' : 'Word (.docx)'}
@@ -575,6 +520,78 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
         </div>,
         document.body
       )}
+
+      {/* Menus déroulants Impression / PDF (portail pour éviter l'overflow de la modale) */}
+      {menuPos &&
+        createPortal(
+          <div
+            data-menu-wrapper
+            className="fixed z-[60]"
+            style={{ top: menuPos.y, left: menuPos.x }}
+          >
+            {menuPos.type === 'impression' && openImpressionMenu && (
+              <div className="w-64 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setOpenImpressionMenu(false); imprimer('un'); }}
+                  className="w-full px-3.5 py-2.5 text-left text-xs font-semibold hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
+                >
+                  <FileSignature className="w-4 h-4 text-salfa-teal shrink-0" />
+                  <div>
+                    <div>Imprimer le contrat actuel</div>
+                    <div className="text-[10px] font-normal text-slate-400">
+                      Salarié sélectionné uniquement
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setOpenImpressionMenu(false); imprimer('tous'); }}
+                  className="w-full px-3.5 py-2.5 text-left text-xs font-semibold border-t border-slate-100 dark:border-slate-700 hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
+                >
+                  <Files className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div>
+                    <div>Imprimer tous les contrats</div>
+                    <div className="text-[10px] font-normal text-slate-400">
+                      Un contrat par salarié, sauts de page
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )}
+            {menuPos.type === 'pdf' && openPdfMenu && (
+              <div className="w-64 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setOpenPdfMenu(false); exporterPdf('un'); }}
+                  className="w-full px-3.5 py-2.5 text-left text-xs font-semibold hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
+                >
+                  <FileSignature className="w-4 h-4 text-salfa-teal shrink-0" />
+                  <div>
+                    <div>PDF du contrat actuel</div>
+                    <div className="text-[10px] font-normal text-slate-400">
+                      Salarié sélectionné uniquement
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setOpenPdfMenu(false); exporterPdf('tous'); }}
+                  className="w-full px-3.5 py-2.5 text-left text-xs font-semibold border-t border-slate-100 dark:border-slate-700 hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
+                >
+                  <Files className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div>
+                    <div>PDF de tous les contrats</div>
+                    <div className="text-[10px] font-normal text-slate-400">
+                      Un fichier PDF par salarié
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>,
+          document.body
+        )}
     </>
   );
 };
