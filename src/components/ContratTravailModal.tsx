@@ -158,7 +158,8 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
   const [impressionScope, setImpressionScope] = useState<'un' | 'tous'>('un');
   const [openImpressionMenu, setOpenImpressionMenu] = useState<boolean>(false);
   const [openPdfMenu, setOpenPdfMenu] = useState<boolean>(false);
-  const [menuPos, setMenuPos] = useState<{ x: number; y: number; type: 'impression' | 'pdf' } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number; type: 'impression' | 'pdf' | 'word' } | null>(null);
+  const [openWordMenu, setOpenWordMenu] = useState<boolean>(false);
 
   const emp = tries.find(e => Number(e.id) === Number(selectedId)) || null;
   const donnees = emp ? drafts[emp.id] || initialiserContratDepuisEmploye(emp, paieParEmp.get(Number(emp.id))) : null;
@@ -191,6 +192,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
       if (!(e.target as Element).closest('[data-menu-wrapper]')) {
         setOpenImpressionMenu(false);
         setOpenPdfMenu(false);
+        setOpenWordMenu(false);
         setMenuPos(null);
       }
     };
@@ -257,20 +259,38 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
     }
   };
 
-  const exporter = async (format: 'pdf' | 'docx') => {
-    if (format === 'pdf') {
-      await exporterPdf(impressionScope);
-      return;
-    }
-    if (!emp || !contrat || !peutExporter) return;
-    setBusy(format);
+  const exporterDocx = async (scope: 'un' | 'tous') => {
+    if (!emp) return;
+    setBusy('docx');
     setError(null);
     try {
-      await telechargerContratDocx(emp, contrat);
+      if (scope === 'un') {
+        if (!contrat || !peutExporter) return;
+        await telechargerContratDocx(emp, contrat);
+      } else {
+        for (const e of tries) {
+          const d = drafts[e.id] || initialiserContratDepuisEmploye(e, paieParEmp.get(Number(e.id)));
+          const c = construireContrat(d);
+          if (c.validation.erreurs.length > 0) continue;
+          const empObj = tries.find((x) => x.id === e.id)!;
+          await telechargerContratDocx(empObj, c);
+        }
+      }
     } catch (e: any) {
-      setError(e?.message || 'Export impossible. Réessayez.');
+      setError(e?.message || 'Export Word impossible. Réessayez.');
     } finally {
       setBusy(null);
+    }
+  };
+
+  const exporter = async (format: 'pdf' | 'docx', scope?: 'un' | 'tous') => {
+    if (format === 'pdf') {
+      await exporterPdf(scope ?? impressionScope);
+      return;
+    }
+    if (format === 'docx') {
+      await exporterDocx(scope ?? 'un');
+      return;
     }
   };
 
@@ -343,7 +363,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
             <div className="ml-auto flex xl:hidden rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden text-xs font-bold">
               <button type="button" onClick={() => setMobileTab('saisie')} className={`px-3 py-1.5 ${mobileTab === 'saisie' ? 'bg-salfa-dark text-white' : 'bg-white dark:bg-slate-700'}`}>Saisie</button>
 
-              {/* Actions : Imprimer et PDF (en haut pour que les sous-menus ne soient pas hors champ) */}
+              {/* Actions : Imprimer, PDF et Word (en haut pour que les sous-menus ne soient pas hors champ) */}
               <div className="ml-3 flex items-center gap-2">
                 <button
                   type="button"
@@ -353,6 +373,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
                     setMenuPos({ x: rect.left, y: rect.bottom, type: 'impression' });
                     setOpenImpressionMenu(true);
                     setOpenPdfMenu(false);
+                    setOpenWordMenu(false);
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-bold disabled:opacity-50"
                 >
@@ -368,11 +389,28 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
                     setMenuPos({ x: rect.left, y: rect.bottom, type: 'pdf' });
                     setOpenPdfMenu(true);
                     setOpenImpressionMenu(false);
+                    setOpenWordMenu(false);
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-50"
                 >
                   <FileDown className="w-4 h-4" />
                   <span>{busy === 'pdf' ? 'PDF…' : 'PDF'}</span>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={!emp || busy !== null}
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setMenuPos({ x: rect.left, y: rect.bottom, type: 'word' });
+                    setOpenWordMenu(true);
+                    setOpenImpressionMenu(false);
+                    setOpenPdfMenu(false);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-salfa-dark hover:bg-salfa-teal text-white text-sm font-bold disabled:opacity-50"
+                >
+                  <FileType2 className="w-4 h-4" />
+                  <span>{busy === 'docx' ? 'Word…' : 'Word (.docx)'}</span>
                   <ChevronDown className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -503,10 +541,6 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
               {validation.complets ? 'Contrat complet — à vérifier avant signature.' : 'Les exports incomplets portent la mention « PROJET ».'}
             </p>
             {error && <p className="w-full text-xs text-red-600 dark:text-red-400">{error}</p>}
-            <button type="button" onClick={() => exporter('docx')} disabled={!peutExporter || busy !== null}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-salfa-dark hover:bg-salfa-teal text-white text-sm font-bold disabled:opacity-50">
-              <FileType2 className="w-4 h-4" /> {busy === 'docx' ? 'Word…' : 'Word (.docx)'}
-            </button>
           </div>
         </div>
       </div>
@@ -585,6 +619,36 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
                     <div>PDF de tous les contrats</div>
                     <div className="text-[10px] font-normal text-slate-400">
                       Un fichier PDF par salarié
+                    </div>
+                  </div>
+                </button>
+              </div>
+            )}
+            {menuPos.type === 'word' && openWordMenu && (
+              <div className="w-64 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setOpenWordMenu(false); exporterDocx('un'); }}
+                  className="w-full px-3.5 py-2.5 text-left text-xs font-semibold hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
+                >
+                  <FileSignature className="w-4 h-4 text-salfa-teal shrink-0" />
+                  <div>
+                    <div>Word du contrat actuel</div>
+                    <div className="text-[10px] font-normal text-slate-400">
+                      Salarié sélectionné uniquement
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setOpenWordMenu(false); exporterDocx('tous'); }}
+                  className="w-full px-3.5 py-2.5 text-left text-xs font-semibold border-t border-slate-100 dark:border-slate-700 hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
+                >
+                  <Files className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div>
+                    <div>Word de tous les contrats</div>
+                    <div className="text-[10px] font-normal text-slate-400">
+                      Un fichier Word par salarié
                     </div>
                   </div>
                 </button>
