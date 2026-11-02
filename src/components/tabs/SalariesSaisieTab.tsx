@@ -323,6 +323,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
 }) => {
   const effectiveRole = currentUser?.role || userRole || 'Administrateur';
   const [mois, setMois] = useState<string>(() => importedMois || MOIS_LISTE[new Date().getMonth()]);
+  const moisParDefautApplique = useRef<boolean>(false);
 
   useEffect(() => {
     if (importedMois && MOIS_LISTE.includes(importedMois)) {
@@ -348,6 +349,24 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [search, setSearch] = useState<string>('');
+
+  // Ouvre par défaut le dernier mois initialisé/clôturé plutôt que le mois en cours
+  // quand celui-ci n'a pas encore d'état de paie (importedMois prioritaire).
+  useEffect(() => {
+    if (moisParDefautApplique.current) return;
+    if (importedMois) {
+      moisParDefautApplique.current = true;
+      return;
+    }
+    if (suiteChrono?.dernierMoisEtat) {
+      setMois(suiteChrono.dernierMoisEtat.mois);
+      if (suiteChrono.dernierMoisEtat.annee !== annee) {
+        setAnnee(suiteChrono.dernierMoisEtat.annee);
+      }
+    }
+    moisParDefautApplique.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suiteChrono, importedMois]);
 
   // Impression de l'État : état actif seul ou tous les états de l'année
   const [openPrintMenu, setOpenPrintMenu] = useState<boolean>(false);
@@ -531,6 +550,9 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   ])));
   const rows = tableSort.rows;
   const nbAnniversaires = rows.filter(p => changementAncienneteDuMois(p.date_embauche, annee, mois)).length;
+
+  // Salarié de la ligne sélectionnée dans l'état (pour ouvrir son contrat depuis la barre d'outils).
+  const selectedPaie = selectedPaieId ? paies.find((p) => p.id === selectedPaieId) : null;
 
   // Salariés actifs qui n'ont pas encore de ligne de paie ce mois-ci
   const paieEmpIds = new Set(paies.map((p) => p.employe_id));
@@ -922,7 +944,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
           <button
             type="button"
             onClick={() => {
-              setContratInitialEmpId(null);
+              setContratInitialEmpId(selectedPaie ? Number(selectedPaie.employe_id) : null);
               setShowContratModal(true);
             }}
             className="flex items-center justify-center gap-2 bg-white dark:bg-slate-700 border border-salfa-dark/30 dark:border-slate-500 text-salfa-dark dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-slate-600 px-3.5 py-2 rounded-lg font-bold text-xs sm:text-sm shadow-sm transition"
@@ -1447,6 +1469,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
       {showContratModal && (
         <ContratTravailModal
           employes={employes}
+          paies={paies}
           initialEmployeId={contratInitialEmpId}
           userRole={effectiveRole}
           onClose={() => {

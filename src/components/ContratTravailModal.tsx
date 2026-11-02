@@ -10,12 +10,12 @@ import { flushSync } from 'react-dom';
 import {
   X, FileSignature, Printer, FileDown, FileType2, RotateCcw, AlertTriangle, CheckCircle2, Info,
 } from 'lucide-react';
-import { Employe } from '../types';
+import { Employe, PaieMensuelle } from '../types';
 import { estRoleAdmin } from '../local/roles';
 import {
   ContratDonnees, ContratDonneesCles, ContratDocument, construireContrat,
   initialiserContratDepuisEmploye, LIBELLES_CHAMPS_CONTRAT, NATURES_CONTRAT,
-  parseMontantContrat, validerContrat,
+  PLACEHOLDER_CONTRAT, parseMontantContrat, validerContrat,
 } from '../contrat/model';
 import { telechargerContratDocx } from '../contrat/docx';
 import { telechargerContratPdf } from '../contrat/pdf';
@@ -24,6 +24,7 @@ import { formatMontant } from '../local/montants';
 
 interface Props {
   employes: Employe[];
+  paies?: PaieMensuelle[];
   initialEmployeId?: number | null;
   userRole?: string | null;
   onClose: () => void;
@@ -103,16 +104,17 @@ export const ContratApercu: React.FC<{ contrat: ContratDocument }> = ({ contrat 
   </article>
 );
 
-const ContratTravailModalInner: React.FC<Props> = ({ employes, initialEmployeId, onClose }) => {
+const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmployeId, onClose }) => {
   const tries = useMemo(
     () => [...employes].sort((a, b) => Number(a.numero_matricule) - Number(b.numero_matricule)),
     [employes]
   );
   const premierId = initialEmployeId ?? tries[0]?.id ?? null;
+  const paieParEmp = useMemo(() => new Map((paies || []).map((p) => [Number(p.employe_id), p])), [paies]);
   const [selectedId, setSelectedId] = useState<number | null>(premierId);
   const [drafts, setDrafts] = useState<Record<number, ContratDonnees>>(() => {
     const emp = tries.find(e => Number(e.id) === Number(premierId));
-    return emp ? { [emp.id]: initialiserContratDepuisEmploye(emp) } : {};
+    return emp ? { [emp.id]: initialiserContratDepuisEmploye(emp, paieParEmp.get(Number(emp.id))) } : {};
   });
   const [dirtyIds, setDirtyIds] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState<'pdf' | 'docx' | null>(null);
@@ -120,7 +122,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, initialEmployeId,
   const [mobileTab, setMobileTab] = useState<'saisie' | 'apercu'>('saisie');
 
   const emp = tries.find(e => Number(e.id) === Number(selectedId)) || null;
-  const donnees = emp ? drafts[emp.id] || initialiserContratDepuisEmploye(emp) : null;
+  const donnees = emp ? drafts[emp.id] || initialiserContratDepuisEmploye(emp, paieParEmp.get(Number(emp.id))) : null;
   const contrat = useMemo(() => donnees ? construireContrat(donnees) : null, [donnees]);
   const validation = contrat?.validation || validerContrat(initialiserContratDepuisEmploye({} as Employe));
   const peutExporter = Boolean(emp && contrat && validation.erreurs.length === 0);
@@ -145,7 +147,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, initialEmployeId,
     setDrafts(prev => {
       if (prev[id]) return prev;
       const e = tries.find(x => Number(x.id) === id);
-      return e ? { ...prev, [id]: initialiserContratDepuisEmploye(e) } : prev;
+      return e ? { ...prev, [id]: initialiserContratDepuisEmploye(e, paieParEmp.get(Number(e.id))) } : prev;
     });
   };
 
@@ -201,10 +203,10 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, initialEmployeId,
       <div key={cle}>
         <label htmlFor={`contrat-${cle}`} className={labelCls}>{label}</label>
         {opts.textarea ? (
-          <textarea id={`contrat-${cle}`} rows={2} value={donnees[cle]} placeholder={opts.placeholder}
+          <textarea id={`contrat-${cle}`} rows={2} value={donnees[cle]} placeholder={opts.placeholder ?? PLACEHOLDER_CONTRAT}
             onChange={e => maj(cle, e.target.value)} className={cls} />
         ) : (
-          <input id={`contrat-${cle}`} type={opts.type || 'text'} value={donnees[cle]} placeholder={opts.placeholder}
+          <input id={`contrat-${cle}`} type={opts.type || 'text'} value={donnees[cle]} placeholder={opts.placeholder ?? (opts.type === 'date' ? undefined : PLACEHOLDER_CONTRAT)}
             disabled={opts.disabled} onChange={e => maj(cle, e.target.value)} className={cls}
             inputMode={opts.type === 'text' && cle.startsWith('indemnite') || cle === 'salaire_base' ? 'decimal' : undefined} />
         )}
@@ -308,7 +310,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, initialEmployeId,
                       <div>
                         <label htmlFor="contrat-nature" className={labelCls}>Nature du contrat</label>
                         <select id="contrat-nature" value={donnees.nature_contrat} onChange={e => maj('nature_contrat', e.target.value)} className={inputCls}>
-                          <option value="">À compléter</option>
+                          <option value="">{PLACEHOLDER_CONTRAT}</option>
                           {NATURES_CONTRAT.map(n => <option key={n} value={n}>{n}</option>)}
                         </select>
                       </div>
