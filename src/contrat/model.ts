@@ -275,7 +275,7 @@ export function construireContrat(donnees: ContratDonnees): ContratDocument {
     { type: 'paragraphe', texte: `Entre la SAMPAN’ASA LOTERANA MOMBA NY FAHASALAMANA (SALFA), dénommée, l’employeur, représenté par ${v('representant')}` },
     champ('nom_prenoms', `${labelCivilite} :`, valeurTexte(donnees.nom_prenoms) || PLACEHOLDER_CONTRAT),
     { type: 'champ', label: labelNaissance, valeur: `${formaterDateContrat(donnees.date_naissance)} à ${v('lieu_naissance')}`, manquant: validation.champsManquants.includes('date_naissance') || validation.champsManquants.includes('lieu_naissance') },
-    { type: 'champ', label: labelParents, valeur: `${v('pere')} <strong>et de :</strong> ${v('mere')}`, manquant: validation.champsManquants.includes('pere') || validation.champsManquants.includes('mere') },
+    { type: 'champ', label: labelParents, valeur: `${v('pere')} et de : ${v('mere')}`, manquant: validation.champsManquants.includes('pere') || validation.champsManquants.includes('mere') },
     champ('cin', 'Titulaire de la CIN N° :', formaterCinContrat(donnees.cin)),
     { type: 'champ', label: 'Délivrée le :', valeur: `${formaterDateContrat(donnees.date_cin)} à ${v('lieu_cin')}`, manquant: validation.champsManquants.includes('date_cin') || validation.champsManquants.includes('lieu_cin') },
     champ('situation_matrimoniale', 'Situation Matrimoniale :'),

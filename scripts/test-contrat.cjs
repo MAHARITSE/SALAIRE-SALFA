@@ -85,6 +85,7 @@ try {
   assert.equal(validationComplete.complets, true, 'un CDI explicitement choisi n’exige pas de durée saisie');
   const contratComplet = model.construireContrat(complet);
   assert.equal(contratComplet.mentionProjet, '');
+  assert.equal(contratComplet.blocs.find(b => b.type === 'champ' && b.label === 'Fils de :').valeur, 'Père Test et de : Mère Test');
   assert.ok(contratComplet.blocs.some(b => b.type === 'article' && b.numero === 2 && String(b.valeur).includes('Durée indéterminée')));
 
   const invalide = { ...complet, salaire_base: '-1', date_naissance: '1990-02-30' };
@@ -155,6 +156,14 @@ try {
   assert.ok(joint.includes('Le tribunal compétent est celui du lieu d’exécution du travail'.replace('’', "'")));
   assert.ok(textes.some(t => t.s === '-'), 'le PDF projet doit afficher des tirets pour les champs manquants');
   assert.ok(!joint.includes('À compléter'), 'le PDF projet ne doit plus afficher l’ancien libellé de champ manquant');
+  assert.ok(!joint.includes('<strong>') && !joint.includes('</strong>'), 'le PDF ne doit pas afficher de balises HTML');
+  const pdfComplet = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const textesComplets = [];
+  const textComplet = pdfComplet.text.bind(pdfComplet);
+  pdfComplet.text = (txt, x, y, opts) => { textesComplets.push(String(txt)); return textComplet(txt, x, y, opts); };
+  pdf.drawContratPdf(pdfComplet, contratComplet);
+  assert.ok(textesComplets.join(' ').includes('Père Test et de : Mère Test'));
+  assert.ok(!textesComplets.join(' ').includes('<strong>'));
   for (const t of textes) {
     assert.ok(t.y >= 0 && t.y <= 297, `texte hors page verticalement : ${t.s} à ${t.y}`);
     assert.ok(t.x >= 0 && t.x <= 210, `texte hors page horizontalement : ${t.s} à ${t.x}`);
@@ -174,6 +183,8 @@ try {
   assert.ok(modal.includes('createPortal'));
   assert.ok(css.includes('body:has(.contrat-print) #root { display: none !important; }'));
   assert.ok(css.includes('@page contrat-impression { size: A4 portrait;'));
+  assert.ok(!/\.contrat-print\s+\.contrat-signature-bloc\s*\{[^}]*page-break-before:\s*always/s.test(css), 'aucun saut forcé avant la signature');
+  assert.ok(!modal.includes('dangerouslySetInnerHTML'), 'les champs du contrat sont affichés comme du texte');
 
   console.log('Contrats de travail : préremplissage, validation, Word, PDF et impression OK');
 } finally {
