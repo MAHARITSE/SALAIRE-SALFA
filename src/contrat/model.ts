@@ -248,7 +248,11 @@ export function construireContrat(donnees: ContratDonnees): ContratDocument {
   const champ = (key: ContratDonneesCles, label: string, valeur?: string, manquant?: boolean): BlocContrat => ({
     type: 'champ', label, valeur: valeur ?? v(key), manquant: manquant ?? validation.champsManquants.includes(key),
   });
-  const identite = [valeurTexte(donnees.civilite), valeurTexte(donnees.nom_prenoms)].filter(Boolean).join(' ') || PLACEHOLDER_CONTRAT;
+  const civilite = valeurTexte(donnees.civilite);
+  const estFeminin = /^(mme|mlle)/i.test(civilite);
+  const labelCivilite = civilite || 'Mr/Mme/Mlle';
+  const labelNaissance = estFeminin ? 'Née le :' : 'Né le :';
+  const labelParents = estFeminin ? 'Fille de :' : 'Fils de :';
   const nature = valeurTexte(donnees.nature_contrat);
   const duree = valeurTexte(donnees.duree_contrat) || (nature === 'CDI' ? 'Durée indéterminée' : '');
   const natureDuree = [nature, duree].filter(Boolean).join(' — ') || PLACEHOLDER_CONTRAT;
@@ -260,9 +264,9 @@ export function construireContrat(donnees: ContratDonnees): ContratDocument {
   if (mentionProjet) blocs.push({ type: 'mention', texte: mentionProjet });
   blocs.push(
     { type: 'paragraphe', texte: `Entre la SAMPAN’ASA LOTERANA MOMBA NY FAHASALAMANA (SALFA), dénommée, l’employeur, représenté par ${v('representant')}` },
-    champ('nom_prenoms', 'Mr/Mme/Mlle :', identite),
-    { type: 'champ', label: 'Né(e) le :', valeur: `${formaterDateContrat(donnees.date_naissance)} à ${v('lieu_naissance')}`, manquant: validation.champsManquants.includes('date_naissance') || validation.champsManquants.includes('lieu_naissance') },
-    { type: 'champ', label: 'Fils / Fille de :', valeur: `${v('pere')} et de : ${v('mere')}`, manquant: validation.champsManquants.includes('pere') || validation.champsManquants.includes('mere') },
+    champ('nom_prenoms', `${labelCivilite} :`, valeurTexte(donnees.nom_prenoms) || PLACEHOLDER_CONTRAT),
+    { type: 'champ', label: labelNaissance, valeur: `${formaterDateContrat(donnees.date_naissance)} à ${v('lieu_naissance')}`, manquant: validation.champsManquants.includes('date_naissance') || validation.champsManquants.includes('lieu_naissance') },
+    { type: 'champ', label: labelParents, valeur: `${v('pere')} <strong>et de :</strong> ${v('mere')}`, manquant: validation.champsManquants.includes('pere') || validation.champsManquants.includes('mere') },
     champ('cin', 'Titulaire de la CIN N° :'),
     { type: 'champ', label: 'Délivrée le :', valeur: `${formaterDateContrat(donnees.date_cin)} à ${v('lieu_cin')}`, manquant: validation.champsManquants.includes('date_cin') || validation.champsManquants.includes('lieu_cin') },
     champ('situation_matrimoniale', 'Situation Matrimoniale :'),
