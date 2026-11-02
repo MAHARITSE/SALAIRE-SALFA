@@ -186,7 +186,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
   }, [dirtyIds]);
 
   useEffect(() => {
-    if (!openImpressionMenu && !openPdfMenu) return;
+    if (!openImpressionMenu && !openPdfMenu && !openWordMenu) return;
     const close = (e: MouseEvent) => {
       // Fermer quand on clique sur le backdrop (n'importe où en dehors des menus)
       if (!(e.target as Element).closest('[data-menu-wrapper]')) {
@@ -199,7 +199,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openImpressionMenu, openPdfMenu]);
+  }, [openImpressionMenu, openPdfMenu, openWordMenu]);
 
   const choisir = (id: number) => {
     setSelectedId(id);
@@ -363,14 +363,18 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
             <div className="ml-auto flex xl:hidden rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden text-xs font-bold">
               <button type="button" onClick={() => setMobileTab('saisie')} className={`px-3 py-1.5 ${mobileTab === 'saisie' ? 'bg-salfa-dark text-white' : 'bg-white dark:bg-slate-700'}`}>Saisie</button>
 
-              {/* Actions : Imprimer, PDF et Word (en haut pour que les sous-menus ne soient pas hors champ) */}
-              <div className="ml-3 flex items-center gap-2">
+              <button type="button" onClick={() => setMobileTab('apercu')} className={`px-3 py-1.5 ${mobileTab === 'apercu' ? 'bg-salfa-dark text-white' : 'bg-white dark:bg-slate-700'}`}>Aperçu</button>
+            </div>
+          </div>
+
+          {/* Actions toujours visibles en haut, sur ordinateur comme sur mobile. */}
+          <div className="px-4 sm:px-6 py-2 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2 shrink-0">
                 <button
                   type="button"
                   disabled={!peutExporter || busy !== null}
                   onClick={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
-                    setMenuPos({ x: rect.left, y: rect.bottom, type: 'impression' });
+                    setMenuPos({ x: Math.max(8, Math.min(rect.left, window.innerWidth - 264)), y: rect.bottom, type: 'impression' });
                     setOpenImpressionMenu(true);
                     setOpenPdfMenu(false);
                     setOpenWordMenu(false);
@@ -386,7 +390,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
                   disabled={!emp || busy !== null}
                   onClick={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
-                    setMenuPos({ x: rect.left, y: rect.bottom, type: 'pdf' });
+                    setMenuPos({ x: Math.max(8, Math.min(rect.left, window.innerWidth - 264)), y: rect.bottom, type: 'pdf' });
                     setOpenPdfMenu(true);
                     setOpenImpressionMenu(false);
                     setOpenWordMenu(false);
@@ -402,7 +406,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
                   disabled={!emp || busy !== null}
                   onClick={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
-                    setMenuPos({ x: rect.left, y: rect.bottom, type: 'word' });
+                    setMenuPos({ x: Math.max(8, Math.min(rect.left, window.innerWidth - 264)), y: rect.bottom, type: 'word' });
                     setOpenWordMenu(true);
                     setOpenImpressionMenu(false);
                     setOpenPdfMenu(false);
@@ -413,9 +417,6 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
                   <span>{busy === 'docx' ? 'Word…' : 'Word (.docx)'}</span>
                   <ChevronDown className="w-3.5 h-3.5" />
                 </button>
-              </div>
-              <button type="button" onClick={() => setMobileTab('apercu')} className={`px-3 py-1.5 ${mobileTab === 'apercu' ? 'bg-salfa-dark text-white' : 'bg-white dark:bg-slate-700'}`}>Aperçu</button>
-            </div>
           </div>
 
           <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-2">
@@ -561,11 +562,11 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
         createPortal(
           <div
             data-menu-wrapper
-            className="fixed z-[60]"
+            className="fixed z-[80]"
             style={{ top: menuPos.y, left: menuPos.x }}
           >
             {menuPos.type === 'impression' && openImpressionMenu && (
-              <div className="w-64 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
+              <div className="w-64 max-w-[calc(100vw-16px)] rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setOpenImpressionMenu(false); imprimer('un'); }}
@@ -595,7 +596,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
               </div>
             )}
             {menuPos.type === 'pdf' && openPdfMenu && (
-              <div className="w-64 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
+              <div className="w-64 max-w-[calc(100vw-16px)] rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setOpenPdfMenu(false); exporterPdf('un'); }}
@@ -625,7 +626,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
               </div>
             )}
             {menuPos.type === 'word' && openWordMenu && (
-              <div className="w-64 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
+              <div className="w-64 max-w-[calc(100vw-16px)] rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setOpenWordMenu(false); exporterDocx('un'); }}
