@@ -57,7 +57,7 @@ const BlocsContrat: React.FC<{ contrat: ContratDocument }> = ({ contrat }) => (
           return (
             <p key={i} className="contrat-champ">
               <strong>{bloc.label}</strong>{' '}
-              <span className={bloc.manquant ? 'contrat-manquant' : undefined} dangerouslySetInnerHTML={{ __html: bloc.valeur }} />
+              <span className={bloc.manquant ? 'contrat-manquant' : undefined}>{bloc.valeur}</span>
             </p>
           );
         case 'article':

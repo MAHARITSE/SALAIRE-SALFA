@@ -730,11 +730,7 @@
     break-after: auto;
     page-break-after: auto;
   }
-  /* Éviter la page 3 : la signature commence toujours sur une nouvelle page (page 2 du contrat) */
-  .contrat-print .contrat-signature-bloc {
-    break-before: page;
-    page-break-before: always;
-  }
+  /* La signature reste groupée, mais utilise la place disponible sur la page courante. */
 }
 
 @media (max-width: 640px) {
