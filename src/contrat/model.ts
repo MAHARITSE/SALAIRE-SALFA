@@ -157,6 +157,15 @@ export function formaterMontantContrat(raw: string): string {
   return formatMontant(n, { unite: true });
 }
 
+/** Formate un CIN avec séparateur de millier, sans décimales (ex: 863 892). */
+export function formaterCinContrat(raw: string): string {
+  const s = valeurTexte(raw);
+  if (!s) return PLACEHOLDER_CONTRAT;
+  const n = Number(s.replace(/[^\d]/g, ''));
+  if (!Number.isFinite(n)) return s;
+  return n.toLocaleString('fr-FR', { maximumFractionDigits: 0 });
+}
+
 export function formaterDateContrat(raw: string): string {
   const s = valeurTexte(raw);
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
@@ -267,7 +276,7 @@ export function construireContrat(donnees: ContratDonnees): ContratDocument {
     champ('nom_prenoms', `${labelCivilite} :`, valeurTexte(donnees.nom_prenoms) || PLACEHOLDER_CONTRAT),
     { type: 'champ', label: labelNaissance, valeur: `${formaterDateContrat(donnees.date_naissance)} à ${v('lieu_naissance')}`, manquant: validation.champsManquants.includes('date_naissance') || validation.champsManquants.includes('lieu_naissance') },
     { type: 'champ', label: labelParents, valeur: `${v('pere')} <strong>et de :</strong> ${v('mere')}`, manquant: validation.champsManquants.includes('pere') || validation.champsManquants.includes('mere') },
-    champ('cin', 'Titulaire de la CIN N° :'),
+    champ('cin', 'Titulaire de la CIN N° :', formaterCinContrat(donnees.cin)),
     { type: 'champ', label: 'Délivrée le :', valeur: `${formaterDateContrat(donnees.date_cin)} à ${v('lieu_cin')}`, manquant: validation.champsManquants.includes('date_cin') || validation.champsManquants.includes('lieu_cin') },
     champ('situation_matrimoniale', 'Situation Matrimoniale :'),
     champ('adresse', 'Demeurant à :'),
@@ -324,7 +333,7 @@ export function valeursModeleContrat(doc: ContratDocument): Record<string, strin
     lieu_naissance: v('lieu_naissance'),
     pere: v('pere'),
     mere: v('mere'),
-    cin: v('cin'),
+    cin: formaterCinContrat(d.cin),
     date_cin: formaterDateContrat(d.date_cin),
     lieu_cin: v('lieu_cin'),
     situation_matrimoniale: v('situation_matrimoniale'),
