@@ -342,7 +342,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
           <div className="px-4 sm:px-6 py-3 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-3 shrink-0">
             <label className="text-xs font-bold text-slate-600 dark:text-slate-300" htmlFor="contrat-salarie">Salarié</label>
             <select id="contrat-salarie" value={selectedId ?? ''} onChange={e => choisir(Number(e.target.value))}
-              className={`${inputCls} max-w-md`}>
+              className={`${inputCls} sm:!w-64 xl:!w-80 max-w-full`}>
               {tries.map(e => (
                 <option key={e.id} value={e.id}>
                   Mat {e.numero_matricule} — {e.nom_prenoms}{Number(e.actif) !== 1 ? ' (inactif)' : ''}
@@ -355,20 +355,15 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
                   <CheckCircle2 className="w-3.5 h-3.5" /> Complet
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-                  <AlertTriangle className="w-3.5 h-3.5" /> Projet — {validation.champsManquants.length} champ(s) à compléter
+                <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                  title={`Projet — ${validation.champsManquants.length} champ(s) à compléter`}
+                  aria-label={`Projet — ${validation.champsManquants.length} champ(s) à compléter`}>
+                  Projet — <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" /> {validation.champsManquants.length}
                 </span>
               )
             )}
-            <div className="ml-auto flex xl:hidden rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden text-xs font-bold">
-              <button type="button" onClick={() => setMobileTab('saisie')} className={`px-3 py-1.5 ${mobileTab === 'saisie' ? 'bg-salfa-dark text-white' : 'bg-white dark:bg-slate-700'}`}>Saisie</button>
-
-              <button type="button" onClick={() => setMobileTab('apercu')} className={`px-3 py-1.5 ${mobileTab === 'apercu' ? 'bg-salfa-dark text-white' : 'bg-white dark:bg-slate-700'}`}>Aperçu</button>
-            </div>
-          </div>
-
-          {/* Actions toujours visibles en haut, sur ordinateur comme sur mobile. */}
-          <div className="px-4 sm:px-6 py-2 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2 shrink-0">
+            {/* Les actions restent à droite sur grand écran et passent à la ligne si nécessaire. */}
+            <div className="ml-auto flex flex-wrap justify-end items-center gap-2">
                 <button
                   type="button"
                   disabled={!peutExporter || busy !== null}
@@ -417,6 +412,11 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
                   <span>{busy === 'docx' ? 'Word…' : 'Word (.docx)'}</span>
                   <ChevronDown className="w-3.5 h-3.5" />
                 </button>
+            </div>
+            <div className="flex xl:hidden rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden text-xs font-bold">
+              <button type="button" onClick={() => setMobileTab('saisie')} className={`px-3 py-1.5 ${mobileTab === 'saisie' ? 'bg-salfa-dark text-white' : 'bg-white dark:bg-slate-700'}`}>Saisie</button>
+              <button type="button" onClick={() => setMobileTab('apercu')} className={`px-3 py-1.5 ${mobileTab === 'apercu' ? 'bg-salfa-dark text-white' : 'bg-white dark:bg-slate-700'}`}>Aperçu</button>
+            </div>
           </div>
 
           <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-2">
