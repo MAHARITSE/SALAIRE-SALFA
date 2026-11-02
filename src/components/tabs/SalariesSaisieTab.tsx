@@ -1292,7 +1292,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                                 >
                                   <Edit3 className="w-3.5 h-3.5" />
                                 </button>
-                                <button
+                                {Number(emp.actif) === 1 && <button
                                   onClick={() => {
                                     setContratInitialEmpId(emp.id);
                                     setShowContratModal(true);
@@ -1302,7 +1302,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                                   aria-label={`Contrat de travail de ${emp.nom_prenoms}`}
                                 >
                                   <FileSignature className="w-3.5 h-3.5" />
-                                </button>
+                                </button>}
                                 <button
                                   onClick={() => {
                                     setFusionInitialEmpId(emp.id);

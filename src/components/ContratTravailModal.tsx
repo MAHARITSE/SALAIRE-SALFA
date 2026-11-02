@@ -129,10 +129,10 @@ export const ContratApercu: React.FC<{
 
 const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmployeId, onClose }) => {
   const tries = useMemo(
-    () => [...employes].sort((a, b) => Number(a.numero_matricule) - Number(b.numero_matricule)),
+    () => employes.filter(e => Number(e.actif) === 1).sort((a, b) => Number(a.numero_matricule) - Number(b.numero_matricule)),
     [employes]
   );
-  const premierId = initialEmployeId ?? tries[0]?.id ?? null;
+  const premierId = tries.find(e => Number(e.id) === Number(initialEmployeId))?.id ?? tries[0]?.id ?? null;
   const paieParEmp = useMemo(() => new Map((paies || []).map((p) => [Number(p.employe_id), p])), [paies]);
   const [selectedId, setSelectedId] = useState<number | null>(premierId);
   const [drafts, setDrafts] = useState<Record<number, ContratDonnees>>(() => {
@@ -149,7 +149,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
   const [menuPos, setMenuPos] = useState<{ x: number; y: number; type: 'impression' | 'pdf' | 'word' } | null>(null);
   const [openWordMenu, setOpenWordMenu] = useState<boolean>(false);
 
-  const emp = tries.find(e => Number(e.id) === Number(selectedId)) || null;
+  const emp = tries.find(e => Number(e.id) === Number(selectedId)) || tries[0] || null;
   const donnees = emp ? drafts[emp.id] || initialiserContratDepuisEmploye(emp, paieParEmp.get(Number(emp.id))) : null;
   const contrat = useMemo(() => donnees ? construireContrat(donnees) : null, [donnees]);
   const validation = contrat?.validation || validerContrat(initialiserContratDepuisEmploye({} as Employe));
@@ -329,11 +329,12 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
 
           <div className="px-4 sm:px-6 py-3 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-3 shrink-0">
             <label className="text-xs font-bold text-slate-600 dark:text-slate-300" htmlFor="contrat-salarie">Salarié</label>
-            <select id="contrat-salarie" value={selectedId ?? ''} onChange={e => choisir(Number(e.target.value))}
-              className={`${inputCls} sm:!w-64 xl:!w-80 max-w-full`}>
+            <select id="contrat-salarie" value={emp?.id ?? ''} onChange={e => choisir(Number(e.target.value))}
+              disabled={!emp} className={`${inputCls} sm:!w-64 xl:!w-80 max-w-full`}>
+              {!emp && <option value="">Aucun salarié actif</option>}
               {tries.map(e => (
                 <option key={e.id} value={e.id}>
-                  Mat {e.numero_matricule} — {e.nom_prenoms}{Number(e.actif) !== 1 ? ' (inactif)' : ''}
+                  Mat {e.numero_matricule} — {e.nom_prenoms}
                 </option>
               ))}
             </select>
@@ -410,7 +411,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
           <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-2">
             <div className={`overflow-y-auto thin-scrollbar p-4 sm:p-6 space-y-4 ${mobileTab === 'saisie' ? '' : 'hidden xl:block'}`}>
               {!emp || !donnees || !contrat ? (
-                <p className="text-sm text-slate-500">Aucun salarié disponible. Créez d’abord une fiche salarié.</p>
+                <p className="text-sm text-slate-500">Aucun salarié actif disponible.</p>
               ) : (
                 <>
                   <div className="rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 p-3 text-[11px] text-sky-900 dark:text-sky-200 flex gap-2">
