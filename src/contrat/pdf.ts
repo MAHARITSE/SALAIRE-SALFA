@@ -199,9 +199,6 @@ export function drawContratPdf(doc: jsPDF, contrat: ContratDocument): void {
     doc.setDrawColor(0);
     doc.setLineWidth(0.2);
     doc.line(MX, PAGE_H - 12, PAGE_W - MX, PAGE_H - 12);
-    if (contrat.mentionProjet) {
-      doc.text(cleanPdfText(contrat.mentionProjet), MX, PAGE_H - 8);
-    }
     doc.text(`Page ${i} / ${totalPages}`, PAGE_W - MX, PAGE_H - 8, { align: 'right' });
   }
   // La variable page est conservée pour les tests et évolutions de pagination.
