@@ -342,6 +342,40 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
             )}
             <div className="ml-auto flex xl:hidden rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden text-xs font-bold">
               <button type="button" onClick={() => setMobileTab('saisie')} className={`px-3 py-1.5 ${mobileTab === 'saisie' ? 'bg-salfa-dark text-white' : 'bg-white dark:bg-slate-700'}`}>Saisie</button>
+
+              {/* Actions : Imprimer et PDF (en haut pour que les sous-menus ne soient pas hors champ) */}
+              <div className="ml-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!peutExporter || busy !== null}
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setMenuPos({ x: rect.left, y: rect.bottom, type: 'impression' });
+                    setOpenImpressionMenu(true);
+                    setOpenPdfMenu(false);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-bold disabled:opacity-50"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Imprimer</span>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={!emp || busy !== null}
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setMenuPos({ x: rect.left, y: rect.bottom, type: 'pdf' });
+                    setOpenPdfMenu(true);
+                    setOpenImpressionMenu(false);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-50"
+                >
+                  <FileDown className="w-4 h-4" />
+                  <span>{busy === 'pdf' ? 'PDF…' : 'PDF'}</span>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+              </div>
               <button type="button" onClick={() => setMobileTab('apercu')} className={`px-3 py-1.5 ${mobileTab === 'apercu' ? 'bg-salfa-dark text-white' : 'bg-white dark:bg-slate-700'}`}>Aperçu</button>
             </div>
           </div>
@@ -469,39 +503,6 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
               {validation.complets ? 'Contrat complet — à vérifier avant signature.' : 'Les exports incomplets portent la mention « PROJET ».'}
             </p>
             {error && <p className="w-full text-xs text-red-600 dark:text-red-400">{error}</p>}
-            {/* Impression : un seul contrat ou tous les contrats */}
-            <button
-              type="button"
-              disabled={!peutExporter || busy !== null}
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setMenuPos({ x: rect.left, y: rect.bottom, type: 'impression' });
-                setOpenImpressionMenu(true);
-                setOpenPdfMenu(false);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-bold disabled:opacity-50"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Imprimer</span>
-              <ChevronDown className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Export PDF : un seul contrat ou tous les contrats */}
-            <button
-              type="button"
-              disabled={!emp || busy !== null}
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setMenuPos({ x: rect.left, y: rect.bottom, type: 'pdf' });
-                setOpenPdfMenu(true);
-                setOpenImpressionMenu(false);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-50"
-            >
-              <FileDown className="w-4 h-4" />
-              <span>{busy === 'pdf' ? 'PDF…' : 'PDF'}</span>
-              <ChevronDown className="w-3.5 h-3.5" />
-            </button>
             <button type="button" onClick={() => exporter('docx')} disabled={!peutExporter || busy !== null}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-salfa-dark hover:bg-salfa-teal text-white text-sm font-bold disabled:opacity-50">
               <FileType2 className="w-4 h-4" /> {busy === 'docx' ? 'Word…' : 'Word (.docx)'}
