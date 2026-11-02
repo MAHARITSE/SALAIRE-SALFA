@@ -183,6 +183,11 @@ try {
   assert.ok(modal.includes('<option value="">{PLACEHOLDER_CONTRAT}</option>'), 'la nature du contrat utilise le même tiret pour le choix vide');
   assert.ok(!modal.includes('À compléter'), 'l’éditeur de contrat ne doit plus afficher l’ancien libellé de champ manquant');
   assert.ok(modal.includes('createPortal'));
+  assert.match(modal, /employes\.filter\(e => Number\(e\.actif\) === 1\)/, 'la liste et les exports ne comprennent que les salariés actifs');
+  assert.match(modal, /tries\.find\(e => Number\(e\.id\) === Number\(initialEmployeId\)\)\?\.id \?\? tries\[0\]\?\.id/, 'un salarié initial inactif ne peut pas être sélectionné');
+  assert.ok(modal.includes('Aucun salarié actif disponible.'), 'le cas sans salarié actif est indiqué');
+  assert.match(tab, /Number\(emp\.actif\) === 1 && <button[\s\S]*?setContratInitialEmpId\(emp\.id\)/, 'pas de bouton contrat pour les salariés inactifs');
+  assert.match(css, /body:has\(\.contrat-print\)\s*\{\s*page:\s*contrat-impression;/, 'le format de page est appliqué au document entier');
   assert.match(modal, /contrats\.map\(\(c, idx\)[\s\S]*?<ContratApercu contrat=\{c\}/, 'chaque contrat imprimé doit comporter son propre en-tête');
   assert.match(css, /\.contrat-section \+ \.contrat-section\s*\{[^}]*break-before:\s*page/s, 'le saut précède uniquement les contrats suivants');
   assert.ok(!/\.contrat-multi \.contrat-section\s*\{[^}]*break-after:\s*page/s.test(css), 'pas de saut après le dernier contrat');

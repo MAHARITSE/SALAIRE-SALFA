@@ -697,10 +697,12 @@
 @page contrat-impression { size: A4 portrait; margin: 12mm 17.5mm 18mm; }
 
 @media print {
+  /* Attribuer le format à tout le document évite une page vide due au
+     changement de format entre le corps et le portail du contrat. */
+  body:has(.contrat-print) { page: contrat-impression; }
   body:has(.contrat-print) #root { display: none !important; }
   body:has(.contrat-print) .contrat-print {
     display: block !important;
-    page: contrat-impression;
     margin: 0 !important;
     padding: 0 !important;
     background: #fff !important;
