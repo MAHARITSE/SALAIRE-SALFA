@@ -363,8 +363,8 @@ export const SalariesSaisieTab: React.FC<Props> = ({
       if (suiteChrono.dernierMoisEtat.annee !== annee) {
         setAnnee(suiteChrono.dernierMoisEtat.annee);
       }
+      moisParDefautApplique.current = true;
     }
-    moisParDefautApplique.current = true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [suiteChrono, importedMois]);
 

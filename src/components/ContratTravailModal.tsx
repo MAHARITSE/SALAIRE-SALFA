@@ -4,11 +4,12 @@
 // fiche salarié ni la paie ; ils vivent uniquement dans cet éditeur jusqu'à sa
 // fermeture. Le modèle de clauses est celui du DOCX fourni.
 // ==============================================================================
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { flushSync } from 'react-dom';
 import {
   X, FileSignature, Printer, FileDown, FileType2, RotateCcw, AlertTriangle, CheckCircle2, Info,
+  ChevronDown, Files,
 } from 'lucide-react';
 import { Employe, PaieMensuelle } from '../types';
 import { estRoleAdmin } from '../local/roles';
@@ -154,7 +155,11 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
   const [busy, setBusy] = useState<'pdf' | 'docx' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'saisie' | 'apercu'>('saisie');
-  const [imprimerTous, setImprimerTous] = useState<boolean>(false);
+  const [impressionScope, setImpressionScope] = useState<'un' | 'tous'>('un');
+  const [openImpressionMenu, setOpenImpressionMenu] = useState<boolean>(false);
+  const [openPdfMenu, setOpenPdfMenu] = useState<boolean>(false);
+  const impressionMenuRef = useRef<HTMLDivElement | null>(null);
+  const pdfMenuRef = useRef<HTMLDivElement | null>(null);
 
   const emp = tries.find(e => Number(e.id) === Number(selectedId)) || null;
   const donnees = emp ? drafts[emp.id] || initialiserContratDepuisEmploye(emp, paieParEmp.get(Number(emp.id))) : null;
@@ -179,6 +184,21 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirtyIds]);
+
+  useEffect(() => {
+    if (!openImpressionMenu && !openPdfMenu) return;
+    const close = (e: MouseEvent) => {
+      if (impressionMenuRef.current && !impressionMenuRef.current.contains(e.target as Node)) {
+        setOpenImpressionMenu(false);
+      }
+      if (pdfMenuRef.current && !pdfMenuRef.current.contains(e.target as Node)) {
+        setOpenPdfMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openImpressionMenu, openPdfMenu]);
 
   const choisir = (id: number) => {
     setSelectedId(id);
@@ -207,25 +227,47 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
     setDirtyIds(prev => { const n = new Set(prev); n.delete(emp.id); return n; });
   };
 
-  const imprimer = () => {
-    if (!peutExporter) return;
+  const imprimer = (scope: 'un' | 'tous') => {
+    if (!peutExporter && scope === 'un') return;
     flushSync(() => setMobileTab('apercu'));
+    flushSync(() => setImpressionScope(scope));
     window.requestAnimationFrame(() => window.print());
   };
 
-  const imprimerTousContrats = () => {
-    flushSync(() => setMobileTab('apercu'));
-    flushSync(() => setImprimerTous(true));
-    window.requestAnimationFrame(() => window.print());
+  const exporterPdf = async (scope: 'un' | 'tous') => {
+    if (!emp) return;
+    setBusy('pdf');
+    setError(null);
+    try {
+      if (scope === 'un') {
+        if (!contrat || !peutExporter) return;
+        await telechargerContratPdf(emp, contrat);
+      } else {
+        for (const e of tries) {
+          const d = drafts[e.id] || initialiserContratDepuisEmploye(e, paieParEmp.get(Number(e.id)));
+          const c = construireContrat(d);
+          if (c.validation.erreurs.length > 0) continue;
+          const empObj = tries.find((x) => x.id === e.id)!;
+          await telechargerContratPdf(empObj, c);
+        }
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Export PDF impossible. Réessayez.');
+    } finally {
+      setBusy(null);
+    }
   };
 
   const exporter = async (format: 'pdf' | 'docx') => {
+    if (format === 'pdf') {
+      await exporterPdf(impressionScope);
+      return;
+    }
     if (!emp || !contrat || !peutExporter) return;
     setBusy(format);
     setError(null);
     try {
-      if (format === 'pdf') await telechargerContratPdf(emp, contrat);
-      else await telechargerContratDocx(emp, contrat);
+      await telechargerContratDocx(emp, contrat);
     } catch (e: any) {
       setError(e?.message || 'Export impossible. Réessayez.');
     } finally {
@@ -428,18 +470,93 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
               {validation.complets ? 'Contrat complet — à vérifier avant signature.' : 'Les exports incomplets portent la mention « PROJET ».'}
             </p>
             {error && <p className="w-full text-xs text-red-600 dark:text-red-400">{error}</p>}
-            <button type="button" onClick={imprimer} disabled={!peutExporter}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-bold disabled:opacity-50">
-              <Printer className="w-4 h-4" /> Imprimer
-            </button>
-            <button type="button" onClick={imprimerTousContrats} disabled={!tries || tries.length === 0 || busy !== null}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold disabled:opacity-50">
-              <FileSignature className="w-4 h-4" /> Tous les contrats
-            </button>
-            <button type="button" onClick={() => exporter('pdf')} disabled={!peutExporter || busy !== null}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-50">
-              <FileDown className="w-4 h-4" /> {busy === 'pdf' ? 'PDF…' : 'PDF'}
-            </button>
+            {/* Impression : un seul contrat ou tous les contrats */}
+            <div ref={impressionMenuRef} className="relative">
+              <button
+                type="button"
+                disabled={!peutExporter || busy !== null}
+                onClick={() => setOpenImpressionMenu((v) => !v)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-bold disabled:opacity-50"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Imprimer</span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+              {openImpressionMenu && (
+                <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1 z-40">
+                  <button
+                    type="button"
+                    onClick={() => { setOpenImpressionMenu(false); imprimer('un'); }}
+                    className="w-full px-3.5 py-2.5 text-left text-xs font-semibold hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
+                  >
+                    <FileSignature className="w-4 h-4 text-salfa-teal shrink-0" />
+                    <div>
+                      <div>Imprimer le contrat actuel</div>
+                      <div className="text-[10px] font-normal text-slate-400">
+                        Salarié sélectionné uniquement
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setOpenImpressionMenu(false); imprimer('tous'); }}
+                    className="w-full px-3.5 py-2.5 text-left text-xs font-semibold border-t border-slate-100 dark:border-slate-700 hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
+                  >
+                    <Files className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div>
+                      <div>Imprimer tous les contrats</div>
+                      <div className="text-[10px] font-normal text-slate-400">
+                        Un contrat par salarié, sauts de page
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Export PDF : un seul contrat ou tous les contrats */}
+            <div ref={pdfMenuRef} className="relative">
+              <button
+                type="button"
+                disabled={!emp || busy !== null}
+                onClick={() => setOpenPdfMenu((v) => !v)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-50"
+              >
+                <FileDown className="w-4 h-4" />
+                <span>{busy === 'pdf' ? 'PDF…' : 'PDF'}</span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+              {openPdfMenu && (
+                <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1 z-40">
+                  <button
+                    type="button"
+                    onClick={() => { setOpenPdfMenu(false); exporterPdf('un'); }}
+                    className="w-full px-3.5 py-2.5 text-left text-xs font-semibold hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
+                  >
+                    <FileSignature className="w-4 h-4 text-salfa-teal shrink-0" />
+                    <div>
+                      <div>PDF du contrat actuel</div>
+                      <div className="text-[10px] font-normal text-slate-400">
+                        Salarié sélectionné uniquement
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setOpenPdfMenu(false); exporterPdf('tous'); }}
+                    className="w-full px-3.5 py-2.5 text-left text-xs font-semibold border-t border-slate-100 dark:border-slate-700 hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5"
+                  >
+                    <Files className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div>
+                      <div>PDF de tous les contrats</div>
+                      <div className="text-[10px] font-normal text-slate-400">
+                        Un fichier PDF par salarié
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
             <button type="button" onClick={() => exporter('docx')} disabled={!peutExporter || busy !== null}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-salfa-dark hover:bg-salfa-teal text-white text-sm font-bold disabled:opacity-50">
               <FileType2 className="w-4 h-4" /> {busy === 'docx' ? 'Word…' : 'Word (.docx)'}
@@ -450,7 +567,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
 
       {createPortal(
         <div className="contrat-print">
-          {imprimerTous ? (
+          {impressionScope === 'tous' ? (
             <ContratApercu contrats={tousLesContrats} />
           ) : (
             contrat && <ContratApercu contrat={contrat} />
