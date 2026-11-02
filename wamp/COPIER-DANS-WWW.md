@@ -36,6 +36,7 @@ jamais le dossier `wamp\` complet, ni le fichier SQL, ni `salfa-config.php`.
 
 Le dossier et le ZIP prêts à copier incluent désormais :
 
+- les corrections du contrat : la signature utilise la place disponible à l'impression et les balises HTML ne s'affichent plus dans le PDF ;
 - les boutons **Imprimer, PDF et Word** des contrats visibles en haut sur ordinateur et mobile, avec leurs menus corrigés ;
 - les **contrats de travail** : depuis l'onglet *Salariés, Saisie & État de paie*,
   l'administrateur peut ouvrir un contrat prérempli depuis la fiche salarié,
