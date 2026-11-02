@@ -61,8 +61,58 @@ function ensureSalfaInitialized(PDO $db): void {
         `date_inactif` VARCHAR(20) NOT NULL DEFAULT '',
         `conge_maternite` TINYINT NOT NULL DEFAULT 0,
         `date_debut_maternite` VARCHAR(20) NOT NULL DEFAULT '',
-        `date_creation` VARCHAR(32) NOT NULL DEFAULT ''
+        `date_creation` VARCHAR(32) NOT NULL DEFAULT '',
+        `genre` VARCHAR(20) NOT NULL DEFAULT '',
+        `date_naissance` VARCHAR(20) NOT NULL DEFAULT '',
+        `lieu_naissance` VARCHAR(160) NOT NULL DEFAULT '',
+        `pere` VARCHAR(160) NOT NULL DEFAULT '',
+        `mere` VARCHAR(160) NOT NULL DEFAULT '',
+        `cin` VARCHAR(32) NOT NULL DEFAULT '',
+        `date_cin` VARCHAR(20) NOT NULL DEFAULT '',
+        `lieu_cin` VARCHAR(160) NOT NULL DEFAULT '',
+        `situation_matrimoniale` VARCHAR(60) NOT NULL DEFAULT '',
+        `adresse` VARCHAR(255) NOT NULL DEFAULT '',
+        `service` VARCHAR(160) NOT NULL DEFAULT '',
+        `diplome` VARCHAR(255) NOT NULL DEFAULT '',
+        `etablissement` VARCHAR(255) NOT NULL DEFAULT '',
+        `statut` VARCHAR(80) NOT NULL DEFAULT '',
+        `numero_ordre` VARCHAR(60) NOT NULL DEFAULT '',
+        `nature_contrat` VARCHAR(32) NOT NULL DEFAULT '',
+        `duree_contrat` VARCHAR(160) NOT NULL DEFAULT '',
+        `lieu_embauche` VARCHAR(160) NOT NULL DEFAULT '',
+        `lieu_travail` VARCHAR(160) NOT NULL DEFAULT '',
+        `date_effet` VARCHAR(20) NOT NULL DEFAULT ''
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // Compléments « LISTE DE PERSONNEL » : ajouter les colonnes manquantes sur une base existante.
+    $personnelCols = [
+        "genre" => "VARCHAR(20) NOT NULL DEFAULT ''",
+        "date_naissance" => "VARCHAR(20) NOT NULL DEFAULT ''",
+        "lieu_naissance" => "VARCHAR(160) NOT NULL DEFAULT ''",
+        "pere" => "VARCHAR(160) NOT NULL DEFAULT ''",
+        "mere" => "VARCHAR(160) NOT NULL DEFAULT ''",
+        "cin" => "VARCHAR(32) NOT NULL DEFAULT ''",
+        "date_cin" => "VARCHAR(20) NOT NULL DEFAULT ''",
+        "lieu_cin" => "VARCHAR(160) NOT NULL DEFAULT ''",
+        "situation_matrimoniale" => "VARCHAR(60) NOT NULL DEFAULT ''",
+        "adresse" => "VARCHAR(255) NOT NULL DEFAULT ''",
+        "service" => "VARCHAR(160) NOT NULL DEFAULT ''",
+        "diplome" => "VARCHAR(255) NOT NULL DEFAULT ''",
+        "etablissement" => "VARCHAR(255) NOT NULL DEFAULT ''",
+        "statut" => "VARCHAR(80) NOT NULL DEFAULT ''",
+        "numero_ordre" => "VARCHAR(60) NOT NULL DEFAULT ''",
+        "nature_contrat" => "VARCHAR(32) NOT NULL DEFAULT ''",
+        "duree_contrat" => "VARCHAR(160) NOT NULL DEFAULT ''",
+        "lieu_embauche" => "VARCHAR(160) NOT NULL DEFAULT ''",
+        "lieu_travail" => "VARCHAR(160) NOT NULL DEFAULT ''",
+        "date_effet" => "VARCHAR(20) NOT NULL DEFAULT ''"
+    ];
+    foreach ($personnelCols as $col => $definition) {
+        $exists = $db->query("SHOW COLUMNS FROM `salfa_employes` LIKE " . $db->quote($col))->fetch(PDO::FETCH_ASSOC);
+        if (!$exists) {
+            $db->exec("ALTER TABLE `salfa_employes` ADD COLUMN `$col` $definition");
+        }
+    }
 
     $db->exec("CREATE TABLE IF NOT EXISTS `salfa_paies` (
         `id` INT NOT NULL PRIMARY KEY,
@@ -343,6 +393,26 @@ function loadRelationalStore(PDO $db): array {
             'conge_maternite' => (int)$r['conge_maternite'],
             'date_debut_maternite' => (string)$r['date_debut_maternite'],
             'date_creation' => (string)$r['date_creation'],
+            'genre' => (string)($r['genre'] ?? ''),
+            'date_naissance' => (string)($r['date_naissance'] ?? ''),
+            'lieu_naissance' => (string)($r['lieu_naissance'] ?? ''),
+            'pere' => (string)($r['pere'] ?? ''),
+            'mere' => (string)($r['mere'] ?? ''),
+            'cin' => (string)($r['cin'] ?? ''),
+            'date_cin' => (string)($r['date_cin'] ?? ''),
+            'lieu_cin' => (string)($r['lieu_cin'] ?? ''),
+            'situation_matrimoniale' => (string)($r['situation_matrimoniale'] ?? ''),
+            'adresse' => (string)($r['adresse'] ?? ''),
+            'service' => (string)($r['service'] ?? ''),
+            'diplome' => (string)($r['diplome'] ?? ''),
+            'etablissement' => (string)($r['etablissement'] ?? ''),
+            'statut' => (string)($r['statut'] ?? ''),
+            'numero_ordre' => (string)($r['numero_ordre'] ?? ''),
+            'nature_contrat' => (string)($r['nature_contrat'] ?? ''),
+            'duree_contrat' => (string)($r['duree_contrat'] ?? ''),
+            'lieu_embauche' => (string)($r['lieu_embauche'] ?? ''),
+            'lieu_travail' => (string)($r['lieu_travail'] ?? ''),
+            'date_effet' => (string)($r['date_effet'] ?? ''),
         ];
     }
 
@@ -608,6 +678,7 @@ function syncEmployesTable(PDO $db, array $employes): void {
         'date_embauche', 'nombre_annees', 'enfant_a_charge', 'base_aj', 'logement_transport',
         'rendement', 'responsabilite_representation', 'rib', 'mode_paiement', 'actif',
         'date_inactif', 'conge_maternite', 'date_debut_maternite', 'date_creation',
+        'genre', 'date_naissance', 'lieu_naissance', 'pere', 'mere', 'cin', 'date_cin', 'lieu_cin', 'situation_matrimoniale', 'adresse', 'service', 'diplome', 'etablissement', 'statut', 'numero_ordre', 'nature_contrat', 'duree_contrat', 'lieu_embauche', 'lieu_travail', 'date_effet',
     ];
     $updates = [];
     foreach ($cols as $c) {
@@ -641,6 +712,26 @@ function syncEmployesTable(PDO $db, array $employes): void {
             $params[] = !empty($e['conge_maternite']) ? 1 : 0;
             $params[] = substr((string)($e['date_debut_maternite'] ?? ''), 0, 20);
             $params[] = substr((string)($e['date_creation'] ?? ''), 0, 32);
+            $params[] = substr((string)($e['genre'] ?? ''), 0, 20);
+            $params[] = substr((string)($e['date_naissance'] ?? ''), 0, 20);
+            $params[] = substr((string)($e['lieu_naissance'] ?? ''), 0, 160);
+            $params[] = substr((string)($e['pere'] ?? ''), 0, 160);
+            $params[] = substr((string)($e['mere'] ?? ''), 0, 160);
+            $params[] = substr((string)($e['cin'] ?? ''), 0, 32);
+            $params[] = substr((string)($e['date_cin'] ?? ''), 0, 20);
+            $params[] = substr((string)($e['lieu_cin'] ?? ''), 0, 160);
+            $params[] = substr((string)($e['situation_matrimoniale'] ?? ''), 0, 60);
+            $params[] = substr((string)($e['adresse'] ?? ''), 0, 255);
+            $params[] = substr((string)($e['service'] ?? ''), 0, 160);
+            $params[] = substr((string)($e['diplome'] ?? ''), 0, 255);
+            $params[] = substr((string)($e['etablissement'] ?? ''), 0, 255);
+            $params[] = substr((string)($e['statut'] ?? ''), 0, 80);
+            $params[] = substr((string)($e['numero_ordre'] ?? ''), 0, 60);
+            $params[] = substr((string)($e['nature_contrat'] ?? ''), 0, 32);
+            $params[] = substr((string)($e['duree_contrat'] ?? ''), 0, 160);
+            $params[] = substr((string)($e['lieu_embauche'] ?? ''), 0, 160);
+            $params[] = substr((string)($e['lieu_travail'] ?? ''), 0, 160);
+            $params[] = substr((string)($e['date_effet'] ?? ''), 0, 20);
         }
         $st = $db->prepare($sql);
         $st->execute($params);
@@ -1092,7 +1183,7 @@ function generateRelationalSqlDump(PDO $db, string $motif = 'Sauvegarde SQL manu
     }
     $lines[] = '';
 
-    $empCols = ['id', 'numero_matricule', 'nom_prenoms', 'numero_cnaps', 'categorie', 'jobs', 'date_embauche', 'nombre_annees', 'enfant_a_charge', 'base_aj', 'logement_transport', 'rendement', 'responsabilite_representation', 'rib', 'mode_paiement', 'actif', 'date_inactif', 'conge_maternite', 'date_debut_maternite', 'date_creation'];
+    $empCols = ['id', 'numero_matricule', 'nom_prenoms', 'numero_cnaps', 'categorie', 'jobs', 'date_embauche', 'nombre_annees', 'enfant_a_charge', 'base_aj', 'logement_transport', 'rendement', 'responsabilite_representation', 'rib', 'mode_paiement', 'actif', 'date_inactif', 'conge_maternite', 'date_debut_maternite', 'date_creation', 'genre', 'date_naissance', 'lieu_naissance', 'pere', 'mere', 'cin', 'date_cin', 'lieu_cin', 'situation_matrimoniale', 'adresse', 'service', 'diplome', 'etablissement', 'statut', 'numero_ordre', 'nature_contrat', 'duree_contrat', 'lieu_embauche', 'lieu_travail', 'date_effet'];
     if ($congesOnly) {
         $lines[] = dumpTableRowsSql($db, 'salfa_employes', $empCols, '`id` ASC', true);
     } else {

@@ -616,3 +616,122 @@
   .anciennete-card { background-color: #7dd3fc; }
   .dark .anciennete-card { background-color: #075985; }
 }
+
+/* ============================================================================
+   CONTRAT DE TRAVAIL — aperçu écran et impression A4 portrait
+   Le modèle imprimé est isolé dans un portail .contrat-print : il masque
+   l'application et les autres documents d'impression pendant la génération.
+   ============================================================================ */
+.contrat-sheet {
+  box-sizing: border-box;
+  width: 210mm;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 14mm 16mm 18mm;
+  background: #fff !important;
+  color: #000 !important;
+  font-family: Cambria, 'Times New Roman', serif;
+  font-size: 10.5pt;
+  line-height: 1.35;
+  box-shadow: 0 4px 24px rgb(15 23 42 / 0.18);
+  border: 1px solid #cbd5e1;
+}
+.contrat-sheet * { color: #000 !important; }
+.contrat-entete {
+  display: flex;
+  align-items: center;
+  gap: 5mm;
+  border-bottom: 1.2px solid #000;
+  padding-bottom: 3mm;
+  margin-bottom: 5mm;
+}
+.contrat-logo { width: 20mm; height: 25mm; object-fit: contain; flex-shrink: 0; }
+.contrat-entete-texte { flex: 1; text-align: center; font-size: 8pt; line-height: 1.3; }
+.contrat-entete-texte strong, .contrat-entete-texte span { display: block; }
+.contrat-entete-texte strong { font-size: 9pt; }
+.contrat-titre {
+  text-align: center;
+  font-size: 13pt;
+  font-weight: 700;
+  text-decoration: underline;
+  margin: 4mm 0 3mm;
+}
+.contrat-mention {
+  text-align: center;
+  font-weight: 700;
+  font-style: italic;
+  font-size: 9.5pt;
+  margin: 0 0 3mm;
+}
+.contrat-paragraphe { margin: 0 0 2mm; text-align: justify; }
+.contrat-champ { margin: 0 0 1.6mm; }
+.contrat-champ strong { font-weight: 700; }
+.contrat-manquant {
+  font-style: italic;
+  background: #fef3c7;
+  border-bottom: 1px dotted #92400e;
+  padding: 0 1px;
+}
+.contrat-article { margin: 3mm 0 2mm; break-inside: avoid; page-break-inside: avoid; }
+.contrat-article h3 {
+  font-size: 10.5pt;
+  font-weight: 700;
+  text-decoration: underline;
+  margin: 0 0 1.5mm;
+}
+.contrat-article p { margin: 0 0 1.5mm; }
+.contrat-signature-bloc { margin-top: 6mm; break-inside: avoid; page-break-inside: avoid; }
+.contrat-signature {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10mm;
+  margin-top: 8mm;
+  text-align: center;
+}
+.contrat-signature strong { text-decoration: underline; }
+.contrat-signature p { margin: 1mm 0 0; font-size: 9.5pt; }
+.contrat-signature-espace { height: 18mm; }
+.contrat-signature-mention { text-align: center; font-style: italic; font-size: 9pt; margin-top: 2mm; }
+
+.contrat-print { display: none; }
+@page contrat-impression { size: A4 portrait; margin: 12mm 17.5mm 18mm; }
+
+@media print {
+  body:has(.contrat-print) #root { display: none !important; }
+  body:has(.contrat-print) .contrat-print {
+    display: block !important;
+    page: contrat-impression;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+  .contrat-print .contrat-sheet {
+    width: auto;
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    font-size: 10.5pt;
+  }
+  .contrat-print .contrat-manquant {
+    background: transparent;
+    border-bottom: 1px dotted #000;
+  }
+  .contrat-print .contrat-entete { break-inside: avoid; page-break-inside: avoid; }
+  .contrat-print .contrat-titre { break-after: avoid; page-break-after: avoid; }
+  .contrat-print .contrat-article h3 { break-after: avoid; page-break-after: avoid; }
+}
+
+@media (max-width: 640px) {
+  .contrat-sheet { padding: 8mm 6mm 12mm; font-size: 10pt; }
+  .contrat-entete { gap: 3mm; }
+  .contrat-logo { width: 14mm; height: 18mm; }
+  .contrat-entete-texte { font-size: 6.5pt; }
+  .contrat-entete-texte strong { font-size: 7.5pt; }
+}
+
+/* Affichage comptable unifié : montants à droite, zéro affiché « - ». */
+.money-cell { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+input.money-cell, textarea.money-cell { text-align: right; }

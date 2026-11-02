@@ -289,6 +289,9 @@ if ($action === 'snapshot' && $_SERVER['REQUEST_METHOD'] === 'GET') {
                 $emp['responsabilite_representation'] = 0;
                 $emp['rib'] = '';
                 $emp['mode_paiement'] = '';
+                foreach (['genre','date_naissance','lieu_naissance','pere','mere','cin','date_cin','lieu_cin','situation_matrimoniale','adresse','service','diplome','etablissement','statut','numero_ordre','nature_contrat','duree_contrat','lieu_embauche','lieu_travail','date_effet'] as $champPersonnel) {
+                    $emp[$champPersonnel] = '';
+                }
             }
             unset($emp);
         }
@@ -311,7 +314,7 @@ if (($action === 'save' || $action === 'settings') && $_SERVER['REQUEST_METHOD']
             $operation = (string)($input['action'] ?? '');
             $role = (string)($_SESSION['user']['role'] ?? '');
             $congeActions = ['creerConge', 'modifierConge', 'deciderConge', 'supprimerConge', 'saisirOuverturePremiereAnnee', 'saisirSoldeAnnee', 'importerConges', 'ajouterAnnee'];
-            $adminActions = ['createEmploye', 'updateEmploye', 'toggleActifEmploye', 'fusionnerEmployes', 'initPaieEmploye', 'initMoisPaie', 'savePaieSaisie', 'savePaieReglement', 'cloturerMois', 'deverrouillerMois', 'importerClasseur', 'enregistrerSaisieLot'];
+            $adminActions = ['completerPersonnel', 'createEmploye', 'updateEmploye', 'toggleActifEmploye', 'fusionnerEmployes', 'initPaieEmploye', 'initMoisPaie', 'savePaieSaisie', 'savePaieReglement', 'cloturerMois', 'deverrouillerMois', 'importerClasseur', 'enregistrerSaisieLot'];
             $allowed = array_merge($adminActions, $congeActions);
             if (!in_array($operation, $allowed, true)) { $db->rollBack(); answer(403, ['error' => 'Action non autorisée.']); }
             if ($role !== 'Administrateur' && !in_array($operation, $congeActions, true)) { $db->rollBack(); answer(403, ['error' => 'Action réservée à l’administrateur.']); }

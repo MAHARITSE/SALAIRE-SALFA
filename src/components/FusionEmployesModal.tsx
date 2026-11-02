@@ -20,6 +20,7 @@ import {
   ResultatFusionEmployes,
 } from '../api';
 import { correspondRecherche, normaliserRecherche } from '../local/recherche';
+import { formatMontant } from '../local/montants';
 
 interface FusionEmployesModalProps {
   employes: Employe[];
@@ -28,8 +29,7 @@ interface FusionEmployesModalProps {
   onMerged: (res: ResultatFusionEmployes) => void;
 }
 
-const fmtAr = (n: number) =>
-  (n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtAr = (n: number) => formatMontant(n);
 
 export const FusionEmployesModal: React.FC<FusionEmployesModalProps> = ({
   employes,

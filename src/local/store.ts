@@ -7,6 +7,7 @@
 
 import initialData from '../data/salfa_data.json';
 import { defaultUtilisateurs } from './users';
+import { appliquerPersonnelAuxFiches, PERSONNEL_VERSION } from './personnel';
 
 export interface JsonStore {
   meta: any;
@@ -108,6 +109,15 @@ export function loadStore(): JsonStore {
     loaded.meta = { ...loaded.meta, source_version: 'classeur-2026-10' };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded)); }
     catch (e) { console.error('[LOCAL STORE] Migration non sauvegardée.', e); }
+  }
+
+  // Compléter les fiches salariés avec « LISTE DE PERSONNEL.xlsx » sans écraser
+  // les saisies existantes : seuls les champs complémentaires absents sont ajoutés.
+  if (loaded.meta?.personnel_version !== PERSONNEL_VERSION) {
+    appliquerPersonnelAuxFiches(loaded.employes);
+    loaded.meta = { ...loaded.meta, personnel_version: PERSONNEL_VERSION };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded)); }
+    catch (e) { console.error('[LOCAL STORE] Migration personnel non sauvegardée.', e); }
   }
 
   // Les fiches d'absence arrivent d'une version antérieure du store : garantir la liste

@@ -1,4 +1,5 @@
 import { PaieMensuelle } from '../types';
+import { formatMontant as formatMontantComptable } from '../local/montants';
 
 export interface BulletinRow { libelle: string; gain?: number; retenue?: number; total?: boolean }
 
@@ -150,7 +151,7 @@ export function montantEnLettresBulletin(value: number): string {
 }
 
 export function formatMontant(value: number | null | undefined): string {
-  return n(value).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return formatMontantComptable(value);
 }
 
 /** Format comptable Excel des rubriques : « - » lorsque le montant vaut zéro. */

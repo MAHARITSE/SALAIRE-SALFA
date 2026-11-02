@@ -35,6 +35,27 @@ export interface Employe {
   date_inactif?: string;
   conge_maternite?: number | boolean;
   date_debut_maternite?: string;
+  /** Informations complémentaires rapprochées de « LISTE DE PERSONNEL.xlsx ». */
+  genre?: string;
+  date_naissance?: string;
+  lieu_naissance?: string;
+  pere?: string;
+  mere?: string;
+  cin?: string;
+  date_cin?: string;
+  lieu_cin?: string;
+  situation_matrimoniale?: string;
+  adresse?: string;
+  service?: string;
+  diplome?: string;
+  etablissement?: string;
+  statut?: string;
+  numero_ordre?: string;
+  nature_contrat?: string;
+  duree_contrat?: string;
+  lieu_embauche?: string;
+  lieu_travail?: string;
+  date_effet?: string;
 }
 
 export interface PaieMensuelle {

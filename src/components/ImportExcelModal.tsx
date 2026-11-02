@@ -29,6 +29,7 @@ import {
   fetchPeriodes,
 } from '../api';
 import { correspondRecherche, normaliserRecherche } from '../local/recherche';
+import { formatMontant } from '../local/montants';
 
 interface Props {
   onClose: () => void;
@@ -38,10 +39,7 @@ interface Props {
 
 type OngletAnalyse = 'champs' | 'feuilles' | 'apercu';
 
-const fmt = (n: number | null | undefined): string => {
-  if (n === null || n === undefined) return '—';
-  return Number(n).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-};
+const fmt = (n: number | null | undefined): string => formatMontant(n);
 
 const ANNEES_LISTE = (() => {
   const max = new Date().getFullYear() + 5;

@@ -48,11 +48,15 @@ import {
   GitMerge,
   ArrowRight,
   AlertTriangle,
+  FileSignature,
 } from 'lucide-react';
 import { YearProps, YearSelect } from '../YearSelect';
 import { SaisieLotModal } from '../SaisieLotModal';
 import { EmployeModalForm } from '../EmployeModalForm';
 import { FusionEmployesModal } from '../FusionEmployesModal';
+import { ContratTravailModal } from '../ContratTravailModal';
+import { formatMontant, formatMontantSaisie, formatMontantEdition, parseMontantSaisie } from '../../local/montants';
+import { formaterColonnesMonetairesExcel } from '../../local/excelFormat';
 
 const MOIS_LISTE = ['JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN', 'JUILLET', 'AOUT', 'SEPTEMBRE', 'OCTOBRE', 'NOVEMBRE', 'DECEMBRE'];
 
@@ -61,24 +65,9 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const fmt = (val: number | undefined | null) =>
-  val === undefined || val === null
-    ? '0,00'
-    : Number(val).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const formatInputDisplay = (val: number): string => {
-  if (!val) return '';
-  return Number(val)
-    .toLocaleString('fr-FR', { maximumFractionDigits: 2 })
-    .replace(/\u202f/g, ' ');
-};
-
-const parseInputNumber = (raw: string): number => {
-  const cleaned = raw.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
-  if (cleaned === '' || cleaned === '-' || cleaned === '.') return 0;
-  const n = Number(cleaned);
-  return isNaN(n) ? 0 : Math.max(0, Math.round(n * 100) / 100);
-};
+const fmt = (val: number | undefined | null) => formatMontant(val);
+const formatInputDisplay = (val: number): string => formatMontantSaisie(val);
+const parseInputNumber = (raw: string): number => parseMontantSaisie(raw);
 
 function formatDateCourt(raw: unknown) {
   const s = String(raw ?? '').trim();
@@ -222,17 +211,17 @@ const InlineMoneyInput: React.FC<InlineMoneyInputProps> = ({
   rowIndex,
   compact = false,
 }) => {
-  const [text, setText] = useState<string>(() => (value ? formatInputDisplay(value) : '0'));
+  const [text, setText] = useState<string>(() => formatInputDisplay(value));
   const [focused, setFocused] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
 
   useEffect(() => {
-    if (!focused) setText(value ? formatInputDisplay(value) : '0');
+    if (!focused) setText(formatInputDisplay(value));
   }, [value, focused]);
 
   const commit = async () => {
     const n = parseInputNumber(text);
-    setText(n ? formatInputDisplay(n) : '0');
+    setText(formatInputDisplay(n));
     if (Math.abs(n - Number(value || 0)) > 0.004) {
       await onCommit(n);
       setSavedFlash(true);
@@ -267,7 +256,7 @@ const InlineMoneyInput: React.FC<InlineMoneyInputProps> = ({
         onDoubleClick={(e) => e.stopPropagation()}
         onFocus={(e) => {
           setFocused(true);
-          setText(value ? String(Math.round(value * 100) / 100).replace('.', ',') : '');
+          setText(formatMontantEdition(value));
           setTimeout(() => e.target.select(), 0);
         }}
         onBlur={() => {
@@ -291,7 +280,7 @@ const InlineMoneyInput: React.FC<InlineMoneyInputProps> = ({
               }, 30);
             }
           } else if (e.key === 'Escape') {
-            setText(value ? formatInputDisplay(value) : '0');
+            setText(formatInputDisplay(value));
             (e.target as HTMLInputElement).blur();
           }
         }}
@@ -373,6 +362,8 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   const [showLotModal, setShowLotModal] = useState<boolean>(false);
   const [showFusionModal, setShowFusionModal] = useState<boolean>(false);
   const [fusionInitialEmpId, setFusionInitialEmpId] = useState<number | null>(null);
+  const [showContratModal, setShowContratModal] = useState<boolean>(false);
+  const [contratInitialEmpId, setContratInitialEmpId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!openPrintMenu) return;
@@ -563,6 +554,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
       idx === 0 ? '' : idx === 1 ? 'TOTAUX' : c.sum ? Math.round((etatTotals[c.key] || 0) * 100) / 100 : ''
     );
     const ws = XLSX.utils.aoa_to_sheet([groupRow, headerRow, ...dataRows, totalRow]);
+    formaterColonnesMonetairesExcel(ws, ETAT_COLUMNS.map((c, i) => (c.money || c.sum ? i : -1)).filter(i => i >= 0), 2);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `${mois}_${annee}`.slice(0, 31));
     XLSX.writeFile(wb, `ETAT_PAIE_SALFA_${mois}_${annee}.xlsx`);
@@ -930,6 +922,19 @@ export const SalariesSaisieTab: React.FC<Props> = ({
           <button
             type="button"
             onClick={() => {
+              setContratInitialEmpId(null);
+              setShowContratModal(true);
+            }}
+            className="flex items-center justify-center gap-2 bg-white dark:bg-slate-700 border border-salfa-dark/30 dark:border-slate-500 text-salfa-dark dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-slate-600 px-3.5 py-2 rounded-lg font-bold text-xs sm:text-sm shadow-sm transition"
+            title="Générer un contrat de travail depuis une fiche salarié (aperçu, impression, PDF, Word)"
+          >
+            <FileSignature className="w-4 h-4" />
+            <span>Contrats de travail</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
               setEditingEmploye(null);
               setShowEmpModal(true);
             }}
@@ -1267,6 +1272,17 @@ export const SalariesSaisieTab: React.FC<Props> = ({
                                 </button>
                                 <button
                                   onClick={() => {
+                                    setContratInitialEmpId(emp.id);
+                                    setShowContratModal(true);
+                                  }}
+                                  className="p-1 rounded hover:bg-sky-50 dark:hover:bg-sky-900/30 text-salfa-teal dark:text-sky-300"
+                                  title="Contrat de travail de ce salarié"
+                                  aria-label={`Contrat de travail de ${emp.nom_prenoms}`}
+                                >
+                                  <FileSignature className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => {
                                     setFusionInitialEmpId(emp.id);
                                     setShowFusionModal(true);
                                   }}
@@ -1425,6 +1441,18 @@ export const SalariesSaisieTab: React.FC<Props> = ({
           employe={historyModal.employe}
           paies={historyModal.paies}
           onClose={() => setHistoryModal(null)}
+        />
+      )}
+
+      {showContratModal && (
+        <ContratTravailModal
+          employes={employes}
+          initialEmployeId={contratInitialEmpId}
+          userRole={effectiveRole}
+          onClose={() => {
+            setShowContratModal(false);
+            setContratInitialEmpId(null);
+          }}
         />
       )}
     </div>
