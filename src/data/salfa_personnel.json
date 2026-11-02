@@ -1,0 +1,1105 @@
+{
+  "version": "liste-personnel-2026-11",
+  "source": "LISTE DE PERSONNEL.xlsx",
+  "champs": [
+    "genre",
+    "date_naissance",
+    "lieu_naissance",
+    "pere",
+    "mere",
+    "cin",
+    "date_cin",
+    "lieu_cin",
+    "situation_matrimoniale",
+    "adresse",
+    "service",
+    "diplome",
+    "etablissement",
+    "statut",
+    "numero_ordre",
+    "nature_contrat",
+    "duree_contrat",
+    "lieu_embauche",
+    "lieu_travail",
+    "date_effet"
+  ],
+  "entries": [
+    {
+      "numero_matricule": 1,
+      "nom_prenoms": "TSIAMBANY JOELSON",
+      "champs": {
+        "date_naissance": "1969-10-16",
+        "lieu_naissance": "Saint Augustin",
+        "mere": "SERO",
+        "cin": "501031001038",
+        "date_cin": "1987-06-16",
+        "lieu_cin": "Toliara-II",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Toby Betela",
+        "service": "RÉCEPTION",
+        "jobs": "RÉCEPTIONNISTE",
+        "categorie": "OS2",
+        "genre": "Masculin",
+        "statut": "PERMANENT",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 3,
+      "nom_prenoms": "TOVONARY PASCAL",
+      "champs": {
+        "date_naissance": "1971-02-03",
+        "lieu_naissance": "Toliara",
+        "pere": "BOTO Pascal",
+        "mere": "VAOLINA",
+        "cin": "501071001770",
+        "date_cin": "1989-06-30",
+        "lieu_cin": "Toliara -I",
+        "situation_matrimoniale": "Marie",
+        "adresse": "Mahavatse",
+        "service": "LABORATOIRE",
+        "jobs": "AIDE LABORANTIN",
+        "categorie": "3A",
+        "genre": "Masculin",
+        "statut": "PERMANENT",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 4,
+      "nom_prenoms": "MASINA LUCIEN ROLLAND",
+      "champs": {
+        "date_naissance": "1965-09-23",
+        "lieu_naissance": "Toliara",
+        "pere": "BANAITSE Masina",
+        "mere": "BOTETA Cecile",
+        "cin": "501991053313",
+        "date_cin": "1985-05-29",
+        "lieu_cin": "Toliara-I",
+        "situation_matrimoniale": "Marié",
+        "adresse": "Maninday Toliara",
+        "service": "ADMINISTRATION",
+        "jobs": "COURSIER",
+        "categorie": "2B",
+        "genre": "Masculin",
+        "statut": "PERMANENT",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 6,
+      "nom_prenoms": "TINAHINY TSIBARA",
+      "champs": {
+        "date_naissance": "1974-09-30",
+        "lieu_naissance": "Toliara",
+        "pere": "TSIBARA Julien",
+        "mere": "JULIENNE Miandrisoa",
+        "cin": "508992005121",
+        "date_cin": "1992-10-27",
+        "lieu_cin": "Morondava",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Betania Tanambao",
+        "service": "ADMINISTRATION",
+        "jobs": "RESPONSABLE STOCK",
+        "categorie": "4B",
+        "genre": "Féminin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENTE",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 12,
+      "nom_prenoms": "RABOANARISON RADONIAINA PATRICK",
+      "champs": {
+        "date_naissance": "1982-08-03",
+        "lieu_naissance": "Itaosy Antananarivo",
+        "pere": "RABOANARISON Rodin",
+        "mere": "RAZAFIMALALA Voahirana",
+        "cin": "501011004018",
+        "date_cin": "2000-08-09",
+        "lieu_cin": "Tanambao Toliara",
+        "situation_matrimoniale": "Marié",
+        "adresse": "Andaboly Toliara",
+        "service": "RÉCEPTION",
+        "jobs": "RÉCEPTIONNISTE",
+        "categorie": "OS2",
+        "genre": "Masculin",
+        "statut": "PERMANENT",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 13,
+      "nom_prenoms": "RIVONILAINA VICTOR",
+      "champs": {
+        "date_naissance": "1976-09-16",
+        "lieu_naissance": "Toliara",
+        "pere": "VICTOR",
+        "mere": "AMBROISINE",
+        "cin": "520051001933",
+        "date_cin": "1995-03-02",
+        "lieu_cin": "Toliara-II Betsinjake",
+        "situation_matrimoniale": "Marié",
+        "adresse": "Andranomena",
+        "service": "STOMATOLOGIE",
+        "jobs": "AIDE DENTISTE",
+        "categorie": "4B",
+        "genre": "Masculin",
+        "diplome": "LICENCE",
+        "etablissement": "INSFP",
+        "statut": "PERMANENT",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 14,
+      "nom_prenoms": "RASAMOELINA VALSON VERONIQUE",
+      "champs": {
+        "date_naissance": "1976-08-13",
+        "lieu_naissance": "Tananarivo",
+        "pere": "RAVALISON Charles",
+        "mere": "RAVAONIRINA Berthe",
+        "cin": "204032000503",
+        "date_cin": "1994-06-14",
+        "lieu_cin": "Fandriana",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Tanambao",
+        "service": "MATERNITÉ",
+        "jobs": "SAGE FEMME",
+        "categorie": "4B",
+        "genre": "Féminin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENTE",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 18,
+      "nom_prenoms": "RASOARININDRINA LALAO VOANGY",
+      "champs": {
+        "genre": "Féminin",
+        "date_naissance": "1962-01-24",
+        "diplome": "DOCTEUR EN MEDECINE",
+        "etablissement": "UNIVERSITE ANTANANARIVE",
+        "service": "MEDECINE",
+        "statut": "PERMANENTE"
+      }
+    },
+    {
+      "numero_matricule": 20,
+      "nom_prenoms": "VAZISON CLAUDE FANOMEZANTSOA",
+      "champs": {
+        "date_naissance": "1971-10-05",
+        "lieu_naissance": "Tamatave",
+        "pere": "VAZISON François",
+        "mere": "RAVELOARISOA Henriette",
+        "cin": "501091003281",
+        "date_cin": "1994-09-06",
+        "lieu_cin": "Betania Toliara",
+        "situation_matrimoniale": "Marié",
+        "adresse": "Tsianaloka",
+        "service": "SÉCURITÉ",
+        "jobs": "SÉCURITÉ",
+        "categorie": "M2",
+        "genre": "Masculin",
+        "statut": "PERMANENT",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 21,
+      "nom_prenoms": "RAZAFIARIVONY LORENCE",
+      "champs": {
+        "date_naissance": "1972-04-11",
+        "lieu_naissance": "Toliara",
+        "pere": "BEHOAJATO Dolce",
+        "mere": "CHRISTINE",
+        "cin": "501112003822",
+        "date_cin": "1993-11-04",
+        "lieu_cin": "Toliara",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Tsimenatse-III",
+        "service": "ADMINISTRATION",
+        "jobs": "CAISSIÈRE",
+        "categorie": "3A"
+      }
+    },
+    {
+      "numero_matricule": 22,
+      "nom_prenoms": "RAHARIVELO NIRIVOLOLONIAINA MIRANTSOA",
+      "champs": {
+        "date_naissance": "1980-01-24",
+        "lieu_naissance": "Fianarantsoa",
+        "pere": "RAFIDINTSOA Heriniaina",
+        "mere": "RABODOVOLOLONA Marie Virginia",
+        "cin": "201032014669",
+        "date_cin": "1998-02-06",
+        "lieu_cin": "Fianarantsoa",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Betania",
+        "service": "SOINS",
+        "jobs": "INFIRMIÈRE",
+        "categorie": "4B",
+        "genre": "Féminin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENTE",
+        "numero_ordre": "6146-3114 DEL",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 23,
+      "nom_prenoms": "FENOARIFETRA OITRAMANDRESY BENJARIVELO",
+      "champs": {
+        "date_naissance": "1984-03-15",
+        "lieu_naissance": "Antsororokavo Fianarantsoa",
+        "pere": "RANDRIANANDRASANA",
+        "mere": "RAZAFINDRAVELO Julienne",
+        "cin": "201032023683",
+        "date_cin": "2002-10-09",
+        "lieu_cin": "Fianarantsoa",
+        "situation_matrimoniale": "Célibataire",
+        "adresse": "Tsianengea",
+        "service": "PHARMACIE",
+        "jobs": "SAGE FEMME",
+        "categorie": "4B",
+        "genre": "Féminin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENTE",
+        "numero_ordre": "5917-2940 DEL",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 24,
+      "nom_prenoms": "ZAFINDRIAKY DAFISON FLORIS EMILIENNE",
+      "champs": {
+        "date_naissance": "1980-01-01",
+        "lieu_naissance": "Manja",
+        "pere": "DAFISON Hargine",
+        "cin": "501012003976",
+        "date_cin": "2000-06-14",
+        "lieu_cin": "Toliara-I",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Mitsinjo Betanimena",
+        "service": "MATERNITÉ",
+        "jobs": "INFIRMIÈRE",
+        "categorie": "4B",
+        "genre": "Féminin",
+        "diplome": "BACC",
+        "statut": "PERMANENTE",
+        "numero_ordre": "16 12 22 P 2568",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 27,
+      "nom_prenoms": "RAZAFINIERA SOANDALANA EMELIE",
+      "champs": {
+        "date_naissance": "1990-06-19",
+        "lieu_naissance": "Sakoamadinika",
+        "mere": "MARIE Aimée",
+        "cin": "313012025322",
+        "date_cin": "2009-07-15",
+        "lieu_cin": "Ambatondrazaka",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Betania",
+        "service": "PHARMACIE",
+        "jobs": "SAGE FEMME",
+        "categorie": "4B",
+        "genre": "Féminin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENTE",
+        "numero_ordre": "5918-2941 DEL",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 28,
+      "nom_prenoms": "RAVONIHERINDRAINY HAINGONDRAMADA",
+      "champs": {
+        "date_naissance": "1993-11-15",
+        "lieu_naissance": "Toliara",
+        "pere": "RASOLOHERINDRAINY Peterson",
+        "mere": "RAVONINJANAHARY Anastasie",
+        "cin": "201032038319",
+        "date_cin": "2012-11-18",
+        "lieu_cin": "Fianarantsoa",
+        "situation_matrimoniale": "Célibataire",
+        "adresse": "Besasavy",
+        "service": "SOINS",
+        "jobs": "INFIRMIÈRE",
+        "categorie": "3A",
+        "genre": "Féminin",
+        "diplome": "LICENCE",
+        "etablissement": "ISFPS",
+        "statut": "PERMANENTE",
+        "numero_ordre": "16 12 22 P 10293",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 29,
+      "nom_prenoms": "VOAHANGIARISOA LYDIA",
+      "champs": {
+        "date_naissance": "1974-10-14",
+        "lieu_naissance": "Fianarantsoa",
+        "pere": "RAKOTOVAHOAKA",
+        "mere": "RAHARISOA Felistine",
+        "cin": "501092003064",
+        "date_cin": "2016-03-01",
+        "lieu_cin": "Toliara -I",
+        "situation_matrimoniale": "Veuve",
+        "adresse": "Tsianaloka",
+        "service": "ADMINISTRATION",
+        "jobs": "CAISSIÈRE",
+        "categorie": "3A",
+        "genre": "Féminin",
+        "statut": "PERMANENTE",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 30,
+      "nom_prenoms": "JUDITH ALBERSON TADIDY",
+      "champs": {
+        "date_naissance": "1995-11-29",
+        "lieu_naissance": "Antsirabe",
+        "pere": "RAKOTONIAINA Samson",
+        "mere": "FANJANIRINA Liliane Orelys",
+        "cin": "118012019242",
+        "date_cin": "2014-01-30",
+        "lieu_cin": "Antsirabe-II",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Tanambao Morafeno",
+        "service": "SOINS",
+        "jobs": "INFIRMIÈRE",
+        "categorie": "4B",
+        "genre": "Féminin",
+        "diplome": "LINCENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENTE",
+        "numero_ordre": "14247-1126-2 DEL",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 31,
+      "nom_prenoms": "ZAFIHAINGO MURIELLE SAPHINE",
+      "champs": {
+        "date_naissance": "1989-11-24",
+        "lieu_naissance": "Toliara",
+        "pere": "SIMELY Mahene",
+        "mere": "ZAFERINY Rokia",
+        "cin": "501032020286",
+        "date_cin": "2009-03-11",
+        "lieu_cin": "Toliara-I",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Andabizy",
+        "service": "PHARMACIE",
+        "jobs": "SAGE FEMME",
+        "categorie": "4B",
+        "genre": "Féminin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENTE",
+        "numero_ordre": "18877-6507-2 DEL",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 32,
+      "nom_prenoms": "RAHARILALAINTSOA MAURICETTE",
+      "champs": {
+        "date_naissance": "1993-09-22",
+        "lieu_naissance": "Ambositra",
+        "mere": "RAHARIMALALA Christine",
+        "cin": "204012016798",
+        "date_cin": "2013-02-21",
+        "lieu_cin": "Fianarantsoa",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Besakoa",
+        "service": "BLOC OPÉRATOIRE",
+        "jobs": "INFIRMIÈRE",
+        "categorie": "4B",
+        "genre": "Féminin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENTE",
+        "numero_ordre": "16 12 22 P 18.001",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 33,
+      "nom_prenoms": "GASPARD JONARSON",
+      "champs": {
+        "date_naissance": "1968-02-22",
+        "lieu_naissance": "Fianarantsoa",
+        "pere": "PASCAL",
+        "mere": "AVIMASY",
+        "cin": "501111001035",
+        "date_cin": "1988-02-10",
+        "lieu_cin": "Toliara-I",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Andakoro",
+        "service": "TB",
+        "jobs": "ANIMATEUR",
+        "categorie": "TB",
+        "genre": "Masculin",
+        "statut": "PERMANENT",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 34,
+      "nom_prenoms": "FANOMEZANTSOA VOLANIRINA LOUISA",
+      "champs": {
+        "date_naissance": "1992-03-14",
+        "lieu_naissance": "Toliara",
+        "pere": "RAZAFIMAHATRATRA Angelos Modeste",
+        "mere": "RASOANIRINA Elisabethe Simone",
+        "cin": "520052020520",
+        "date_cin": "2014-01-15",
+        "lieu_cin": "Toliara -I",
+        "situation_matrimoniale": "Veuve",
+        "adresse": "Cathedrale FLM",
+        "service": "RÉCEPTION",
+        "jobs": "RÉCEPTIONNISTE",
+        "categorie": "3A",
+        "genre": "Féminin",
+        "statut": "PERMANENTE",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 35,
+      "nom_prenoms": "FLORESTIEN",
+      "champs": {
+        "date_naissance": "1991-09-24",
+        "lieu_naissance": "Sambava",
+        "mere": "FLORIETTE",
+        "cin": "711151002292",
+        "date_cin": "2010-07-01",
+        "lieu_cin": "Sambava",
+        "situation_matrimoniale": "Celibataire",
+        "adresse": "Tanambao Morafeno",
+        "service": "BLOC OPÉRATOIRE",
+        "jobs": "INFIRMIER",
+        "categorie": "4B",
+        "genre": "Masculin",
+        "diplome": "LICENCE",
+        "etablissement": "ISPMD",
+        "statut": "PERMANENT",
+        "numero_ordre": "16 11 22 P 11.642",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 37,
+      "nom_prenoms": "RAVELOSON TAHINISOA PRESSYLLA",
+      "champs": {
+        "date_naissance": "1964-06-12",
+        "lieu_naissance": "Toliara",
+        "pere": "ZAMBO Raveloson",
+        "mere": "TENDRY",
+        "cin": "512012016049",
+        "date_cin": "2013-04-08",
+        "lieu_cin": "Sakaraha",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Betela Morafeno",
+        "service": "BLOC OPÉRATOIRE",
+        "jobs": "INFIRMIÈRE",
+        "categorie": "4B",
+        "genre": "Féminin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENTE",
+        "numero_ordre": "16 12 22 P 9650"
+      }
+    },
+    {
+      "numero_matricule": 38,
+      "nom_prenoms": "RAZAFINDRAVELO CORINNAT",
+      "champs": {
+        "date_naissance": "1995-02-27",
+        "lieu_naissance": "Toliara",
+        "pere": "RAVELOARISEHENO Octave P",
+        "mere": "ZANAMARO Corinne Justine",
+        "cin": "501092020073",
+        "date_cin": "2013-04-18",
+        "lieu_cin": "Toliara-I",
+        "situation_matrimoniale": "Celibataire",
+        "adresse": "Andaboly",
+        "service": "BLOC OPÉRATOIRE",
+        "jobs": "INFIRMIÈRE",
+        "categorie": "4B",
+        "genre": "Féminin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENTE",
+        "numero_ordre": "14189-1069-2DEL",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 39,
+      "nom_prenoms": "RAKOTONANAHARY RAVO NIRINA",
+      "champs": {
+        "date_naissance": "1992-07-21",
+        "lieu_naissance": "Antsirabe",
+        "pere": "RAKOTONANAHARY Benjamin",
+        "mere": "RASOAMIHARY Vololona",
+        "cin": "312001020434",
+        "date_cin": "2009-07-08",
+        "lieu_cin": "Amparafaravola",
+        "situation_matrimoniale": "Marié",
+        "adresse": "SALFA Tanambao",
+        "service": "ÉCHOGRAPHIE",
+        "jobs": "ÉCHOGRAPHE",
+        "categorie": "4B",
+        "genre": "Masculin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENT",
+        "numero_ordre": "01 11 22 P 10553",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 40,
+      "nom_prenoms": "FELANIAINA ORNELLA MARIE",
+      "champs": {
+        "date_naissance": "1992-03-03",
+        "lieu_naissance": "Morondava",
+        "pere": "HERINDRAINY Abel",
+        "mere": "RAZAFINIRINA Clotilde",
+        "cin": "508992020880",
+        "date_cin": "2010-08-30",
+        "lieu_cin": "Morondava",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "SALFA Tanambao",
+        "service": "MATERNITÉ",
+        "jobs": "SAGE FEMME",
+        "categorie": "4B",
+        "genre": "Féminin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENTE",
+        "numero_ordre": "5054-2573 DEL",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 43,
+      "nom_prenoms": "MAMITIANA NICOLE",
+      "champs": {
+        "date_naissance": "1978-06-01",
+        "lieu_naissance": "Tananarivo",
+        "pere": "MASINA Jean De Dieu",
+        "mere": "RAZANATSOA Perline",
+        "cin": "501112006964",
+        "date_cin": "1999-02-16",
+        "lieu_cin": "Toliara",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Tsianaloka",
+        "service": "BLOC OPÉRATOIRE",
+        "jobs": "SERVANTE",
+        "categorie": "1A",
+        "genre": "Féminin",
+        "statut": "PERMANENTE",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 47,
+      "nom_prenoms": "MAHARITSE HYACINTHE BERTRAND",
+      "champs": {
+        "date_naissance": "1992-04-28",
+        "lieu_naissance": "Toliara",
+        "pere": "HERMENEGILDE Bertrand Kidero",
+        "mere": "BOLIDE Bien Nety",
+        "cin": "501111019218",
+        "date_cin": "2010-05-20",
+        "lieu_cin": "Toliara-I",
+        "situation_matrimoniale": "Marié",
+        "adresse": "Besakoa Toliara",
+        "service": "ADMINISTRATION",
+        "jobs": "GESTIONNAIRE",
+        "categorie": "HC",
+        "genre": "Masculin",
+        "diplome": "MAITRISE",
+        "etablissement": "UNIVERSITE DE TOAMASINA",
+        "statut": "PERMANENT",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 48,
+      "nom_prenoms": "TSIVERY AVILAHY DIT NATANDRA",
+      "champs": {
+        "date_naissance": "1996-07-31",
+        "lieu_naissance": "Ambohimahavelona",
+        "pere": "NATANDRA",
+        "mere": "RAVAO",
+        "cin": "501011016135",
+        "date_cin": "2015-07-04",
+        "lieu_cin": "Toliara-I",
+        "situation_matrimoniale": "Célibataire",
+        "adresse": "Ampasikibo",
+        "service": "ADMINISTRATION",
+        "jobs": "COMPTABLE",
+        "categorie": "B1",
+        "genre": "Masculin",
+        "diplome": "LICENCE",
+        "etablissement": "UVERSITE DE TOLIARA",
+        "statut": "PERMANENT",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 50,
+      "nom_prenoms": "RATOVONJANAHARY ONILAZA",
+      "champs": {
+        "date_naissance": "1992-01-08",
+        "lieu_naissance": "Mahaboboka",
+        "pere": "RAKOTONDRAVELO Emile",
+        "mere": "RATOVONJANAHARY Pierette",
+        "cin": "204012015190",
+        "date_cin": "2011-02-10",
+        "lieu_cin": "Fandriana",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Antaninarenina",
+        "service": "MATERNITÉ",
+        "jobs": "SAGE FEMME",
+        "categorie": "3B",
+        "genre": "Féminin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENTE",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 51,
+      "nom_prenoms": "RALAIVAO TOKINIAINA JEAN LUC FRANÇOIS",
+      "champs": {
+        "date_naissance": "1994-12-13",
+        "lieu_naissance": "Ivoamba",
+        "pere": "RALAIVAO François Xavier",
+        "mere": "RASOANANDRASANA Florentine",
+        "cin": "220071005047",
+        "date_cin": "2013-04-04",
+        "lieu_cin": "Lalangina",
+        "situation_matrimoniale": "Célibataire",
+        "adresse": "Ambalanaomby Kamoa",
+        "service": "BLOC OPÉRATOIRE",
+        "jobs": "INFIRMIER",
+        "categorie": "4B",
+        "genre": "Masculin",
+        "diplome": "LICENCE",
+        "etablissement": "SEFAM",
+        "statut": "PERMANENT",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 52,
+      "nom_prenoms": "MOSA DEAUVILLE",
+      "champs": {
+        "date_naissance": "1980-07-25",
+        "lieu_naissance": "Toliara",
+        "pere": "DEAUVILLE",
+        "mere": "FEDELINE",
+        "cin": "520291001955",
+        "date_cin": "1998-08-12",
+        "lieu_cin": "Toliara -II Milenake",
+        "situation_matrimoniale": "Marié",
+        "service": "SÉCURITÉ",
+        "jobs": "SÉCURITÉ",
+        "categorie": "M2",
+        "genre": "Masculin",
+        "statut": "PERMANENT",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 54,
+      "nom_prenoms": "LUCIENNE RAZAFITENDRY MICHELINE",
+      "champs": {
+        "date_naissance": "1999-04-13",
+        "lieu_naissance": "Ambohimahavelona",
+        "pere": "DEMICHEL",
+        "mere": "RAZAFITENDRY Rodine",
+        "cin": "520112011301",
+        "date_cin": "2022-09-28",
+        "lieu_cin": "Toliara-II",
+        "situation_matrimoniale": "Mariée",
+        "adresse": "Tsianaloka",
+        "service": "ADMINISTRATION",
+        "jobs": "SERVANTE",
+        "categorie": "1A",
+        "genre": "Féminin",
+        "statut": "PERMANENTE",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 56,
+      "nom_prenoms": "RADRIANANTOANDRO TIANARISOA",
+      "champs": {
+        "genre": "Féminin",
+        "date_naissance": "1996-06-02",
+        "diplome": "DOCTEUR EN MEDECINE",
+        "etablissement": "UNIVERSITE DE MAHAJANGA",
+        "service": "MEDECINE",
+        "statut": "PERMANENTE",
+        "numero_ordre": "03 11 22 31 430 10759",
+        "nature_contrat": "CDI"
+      }
+    },
+    {
+      "numero_matricule": 58,
+      "nom_prenoms": "RASOANANDRASANA EMELIE",
+      "champs": {
+        "date_naissance": "1991-02-25",
+        "lieu_naissance": "Toliara",
+        "pere": "AIME Florentin",
+        "mere": "RASOANANDRASANA Zavie",
+        "cin": "501072024610",
+        "date_cin": "2009-07-20",
+        "lieu_cin": "Toliara -I",
+        "situation_matrimoniale": "Celibataire",
+        "adresse": "Tsianaloka",
+        "service": "ADMINISTRATION",
+        "jobs": "CAISSIÈRE",
+        "categorie": "3A",
+        "genre": "Féminin",
+        "diplome": "BACCALAUREAT",
+        "etablissement": "UNIVERSITE DE TOLIARA",
+        "statut": "PERMANENTE",
+        "nature_contrat": "CDI"
+      }
+    }
+  ],
+  "nonRapproches": [
+    {
+      "feuille": "Feuil1",
+      "nom": "BITENY Edouardina Dolin",
+      "identifiant": "715031017502"
+    },
+    {
+      "feuille": "Feuil1",
+      "nom": "RABOTORAKA Jimson Marco Andriamalanto",
+      "identifiant": "401011049626"
+    },
+    {
+      "feuille": "Feuil1",
+      "nom": "RANDRIANANTOANDRO Tianarisoa Hery",
+      "identifiant": "401012037730"
+    },
+    {
+      "feuille": "Feuil1",
+      "nom": "CHRISTIAN Euloge Ibrahim",
+      "identifiant": "421011007330"
+    },
+    {
+      "feuille": "Feuil1",
+      "nom": "RAZAKANIAINA Samson",
+      "identifiant": "501071001171"
+    },
+    {
+      "feuille": "Feuil1",
+      "nom": "MAHO Viviane",
+      "identifiant": "515012019190"
+    },
+    {
+      "feuille": "Feuil1",
+      "nom": "RAHARIMANANA Maminiaina Zoarinjara",
+      "identifiant": "101222127847"
+    },
+    {
+      "feuille": "Feuil1",
+      "nom": "RAZAFINIMANANA Rotsy Samuëline Hortense",
+      "identifiant": "501012001886"
+    },
+    {
+      "feuille": "LISTE FINALE",
+      "nom": "RAJAONAH RASOLONJATOVO",
+      "identifiant": ""
+    },
+    {
+      "feuille": "LISTE FINALE",
+      "nom": "BITENY EDOUARDINA DOLIN",
+      "identifiant": "890522007147"
+    },
+    {
+      "feuille": "LISTE FINALE",
+      "nom": "RABOTORAKA JIMSON MARCO ANDRIAMALANTO",
+      "identifiant": "950801005319"
+    },
+    {
+      "feuille": "LISTE FINALE",
+      "nom": "DODOSON BRONISLAW TCHESTERICO",
+      "identifiant": ""
+    },
+    {
+      "feuille": "LISTE FINALE",
+      "nom": "RAHARIMANANA MAMINIAINA ZOARINJARA",
+      "identifiant": "992914003135"
+    },
+    {
+      "feuille": "LISTE FINALE",
+      "nom": "CHRISTIAN EULOGE IBRAHIM",
+      "identifiant": "910903006947"
+    },
+    {
+      "feuille": "LISTE FINALE",
+      "nom": "MAHO VIVIANE",
+      "identifiant": "652325001818"
+    },
+    {
+      "feuille": "LISTE FINALE",
+      "nom": "RAZAKANIAINA SAMSON",
+      "identifiant": ""
+    }
+  ],
+  "conflits": [
+    {
+      "matricule": 39,
+      "nom": "RAKOTONANAHARY RAVO NIRINA",
+      "champ": "date_naissance",
+      "feuilles": [
+        "1992-07-21",
+        "1992-07-27"
+      ],
+      "retenu": "1992-07-21"
+    },
+    {
+      "matricule": 39,
+      "nom": "RAKOTONANAHARY RAVO NIRINA",
+      "champ": "service",
+      "feuilles": [
+        "ÉCHOGRAPHIE",
+        "ECHOGRAPHIE/ BLOC OPERATOIRE"
+      ],
+      "retenu": "ÉCHOGRAPHIE"
+    },
+    {
+      "matricule": 35,
+      "nom": "FLORESTIEN",
+      "champ": "service",
+      "feuilles": [
+        "BLOC OPÉRATOIRE",
+        "BLOC OPERATOIRE"
+      ],
+      "retenu": "BLOC OPÉRATOIRE"
+    },
+    {
+      "matricule": 32,
+      "nom": "RAHARILALAINTSOA MAURICETTE",
+      "champ": "service",
+      "feuilles": [
+        "BLOC OPÉRATOIRE",
+        "BLOC OPERATOIRE"
+      ],
+      "retenu": "BLOC OPÉRATOIRE"
+    },
+    {
+      "matricule": 37,
+      "nom": "RAVELOSON TAHINISOA PRESSYLLA",
+      "champ": "service",
+      "feuilles": [
+        "BLOC OPÉRATOIRE",
+        "BLOC OPERATOIRE"
+      ],
+      "retenu": "BLOC OPÉRATOIRE"
+    },
+    {
+      "matricule": 24,
+      "nom": "ZAFINDRIAKY DAFISON FLORIS EMILIENNE",
+      "champ": "service",
+      "feuilles": [
+        "MATERNITÉ",
+        "MATERNITE"
+      ],
+      "retenu": "MATERNITÉ"
+    },
+    {
+      "matricule": 51,
+      "nom": "RALAIVAO TOKINIAINA JEAN LUC FRANÇOIS",
+      "champ": "service",
+      "feuilles": [
+        "BLOC OPÉRATOIRE",
+        "BLOC OPERATOIRE"
+      ],
+      "retenu": "BLOC OPÉRATOIRE"
+    },
+    {
+      "matricule": 50,
+      "nom": "RATOVONJANAHARY ONILAZA",
+      "champ": "service",
+      "feuilles": [
+        "MATERNITÉ",
+        "SOINS"
+      ],
+      "retenu": "MATERNITÉ"
+    },
+    {
+      "matricule": 23,
+      "nom": "FENOARIFETRA OITRAMANDRESY BENJARIVELO",
+      "champ": "date_naissance",
+      "feuilles": [
+        "1984-03-15",
+        "1984-03-16"
+      ],
+      "retenu": "1984-03-15"
+    },
+    {
+      "matricule": 40,
+      "nom": "FELANIAINA ORNELLA MARIE",
+      "champ": "service",
+      "feuilles": [
+        "MATERNITÉ",
+        "MATERNITE"
+      ],
+      "retenu": "MATERNITÉ"
+    },
+    {
+      "matricule": 22,
+      "nom": "RAHARIVELO NIRIVOLOLONIAINA MIRANTSOA",
+      "champ": "date_naissance",
+      "feuilles": [
+        "1980-01-24",
+        "1980-01-25"
+      ],
+      "retenu": "1980-01-24"
+    },
+    {
+      "matricule": 14,
+      "nom": "RASAMOELINA VALSON VERONIQUE",
+      "champ": "service",
+      "feuilles": [
+        "MATERNITÉ",
+        "MATERNITE"
+      ],
+      "retenu": "MATERNITÉ"
+    },
+    {
+      "matricule": 38,
+      "nom": "RAZAFINDRAVELO CORINNAT",
+      "champ": "service",
+      "feuilles": [
+        "BLOC OPÉRATOIRE",
+        "BLOC OPERATOIRE"
+      ],
+      "retenu": "BLOC OPÉRATOIRE"
+    },
+    {
+      "matricule": 12,
+      "nom": "RABOANARISON RADONIAINA PATRICK",
+      "champ": "service",
+      "feuilles": [
+        "RÉCEPTION",
+        "RECEPTION"
+      ],
+      "retenu": "RÉCEPTION"
+    },
+    {
+      "matricule": 34,
+      "nom": "FANOMEZANTSOA VOLANIRINA LOUISA",
+      "champ": "service",
+      "feuilles": [
+        "RÉCEPTION",
+        "RECEPTION"
+      ],
+      "retenu": "RÉCEPTION"
+    },
+    {
+      "matricule": 1,
+      "nom": "TSIAMBANY JOELSON",
+      "champ": "service",
+      "feuilles": [
+        "RÉCEPTION",
+        "RECEPTION"
+      ],
+      "retenu": "RÉCEPTION"
+    },
+    {
+      "matricule": 13,
+      "nom": "RIVONILAINA VICTOR",
+      "champ": "service",
+      "feuilles": [
+        "STOMATOLOGIE",
+        "ADMINISTRATION"
+      ],
+      "retenu": "STOMATOLOGIE"
+    },
+    {
+      "matricule": 43,
+      "nom": "MAMITIANA NICOLE",
+      "champ": "service",
+      "feuilles": [
+        "BLOC OPÉRATOIRE",
+        "ADMINISTRATION"
+      ],
+      "retenu": "BLOC OPÉRATOIRE"
+    },
+    {
+      "matricule": 33,
+      "nom": "GASPARD JONARSON",
+      "champ": "date_naissance",
+      "feuilles": [
+        "1968-02-22",
+        "1968-06-22"
+      ],
+      "retenu": "1968-02-22"
+    },
+    {
+      "matricule": 33,
+      "nom": "GASPARD JONARSON",
+      "champ": "service",
+      "feuilles": [
+        "TB",
+        "TUBERCULOSE"
+      ],
+      "retenu": "TB"
+    },
+    {
+      "matricule": 52,
+      "nom": "MOSA DEAUVILLE",
+      "champ": "date_naissance",
+      "feuilles": [
+        "1980-07-25",
+        "1960-07-25"
+      ],
+      "retenu": "1980-07-25"
+    },
+    {
+      "matricule": 52,
+      "nom": "MOSA DEAUVILLE",
+      "champ": "service",
+      "feuilles": [
+        "SÉCURITÉ",
+        "SECURITE"
+      ],
+      "retenu": "SÉCURITÉ"
+    },
+    {
+      "matricule": 20,
+      "nom": "VAZISON CLAUDE FANOMEZANTSOA",
+      "champ": "service",
+      "feuilles": [
+        "SÉCURITÉ",
+        "SECURITE"
+      ],
+      "retenu": "SÉCURITÉ"
+    }
+  ]
+}

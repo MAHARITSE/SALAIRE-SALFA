@@ -11,6 +11,7 @@ import { calculerPaieEmploye, calculerAnciennete, estEmployeEnCongeMaternite } f
 import { hashPassword } from './local/hash';
 import { loadConfig } from './local/config';
 import { correspondRecherche, normaliserRecherche } from './local/recherche';
+import { normaliserChampsPersonnel, completerFicheFusionnee, appliquerPersonnelAuxFiches, rapportPersonnel, PERSONNEL_VERSION, CHAMPS_PERSONNEL_SENSIBLES, RapportPersonnel } from './local/personnel';
 import { ImportWorkbookResult, ImportedEmploye, ImportedPaie, MOIS_FR } from './local/importExcel';
 import {
   CongeAbsence, CongesConfig, CategorieAbsence, ImputationConges, StatutConges,
@@ -344,10 +345,32 @@ export async function fetchEmployes(actifsOnly: boolean = false, search: string 
       responsabilite_representation: 0,
       rib: '',
       mode_paiement: '',
+      ...Object.fromEntries(CHAMPS_PERSONNEL_SENSIBLES.map((k) => [k, ''])),
     }));
   }
 
   return employes;
+}
+
+export interface ResultatComplementPersonnel {
+  success: boolean;
+  fiches: number;
+  champs: number;
+  rapport: RapportPersonnel;
+  message?: string;
+}
+
+/** Complète les fiches avec le rapprochement « LISTE DE PERSONNEL.xlsx » sans écraser les saisies. */
+export async function completerPersonnel(): Promise<ResultatComplementPersonnel> {
+  exigerAdmin();
+  const store = getStore();
+  const avant = JSON.parse(JSON.stringify(store));
+  const stats = appliquerPersonnelAuxFiches(store.employes);
+  store.meta = { ...(store.meta || {}), personnel_version: PERSONNEL_VERSION };
+  if (!sauvegarderOuRestaurer(store, avant)) {
+    return { success: false, fiches: 0, champs: 0, rapport: rapportPersonnel(), message: 'Sauvegarde impossible.' };
+  }
+  return { success: true, ...stats, rapport: rapportPersonnel() };
 }
 
 export async function fetchEmployePaies(id: number): Promise<PaieMensuelle[]> {
@@ -431,6 +454,7 @@ export async function createEmploye(employe: Partial<Employe>): Promise<boolean>
     date_inactif: dateInactif,
     conge_maternite: employe.conge_maternite ? 1 : 0,
     date_debut_maternite: String(employe.date_debut_maternite || '').trim(),
+    ...normaliserChampsPersonnel(employe as Record<string, unknown>),
     date_creation: nowStamp(),
   };
   store.employes.push(newEmp);
@@ -498,6 +522,7 @@ export async function updateEmploye(
       employe.date_debut_maternite !== undefined
         ? String(employe.date_debut_maternite || '').trim()
         : oldEmp.date_debut_maternite,
+    ...normaliserChampsPersonnel(employe as Record<string, unknown>),
   };
 
   const salaireOuReglementModifie =
@@ -1482,6 +1507,7 @@ export async function fusionnerEmployes(
     mode_paiement: modeFinal,
     actif: actifFinal,
   };
+  completerFicheFusionnee(cibleFusionnee, source);
   store.employes[idxCible] = cibleFusionnee;
 
   // 2. Rattacher ou dédoublonner les bulletins de paie
@@ -1938,6 +1964,11 @@ function fusionnerEmploye(base: any, src: ImportedEmploye, ecraserValeurs = true
     if (!(v > 0)) continue;
     if (ecraserValeurs || !(Number(out[k] || 0) > 0)) out[k] = v;
   }
+  const personnelImporte = normaliserChampsPersonnel(src as unknown as Record<string, unknown>);
+  for (const [k, v] of Object.entries(personnelImporte)) {
+    if (!v) continue;
+    if (ecraserValeurs || !String(out[k] || '').trim()) out[k] = v;
+  }
   out.nom_prenoms = String(out.nom_prenoms || src.nom_prenoms || '').trim().toLocaleUpperCase('fr-FR');
   return out;
 }
@@ -1963,6 +1994,7 @@ function nouveauEmploye(src: ImportedEmploye, actif: 0 | 1 = 1): any {
     date_inactif: actif === 0 ? new Date().toISOString().slice(0, 10) : '',
     conge_maternite: src.conge_maternite ? 1 : 0,
     date_debut_maternite: src.date_debut_maternite || '',
+    ...normaliserChampsPersonnel(src as unknown as Record<string, unknown>),
     date_creation: nowStamp(),
   };
 }

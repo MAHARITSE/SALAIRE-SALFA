@@ -72,6 +72,8 @@ export const ajouterAnneeBase: typeof local.ajouterAnneeBase = (...args) =>
   WAMP
     ? remoteWrite('ajouterAnnee', () => local.ajouterAnneeBase(...args), { success: false, message: 'Sauvegarde non confirmée.' })
     : local.ajouterAnneeBase(...args);
+export const completerPersonnel: typeof local.completerPersonnel = (...args) =>
+  WAMP ? remoteWrite('completerPersonnel', () => local.completerPersonnel(...args), { success: false, fiches: 0, champs: 0, rapport: { version: '', source: '', rapproches: 0, nonRapproches: [], conflits: [] }, message: 'Complément non confirmé.' }) : local.completerPersonnel(...args);
 export const createEmploye: typeof local.createEmploye = (...args) => WAMP ? remoteWrite('createEmploye', () => local.createEmploye(...args), false) : local.createEmploye(...args);
 export const updateEmploye: typeof local.updateEmploye = (...args) => WAMP ? remoteWrite('updateEmploye', () => local.updateEmploye(...args), false) : local.updateEmploye(...args);
 export const toggleActifEmploye: typeof local.toggleActifEmploye = (...args) => WAMP ? remoteWrite('toggleActifEmploye', () => local.toggleActifEmploye(...args), false) : local.toggleActifEmploye(...args);

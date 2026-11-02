@@ -32,6 +32,21 @@ Les futurs mois créés dans l’application restent ouverts jusqu’à leur cl�
 Ne copiez dans `www` **que** le dossier `Salaire_salfa` prêt à l'emploi :
 jamais le dossier `wamp\` complet, ni le fichier SQL, ni `salfa-config.php`.
 
+## Mise à jour du 2 novembre 2026
+
+Le dossier et le ZIP prêts à copier incluent désormais :
+
+- les **contrats de travail** : depuis l'onglet *Salariés, Saisie & État de paie*,
+  l'administrateur peut ouvrir un contrat prérempli depuis la fiche salarié,
+  compléter les champs manquants, l'imprimer en A4 portrait ou l'exporter en
+  PDF / Word. Les exports incomplets portent la mention « PROJET » ;
+- le complément des fiches salariés depuis **LISTE DE PERSONNEL.xlsx** via
+  **Administration → Liste de personnel**. Les colonnes MySQL manquantes sont
+  ajoutées automatiquement au démarrage ; aucune réimportation SQL n'est
+  nécessaire. Les données personnelles sont masquées au rôle Comptable ;
+- l'affichage comptable unifié : montants **alignés à droite** et zéro affiché
+  **`-`** au lieu de `0,00` (tableaux, bulletins, contrats, exports Excel).
+
 ## Mise à jour du 31 octobre 2026
 
 Le dossier et le ZIP prêts à copier incluent désormais :

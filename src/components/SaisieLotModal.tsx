@@ -6,6 +6,7 @@ import {
 import { enregistrerSaisieLot, SaisieLot } from '../api';
 import { Employe, PaieMensuelle } from '../types';
 import { correspondRecherche, normaliserRecherche } from '../local/recherche';
+import { formatMontant } from '../local/montants';
 
 export type TypeSaisieRetenue = 'avance' | 'med';
 
@@ -29,8 +30,7 @@ interface DraftItem {
   montant: number;
 }
 
-const fmt = (n: number) =>
-  n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (n: number) => formatMontant(n);
 
 function parseMontant(text: string): number | undefined | null {
   const value = text.trim().replace(/\s/g, '');

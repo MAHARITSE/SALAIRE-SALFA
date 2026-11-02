@@ -12,9 +12,10 @@ import {
   paginerPaiesDecharge,
 } from '../bulletin/model';
 import { loadBulletinHeader, defaultBulletinHeader } from '../bulletin/header';
+import { formatMontant } from '../local/montants';
 
 function fmt(value: number | undefined | null): string {
-  return Number(value || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return formatMontant(value);
 }
 
 function safeFilePart(value: string): string {

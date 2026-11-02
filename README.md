@@ -22,7 +22,7 @@ php wamp/test-validation.php
 ```
 
 **État connu :** `npm test` signale encore la divergence de ventilation du matricule
-28 en octobre 2026 entre le classeur et les données initiales (11 suites sur 12
+28 en octobre 2026 entre le classeur et les données initiales (15 suites sur 16
 réussissent). `npm audit` signale encore la dépendance Excel `xlsx`. Ces alertes
 ne doivent pas être ignorées ou présentées comme des vérifications réussies.
 
@@ -134,6 +134,27 @@ src/
 
 ---
 
+## 👤 Liste de personnel et affichage des montants
+
+Les fiches salariés peuvent être complétées depuis **`LISTE DE PERSONNEL.xlsx`** :
+état civil, CIN, filiation, adresse, service d'affectation, diplôme, statut,
+nature de contrat et informations professionnelles. Le rapprochement est
+conservateur : seuls les champs vides sont remplis, les saisies existantes ne
+sont pas écrasées et aucun montant de paie n'est modifié. Les personnes non
+retrouvées et les divergences entre feuilles sont listées dans
+**Administration → Liste de personnel**. Ces données personnelles sont masquées
+au rôle Comptable.
+
+Pour régénérer le rapprochement depuis le classeur :
+
+```sh
+npm run personnel:completer
+```
+
+L'affichage comptable est unifié : les montants sont **alignés à droite** et une
+valeur nulle s'affiche **`-`** au lieu de `0,00`, dans les tableaux, bulletins,
+contrats et exports Excel.
+
 ## 📥 Importer votre classeur Excel (ancien ou récent : personnel + états de paie)
 
 L'application lit directement vos fichiers **`SALAIRE_SALFA_….xlsm` / `.xlsx` / `.xls` / `.xlsb` / `.csv`**
@@ -180,6 +201,25 @@ Reproduction du classeur Excel, en plein écran et imprimable :
 
 ---
 
+## 📝 Contrats de travail
+
+Réservé à l'**Administrateur**, dans **1. Salariés, Saisie & État de paie** :
+
+- bouton **« Contrats de travail »** pour choisir un salarié (actif ou inactif) ;
+- icône **contrat** sur chaque ligne de l'état de paie pour ouvrir directement le contrat du salarié ;
+- préremplissage depuis la fiche : nom, fonction, classification, salaire de base et indemnité de rendement ;
+- les champs absents de la fiche (état civil, CIN, service, nature/durée du contrat, lieux, date d'effet, signature…) restent à compléter dans l'éditeur ;
+- les rubriques groupées **logement/transport** et **responsabilité/représentation** ne sont pas ventilées automatiquement vers les indemnités séparées du contrat ;
+- aperçu du contrat, **impression A4 portrait**, export **PDF** et **Word (.docx)** ;
+- un contrat incomplet peut être exporté comme **projet** : il porte la mention « PROJET — À COMPLÉTER AVANT SIGNATURE » et des champs « À compléter » ;
+- les compléments saisis dans l'éditeur ne modifient ni la fiche salarié ni la paie et ne sont pas conservés après fermeture : téléchargez le contrat pour le garder.
+
+Le modèle Word est dérivé de `CONTRAT DE TRAVAIL SALFA.docx` sans réécrire les clauses.
+Pour le régénérer après modification du document source : `npm run contrat:modele`.
+Vérification dédiée : `node scripts/test-contrat.cjs`.
+
+---
+
 ## ✨ Fonctionnalités
 
 - Authentification locale (`admin` / `comptable`)
@@ -188,6 +228,7 @@ Reproduction du classeur Excel, en plein écran et imprimable :
 - **État de paie mensuel** complet (32 colonnes + totaux), impression A4 en deux pages et export Excel
 - **Saisie indépendante** des **Avances** d'un côté et des **Médicaments** de l'autre (saisie directe par volet ou saisie en lot dédiée, sans champs côte à côte), clôture et déverrouillage des mois
 - Bulletins de paie (2 exemplaires, export PDF via jsPDF)
+- **Contrats de travail** depuis la fiche salarié : édition des champs manquants, aperçu, impression A4 portrait, export PDF et Word (`.docx`) à partir du modèle fourni
 - Rapports & comparaisons, exports Excel (xlsx) et JSON
 - Conformité CGI Madagascar (IRSA) et calcul CNaPS
 

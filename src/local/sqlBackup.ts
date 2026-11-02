@@ -208,7 +208,27 @@ CREATE TABLE IF NOT EXISTS \`salfa_employes\` (
   \`date_inactif\` VARCHAR(20) NOT NULL DEFAULT '',
   \`conge_maternite\` TINYINT NOT NULL DEFAULT 0,
   \`date_debut_maternite\` VARCHAR(20) NOT NULL DEFAULT '',
-  \`date_creation\` VARCHAR(32) NOT NULL DEFAULT ''
+  \`date_creation\` VARCHAR(32) NOT NULL DEFAULT '',
+  \`genre\` VARCHAR(20) NOT NULL DEFAULT '',
+  \`date_naissance\` VARCHAR(20) NOT NULL DEFAULT '',
+  \`lieu_naissance\` VARCHAR(160) NOT NULL DEFAULT '',
+  \`pere\` VARCHAR(160) NOT NULL DEFAULT '',
+  \`mere\` VARCHAR(160) NOT NULL DEFAULT '',
+  \`cin\` VARCHAR(32) NOT NULL DEFAULT '',
+  \`date_cin\` VARCHAR(20) NOT NULL DEFAULT '',
+  \`lieu_cin\` VARCHAR(160) NOT NULL DEFAULT '',
+  \`situation_matrimoniale\` VARCHAR(60) NOT NULL DEFAULT '',
+  \`adresse\` VARCHAR(255) NOT NULL DEFAULT '',
+  \`service\` VARCHAR(160) NOT NULL DEFAULT '',
+  \`diplome\` VARCHAR(255) NOT NULL DEFAULT '',
+  \`etablissement\` VARCHAR(255) NOT NULL DEFAULT '',
+  \`statut\` VARCHAR(80) NOT NULL DEFAULT '',
+  \`numero_ordre\` VARCHAR(60) NOT NULL DEFAULT '',
+  \`nature_contrat\` VARCHAR(32) NOT NULL DEFAULT '',
+  \`duree_contrat\` VARCHAR(160) NOT NULL DEFAULT '',
+  \`lieu_embauche\` VARCHAR(160) NOT NULL DEFAULT '',
+  \`lieu_travail\` VARCHAR(160) NOT NULL DEFAULT '',
+  \`date_effet\` VARCHAR(20) NOT NULL DEFAULT ''
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS \`salfa_paies\` (
@@ -474,10 +494,10 @@ export function buildRelationalSqlBackup(params: {
     if (employes.length > 0) {
       lines.push('-- Salariés référencés (sans écraser les salaires déjà présents en base)');
       for (const batch of chunkArray(employes, 100)) {
-        lines.push('INSERT IGNORE INTO `salfa_employes` (`id`, `numero_matricule`, `nom_prenoms`, `numero_cnaps`, `categorie`, `jobs`, `date_embauche`, `nombre_annees`, `enfant_a_charge`, `base_aj`, `logement_transport`, `rendement`, `responsabilite_representation`, `rib`, `mode_paiement`, `actif`, `date_inactif`, `conge_maternite`, `date_debut_maternite`, `date_creation`) VALUES');
+        lines.push('INSERT IGNORE INTO `salfa_employes` (`id`, `numero_matricule`, `nom_prenoms`, `numero_cnaps`, `categorie`, `jobs`, `date_embauche`, `nombre_annees`, `enfant_a_charge`, `base_aj`, `logement_transport`, `rendement`, `responsabilite_representation`, `rib`, `mode_paiement`, `actif`, `date_inactif`, `conge_maternite`, `date_debut_maternite`, `date_creation`, `genre`, `date_naissance`, `lieu_naissance`, `pere`, `mere`, `cin`, `date_cin`, `lieu_cin`, `situation_matrimoniale`, `adresse`, `service`, `diplome`, `etablissement`, `statut`, `numero_ordre`, `nature_contrat`, `duree_contrat`, `lieu_embauche`, `lieu_travail`, `date_effet`) VALUES');
         lines.push(
           batch
-            .map((e: any) => `  (${sqlInt(e.id)}, ${sqlInt(e.numero_matricule)}, ${sqlEscapeString(e.nom_prenoms, 160)}, ${sqlEscapeString(e.numero_cnaps, 60)}, ${sqlEscapeString(e.categorie, 32)}, ${sqlEscapeString(e.jobs, 160)}, ${sqlEscapeString(e.date_embauche, 20)}, ${sqlInt(e.nombre_annees)}, ${sqlInt(e.enfant_a_charge)}, ${sqlFloat(e.base_aj)}, ${sqlFloat(e.logement_transport)}, ${sqlFloat(e.rendement)}, ${sqlFloat(e.responsabilite_representation)}, ${sqlEscapeString(e.rib, 80)}, ${sqlEscapeString(e.mode_paiement || 'ESPECES', 32)}, ${Number(e.actif) === 0 ? 0 : 1}, ${sqlEscapeString(e.date_inactif, 20)}, ${e.conge_maternite ? 1 : 0}, ${sqlEscapeString(e.date_debut_maternite, 20)}, ${sqlEscapeString(e.date_creation, 32)})`)
+            .map((e: any) => `  (${sqlInt(e.id)}, ${sqlInt(e.numero_matricule)}, ${sqlEscapeString(e.nom_prenoms, 160)}, ${sqlEscapeString(e.numero_cnaps, 60)}, ${sqlEscapeString(e.categorie, 32)}, ${sqlEscapeString(e.jobs, 160)}, ${sqlEscapeString(e.date_embauche, 20)}, ${sqlInt(e.nombre_annees)}, ${sqlInt(e.enfant_a_charge)}, ${sqlFloat(e.base_aj)}, ${sqlFloat(e.logement_transport)}, ${sqlFloat(e.rendement)}, ${sqlFloat(e.responsabilite_representation)}, ${sqlEscapeString(e.rib, 80)}, ${sqlEscapeString(e.mode_paiement || 'ESPECES', 32)}, ${Number(e.actif) === 0 ? 0 : 1}, ${sqlEscapeString(e.date_inactif, 20)}, ${e.conge_maternite ? 1 : 0}, ${sqlEscapeString(e.date_debut_maternite, 20)}, ${sqlEscapeString(e.date_creation, 32)}, ${sqlEscapeString(e.genre, 20)}, ${sqlEscapeString(e.date_naissance, 20)}, ${sqlEscapeString(e.lieu_naissance, 160)}, ${sqlEscapeString(e.pere, 160)}, ${sqlEscapeString(e.mere, 160)}, ${sqlEscapeString(e.cin, 32)}, ${sqlEscapeString(e.date_cin, 20)}, ${sqlEscapeString(e.lieu_cin, 160)}, ${sqlEscapeString(e.situation_matrimoniale, 60)}, ${sqlEscapeString(e.adresse, 255)}, ${sqlEscapeString(e.service, 160)}, ${sqlEscapeString(e.diplome, 255)}, ${sqlEscapeString(e.etablissement, 255)}, ${sqlEscapeString(e.statut, 80)}, ${sqlEscapeString(e.numero_ordre, 60)}, ${sqlEscapeString(e.nature_contrat, 32)}, ${sqlEscapeString(e.duree_contrat, 160)}, ${sqlEscapeString(e.lieu_embauche, 160)}, ${sqlEscapeString(e.lieu_travail, 160)}, ${sqlEscapeString(e.date_effet, 20)})`)
             .join(',\n') + ';'
         );
       }
@@ -548,10 +568,10 @@ export function buildRelationalSqlBackup(params: {
     lines.push('-- Salariés');
     lines.push('DELETE FROM `salfa_employes`;');
     for (const batch of chunkArray(employes, 100)) {
-      lines.push('INSERT INTO `salfa_employes` (`id`, `numero_matricule`, `nom_prenoms`, `numero_cnaps`, `categorie`, `jobs`, `date_embauche`, `nombre_annees`, `enfant_a_charge`, `base_aj`, `logement_transport`, `rendement`, `responsabilite_representation`, `rib`, `mode_paiement`, `actif`, `date_inactif`, `conge_maternite`, `date_debut_maternite`, `date_creation`) VALUES');
+      lines.push('INSERT INTO `salfa_employes` (`id`, `numero_matricule`, `nom_prenoms`, `numero_cnaps`, `categorie`, `jobs`, `date_embauche`, `nombre_annees`, `enfant_a_charge`, `base_aj`, `logement_transport`, `rendement`, `responsabilite_representation`, `rib`, `mode_paiement`, `actif`, `date_inactif`, `conge_maternite`, `date_debut_maternite`, `date_creation`, `genre`, `date_naissance`, `lieu_naissance`, `pere`, `mere`, `cin`, `date_cin`, `lieu_cin`, `situation_matrimoniale`, `adresse`, `service`, `diplome`, `etablissement`, `statut`, `numero_ordre`, `nature_contrat`, `duree_contrat`, `lieu_embauche`, `lieu_travail`, `date_effet`) VALUES');
       lines.push(
         batch
-          .map((e: any) => `  (${sqlInt(e.id)}, ${sqlInt(e.numero_matricule)}, ${sqlEscapeString(e.nom_prenoms, 160)}, ${sqlEscapeString(e.numero_cnaps, 60)}, ${sqlEscapeString(e.categorie, 32)}, ${sqlEscapeString(e.jobs, 160)}, ${sqlEscapeString(e.date_embauche, 20)}, ${sqlInt(e.nombre_annees)}, ${sqlInt(e.enfant_a_charge)}, ${sqlFloat(e.base_aj)}, ${sqlFloat(e.logement_transport)}, ${sqlFloat(e.rendement)}, ${sqlFloat(e.responsabilite_representation)}, ${sqlEscapeString(e.rib, 80)}, ${sqlEscapeString(e.mode_paiement || 'ESPECES', 32)}, ${Number(e.actif) === 0 ? 0 : 1}, ${sqlEscapeString(e.date_inactif, 20)}, ${e.conge_maternite ? 1 : 0}, ${sqlEscapeString(e.date_debut_maternite, 20)}, ${sqlEscapeString(e.date_creation, 32)})`)
+          .map((e: any) => `  (${sqlInt(e.id)}, ${sqlInt(e.numero_matricule)}, ${sqlEscapeString(e.nom_prenoms, 160)}, ${sqlEscapeString(e.numero_cnaps, 60)}, ${sqlEscapeString(e.categorie, 32)}, ${sqlEscapeString(e.jobs, 160)}, ${sqlEscapeString(e.date_embauche, 20)}, ${sqlInt(e.nombre_annees)}, ${sqlInt(e.enfant_a_charge)}, ${sqlFloat(e.base_aj)}, ${sqlFloat(e.logement_transport)}, ${sqlFloat(e.rendement)}, ${sqlFloat(e.responsabilite_representation)}, ${sqlEscapeString(e.rib, 80)}, ${sqlEscapeString(e.mode_paiement || 'ESPECES', 32)}, ${Number(e.actif) === 0 ? 0 : 1}, ${sqlEscapeString(e.date_inactif, 20)}, ${e.conge_maternite ? 1 : 0}, ${sqlEscapeString(e.date_debut_maternite, 20)}, ${sqlEscapeString(e.date_creation, 32)}, ${sqlEscapeString(e.genre, 20)}, ${sqlEscapeString(e.date_naissance, 20)}, ${sqlEscapeString(e.lieu_naissance, 160)}, ${sqlEscapeString(e.pere, 160)}, ${sqlEscapeString(e.mere, 160)}, ${sqlEscapeString(e.cin, 32)}, ${sqlEscapeString(e.date_cin, 20)}, ${sqlEscapeString(e.lieu_cin, 160)}, ${sqlEscapeString(e.situation_matrimoniale, 60)}, ${sqlEscapeString(e.adresse, 255)}, ${sqlEscapeString(e.service, 160)}, ${sqlEscapeString(e.diplome, 255)}, ${sqlEscapeString(e.etablissement, 255)}, ${sqlEscapeString(e.statut, 80)}, ${sqlEscapeString(e.numero_ordre, 60)}, ${sqlEscapeString(e.nature_contrat, 32)}, ${sqlEscapeString(e.duree_contrat, 160)}, ${sqlEscapeString(e.lieu_embauche, 160)}, ${sqlEscapeString(e.lieu_travail, 160)}, ${sqlEscapeString(e.date_effet, 20)})`)
           .join(',\n') + ';'
       );
     }

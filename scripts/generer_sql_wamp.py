@@ -221,7 +221,27 @@ def main() -> None:
         "  `date_inactif` VARCHAR(20) NOT NULL DEFAULT '',",
         "  `conge_maternite` TINYINT NOT NULL DEFAULT 0,",
         "  `date_debut_maternite` VARCHAR(20) NOT NULL DEFAULT '',",
-        "  `date_creation` VARCHAR(32) NOT NULL DEFAULT ''",
+        "  `date_creation` VARCHAR(32) NOT NULL DEFAULT '',",
+        "  `genre` VARCHAR(20) NOT NULL DEFAULT '',",
+        "  `date_naissance` VARCHAR(20) NOT NULL DEFAULT '',",
+        "  `lieu_naissance` VARCHAR(160) NOT NULL DEFAULT '',",
+        "  `pere` VARCHAR(160) NOT NULL DEFAULT '',",
+        "  `mere` VARCHAR(160) NOT NULL DEFAULT '',",
+        "  `cin` VARCHAR(32) NOT NULL DEFAULT '',",
+        "  `date_cin` VARCHAR(20) NOT NULL DEFAULT '',",
+        "  `lieu_cin` VARCHAR(160) NOT NULL DEFAULT '',",
+        "  `situation_matrimoniale` VARCHAR(60) NOT NULL DEFAULT '',",
+        "  `adresse` VARCHAR(255) NOT NULL DEFAULT '',",
+        "  `service` VARCHAR(160) NOT NULL DEFAULT '',",
+        "  `diplome` VARCHAR(255) NOT NULL DEFAULT '',",
+        "  `etablissement` VARCHAR(255) NOT NULL DEFAULT '',",
+        "  `statut` VARCHAR(80) NOT NULL DEFAULT '',",
+        "  `numero_ordre` VARCHAR(60) NOT NULL DEFAULT '',",
+        "  `nature_contrat` VARCHAR(32) NOT NULL DEFAULT '',",
+        "  `duree_contrat` VARCHAR(160) NOT NULL DEFAULT '',",
+        "  `lieu_embauche` VARCHAR(160) NOT NULL DEFAULT '',",
+        "  `lieu_travail` VARCHAR(160) NOT NULL DEFAULT '',",
+        "  `date_effet` VARCHAR(20) NOT NULL DEFAULT ''",
         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
         "",
         "CREATE TABLE IF NOT EXISTS `salfa_paies` (",
@@ -438,7 +458,8 @@ def main() -> None:
         "  `id`, `numero_matricule`, `nom_prenoms`, `numero_cnaps`, `categorie`, `jobs`,",
         "  `date_embauche`, `nombre_annees`, `enfant_a_charge`, `base_aj`, `logement_transport`,",
         "  `rendement`, `responsabilite_representation`, `rib`, `mode_paiement`, `actif`,",
-        "  `date_inactif`, `conge_maternite`, `date_debut_maternite`, `date_creation`",
+        "  `date_inactif`, `conge_maternite`, `date_debut_maternite`, `date_creation`,",
+        "  `genre`, `date_naissance`, `lieu_naissance`, `pere`, `mere`, `cin`, `date_cin`, `lieu_cin`, `situation_matrimoniale`, `adresse`, `service`, `diplome`, `etablissement`, `statut`, `numero_ordre`, `nature_contrat`, `duree_contrat`, `lieu_embauche`, `lieu_travail`, `date_effet`",
         ") VALUES",
     ]
 
@@ -452,7 +473,7 @@ def main() -> None:
             f"{sql_num(e.get('responsabilite_representation', 0))}, {sql_str(e.get('rib', ''), 80)}, "
             f"{sql_str(e.get('mode_paiement', 'ESPECES'), 32)}, {1 if e.get('actif') else 0}, "
             f"{sql_str(e.get('date_inactif', ''), 20)}, {1 if e.get('conge_maternite') else 0}, "
-            f"{sql_str(e.get('date_debut_maternite', ''), 20)}, {sql_str(e.get('date_creation', ''), 32)}){fin}"
+            f"{sql_str(e.get('date_debut_maternite', ''), 20)}, {sql_str(e.get('date_creation', ''), 32)}, {sql_str(e.get('genre', ''), 20)}, {sql_str(e.get('date_naissance', ''), 20)}, {sql_str(e.get('lieu_naissance', ''), 160)}, {sql_str(e.get('pere', ''), 160)}, {sql_str(e.get('mere', ''), 160)}, {sql_str(e.get('cin', ''), 32)}, {sql_str(e.get('date_cin', ''), 20)}, {sql_str(e.get('lieu_cin', ''), 160)}, {sql_str(e.get('situation_matrimoniale', ''), 60)}, {sql_str(e.get('adresse', ''), 255)}, {sql_str(e.get('service', ''), 160)}, {sql_str(e.get('diplome', ''), 255)}, {sql_str(e.get('etablissement', ''), 255)}, {sql_str(e.get('statut', ''), 80)}, {sql_str(e.get('numero_ordre', ''), 60)}, {sql_str(e.get('nature_contrat', ''), 32)}, {sql_str(e.get('duree_contrat', ''), 160)}, {sql_str(e.get('lieu_embauche', ''), 160)}, {sql_str(e.get('lieu_travail', ''), 160)}, {sql_str(e.get('date_effet', ''), 20)}){fin}"
         )
 
     lignes.extend([

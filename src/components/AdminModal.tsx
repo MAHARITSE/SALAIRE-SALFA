@@ -4,14 +4,17 @@ import { WAMP } from '../runtime';
 import { remoteSaveSetting } from '../wampClient';
 import {
   ShieldCheck, X, Plus, Trash2, HeartHandshake, CheckCircle2, Info,
-  Sliders, Layers, Calculator, Award, RotateCcw, Save, CalendarCheck2, Image as ImageIcon, Upload,
+  Sliders, Layers, Calculator, Award, RotateCcw, Save, CalendarCheck2, Image as ImageIcon, Upload, Users,
 } from 'lucide-react';
 import { CongesConfig, DEFAULT_CONGES_CONFIG, MOTIFS_ABSENCE, LIBELLES_CATEGORIE } from '../local/conges';
 import { loadConfig, saveConfig, PaieConfig, BaremeAncienneteConfig, TrancheIrsaConfig, DEFAULT_CONFIG, DEFAULT_BAREME_ANCIENNETE, DEFAULT_BAREME_IRSA, resetConfig } from '../local/config';
 import { detailIrsaAvecConfig, obtenirIndiceAncienneteAvecBareme } from '../local/calcul';
 import { DEFAULT_APP_ICON, PRESET_APP_ICONS, applyAppFavicon, prepareFaviconDataUrl } from '../local/favicon';
+import { completerPersonnel } from '../api';
+import { rapportPersonnel, RapportPersonnel } from '../local/personnel';
+import { formatMontant } from '../local/montants';
 
-export type AdminTabKey = 'formules' | 'irsa' | 'anciennete' | 'colonnes' | 'conges' | 'icone';
+export type AdminTabKey = 'formules' | 'irsa' | 'anciennete' | 'colonnes' | 'conges' | 'icone' | 'personnel';
 
 interface AdminModalProps {
   onClose: () => void;
@@ -28,6 +31,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
   const [iconeApp, setIconeApp] = useState<string>(() => initial.iconeApp || '');
   const [iconeMsg, setIconeMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [savingIcone, setSavingIcone] = useState(false);
+  const [personnelRapport, setPersonnelRapport] = useState<RapportPersonnel>(() => rapportPersonnel());
+  const [personnelMsg, setPersonnelMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [savingPersonnel, setSavingPersonnel] = useState(false);
 
   // Formules générales
   const [tauxMaternite, setTauxMaternite] = useState<number>(initial.tauxMaternite);
@@ -57,6 +63,22 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
       }
       return next;
     });
+
+  const handleCompleterPersonnel = async () => {
+    setSavingPersonnel(true);
+    setPersonnelMsg(null);
+    try {
+      const res = await completerPersonnel();
+      setPersonnelRapport(res.rapport);
+      setPersonnelMsg(res.success
+        ? { type: 'ok', text: `${res.fiches} fiche(s) complétée(s), ${res.champs} champ(s) ajouté(s). Les saisies existantes n'ont pas été écrasées.` }
+        : { type: 'err', text: res.message || 'Complément impossible.' });
+    } catch (err: any) {
+      setPersonnelMsg({ type: 'err', text: err?.message || 'Complément impossible.' });
+    } finally {
+      setSavingPersonnel(false);
+    }
+  };
 
   const handleUploadIcone = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -321,6 +343,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
             { id: 'colonnes' as TabKey, label: '4. Colonnes', short: 'Cols', icon: Layers },
             { id: 'conges' as TabKey, label: '5. Congés & permissions', short: 'Congés', icon: CalendarCheck2 },
             { id: 'icone' as TabKey, label: '6. Icône application', short: 'Icône', icon: ImageIcon },
+            { id: 'personnel' as TabKey, label: '7. Liste de personnel', short: 'Personnel', icon: Users },
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`py-2.5 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 border-b-2 whitespace-nowrap shrink-0 ${activeTab === tab.id ? 'border-salfa-teal dark:border-sky-400 text-salfa-dark dark:text-white bg-white dark:bg-slate-800' : 'border-transparent text-slate-600 dark:text-slate-300'}`}>
               <tab.icon className="w-4 h-4 text-salfa-teal dark:text-sky-300" />
@@ -452,17 +475,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                 <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg border dark:border-slate-700 overflow-hidden">
                   <table className="w-full text-[11px] sm:text-xs">
                     <tbody className="divide-y dark:divide-slate-700">
-                      <tr><td className="px-3 py-2 text-slate-600 dark:text-slate-300">Base arrondie ({arrondiIrsaBase || 'pas'} Ar inf.)</td><td className="px-3 py-2 text-right font-mono font-bold">{detail.baseArrondie.toLocaleString('fr-FR')} Ar</td></tr>
+                      <tr><td className="px-3 py-2 text-slate-600 dark:text-slate-300">Base arrondie ({arrondiIrsaBase || 'pas'} Ar inf.)</td><td className="px-3 py-2 text-right font-mono font-bold">{formatMontant(detail.baseArrondie, { unite: true })}</td></tr>
                       {detail.tranches.map((t: any, i: number) => (
-                        <tr key={i}><td className="px-3 py-2 text-slate-600 dark:text-slate-300">{t.libelle} — base taxable {t.baseTaxable.toLocaleString('fr-FR')} Ar</td><td className="px-3 py-2 text-right font-mono">{t.montant.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} Ar</td></tr>
+                        <tr key={i}><td className="px-3 py-2 text-slate-600 dark:text-slate-300">{t.libelle} — base taxable {formatMontant(t.baseTaxable, { unite: true })}</td><td className="px-3 py-2 text-right font-mono">{formatMontant(t.montant, { unite: true })}</td></tr>
                       ))}
-                      <tr className="bg-slate-100 dark:bg-slate-700 font-bold"><td className="px-3 py-2">IRSA brut</td><td className="px-3 py-2 text-right font-mono">{detail.irsaBrut.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} Ar</td></tr>
-                      <tr><td className="px-3 py-2 text-slate-600 dark:text-slate-300">− Réduction famille ({enfantsEssai} × {deductionEnfant.toLocaleString('fr-FR')})</td><td className="px-3 py-2 text-right font-mono text-red-600">−{detail.deductionFamille.toLocaleString('fr-FR')} Ar</td></tr>
-                      <tr><td className="px-3 py-2 text-slate-600 dark:text-slate-300">Avant minimum</td><td className="px-3 py-2 text-right font-mono">{detail.avantMin.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} Ar</td></tr>
+                      <tr className="bg-slate-100 dark:bg-slate-700 font-bold"><td className="px-3 py-2">IRSA brut</td><td className="px-3 py-2 text-right font-mono">{formatMontant(detail.irsaBrut, { unite: true })}</td></tr>
+                      <tr><td className="px-3 py-2 text-slate-600 dark:text-slate-300">− Réduction famille ({enfantsEssai} × {deductionEnfant.toLocaleString('fr-FR')})</td><td className="px-3 py-2 text-right font-mono text-red-600">−{formatMontant(detail.deductionFamille, { unite: true })}</td></tr>
+                      <tr><td className="px-3 py-2 text-slate-600 dark:text-slate-300">Avant minimum</td><td className="px-3 py-2 text-right font-mono">{formatMontant(detail.avantMin, { unite: true })}</td></tr>
                       {detail.avantMin < detail.minIrsa && (
-                        <tr><td className="px-3 py-2 text-amber-700 dark:text-amber-300 font-semibold">Minimum de perception appliqué</td><td className="px-3 py-2 text-right font-mono text-amber-700 dark:text-amber-300">{detail.minIrsa.toLocaleString('fr-FR')} Ar</td></tr>
+                        <tr><td className="px-3 py-2 text-amber-700 dark:text-amber-300 font-semibold">Minimum de perception appliqué</td><td className="px-3 py-2 text-right font-mono text-amber-700 dark:text-amber-300">{formatMontant(detail.minIrsa, { unite: true })}</td></tr>
                       )}
-                      <tr className="bg-salfa-dark dark:bg-slate-900 text-white font-extrabold"><td className="px-3 py-2.5">IRSA À RETENIR</td><td className="px-3 py-2.5 text-right font-mono text-base">{detail.irsaFinal.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} Ar</td></tr>
+                      <tr className="bg-salfa-dark dark:bg-slate-900 text-white font-extrabold"><td className="px-3 py-2.5">IRSA À RETENIR</td><td className="px-3 py-2.5 text-right font-mono text-base">{formatMontant(detail.irsaFinal, { unite: true })}</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -508,7 +531,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                   <div><label className="block text-[11px] font-bold mb-1 dark:text-slate-300">Base (Ar)</label><input type="number" value={baseEssai} onChange={(e) => setBaseEssai(Number(e.target.value) || 0)} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" /></div>
                   <div><label className="block text-[11px] font-bold uppercase mb-1 dark:text-slate-300">Années ancienneté</label><input type="number" min={0} value={anneesEssai} onChange={(e) => setAnneesEssai(Number(e.target.value) || 0)} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" /></div>
-                  <div className="flex flex-col justify-end"><div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2.5 text-xs">Indice trouvé : <b className="font-mono text-base">{indicePreview.toFixed(2)}×</b><br />Base revalorisée : <b className="font-mono">{Math.round(baseEssai * indicePreview).toLocaleString('fr-FR')} Ar</b></div></div>
+                  <div className="flex flex-col justify-end"><div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2.5 text-xs">Indice trouvé : <b className="font-mono text-base">{indicePreview.toFixed(2)}×</b><br />Base revalorisée : <b className="font-mono">{formatMontant(Math.round(baseEssai * indicePreview), { unite: true })}</b></div></div>
                 </div>
                 <div className="overflow-x-auto thin-scrollbar">
                   <table className="w-full text-[11px] border-collapse">
@@ -517,7 +540,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                       {Array.from({ length: 26 }, (_, i) => i).map(an => {
                         const ind = obtenirIndiceAncienneteAvecBareme(an, cfgLive.baremeAnciennete);
                         const isCurrent = an === anneesEssai;
-                        return <tr key={an} className={isCurrent ? 'bg-amber-100 dark:bg-amber-900/30 font-bold' : ''}><td className="px-3 py-1">{an} an(s)</td><td className="px-3 py-1 text-center font-mono">{ind.toFixed(2)}×</td><td className="px-3 py-1 text-right font-mono">{Math.round(baseEssai * ind).toLocaleString('fr-FR')} Ar</td></tr>;
+                        return <tr key={an} className={isCurrent ? 'bg-amber-100 dark:bg-amber-900/30 font-bold' : ''}><td className="px-3 py-1">{an} an(s)</td><td className="px-3 py-1 text-center font-mono">{ind.toFixed(2)}×</td><td className="px-3 py-1 text-right font-mono">{formatMontant(Math.round(baseEssai * ind), { unite: true })}</td></tr>;
                       })}
                     </tbody>
                   </table>
@@ -747,6 +770,44 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                     <Save className="w-4 h-4" />
                     <span>{savingIcone ? 'Enregistrement…' : 'Enregistrer l’icône'}</span>
                   </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeTab === 'personnel' && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 p-3 text-xs text-sky-900 dark:text-sky-200 flex gap-2">
+                <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  Complète les fiches salariés avec <b>LISTE DE PERSONNEL.xlsx</b> (état civil, CIN, service, diplôme, contrat…).
+                  Seuls les champs vides sont remplis ; la paie, les matricules et les montants ne sont pas modifiés.
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" onClick={handleCompleterPersonnel} disabled={savingPersonnel} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold disabled:opacity-60">
+                  <Users className="w-4 h-4" />{savingPersonnel ? 'Complément…' : 'Compléter les fiches salariés'}
+                </button>
+                <span className="text-xs text-slate-500 dark:text-slate-400">{personnelRapport.rapproches} personne(s) rapprochée(s) · version {personnelRapport.version}</span>
+              </div>
+              {personnelMsg && (
+                <div className={`rounded-lg border px-3 py-2 text-xs font-semibold ${personnelMsg.type === 'ok' ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200' : 'border-red-300 bg-red-50 text-red-800 dark:bg-red-900/30 dark:text-red-200'}`}>
+                  {personnelMsg.text}
+                </div>
+              )}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                  <h4 className="text-xs font-extrabold uppercase mb-2 text-slate-700 dark:text-slate-200">Personnes non retrouvées dans la paie ({personnelRapport.nonRapproches.length})</h4>
+                  <ul className="text-xs space-y-1 max-h-64 overflow-y-auto thin-scrollbar dark:text-slate-300">
+                    {personnelRapport.nonRapproches.map((x, i) => <li key={i}>• {x.nom} <span className="text-slate-400">({x.feuille})</span></li>)}
+                    {personnelRapport.nonRapproches.length === 0 && <li>Aucune.</li>}
+                  </ul>
+                </div>
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                  <h4 className="text-xs font-extrabold uppercase mb-2 text-slate-700 dark:text-slate-200">Divergences entre feuilles ({personnelRapport.conflits.length})</h4>
+                  <ul className="text-xs space-y-1 max-h-64 overflow-y-auto thin-scrollbar dark:text-slate-300">
+                    {personnelRapport.conflits.map((c, i) => <li key={i}>• Mat {c.matricule} — {c.champ} : {c.feuilles.join(' / ')} <span className="text-slate-400">(retenu : {c.retenu})</span></li>)}
+                    {personnelRapport.conflits.length === 0 && <li>Aucune.</li>}
+                  </ul>
                 </div>
               </div>
             </div>

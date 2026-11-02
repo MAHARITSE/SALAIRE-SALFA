@@ -9,15 +9,18 @@
     "build": "npm run typecheck && vite build",
     "build:wamp": "npm run typecheck && vite build --mode wamp --base=./",
     "sql:conges": "node scripts/generer_sql_conges_wamp.cjs",
+    "contrat:modele": "node scripts/preparer-modele-contrat.cjs",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
     "deploy:pages": "npm run build && wrangler pages deploy dist --project-name salfa-web-paie",
     "deploy:workers": "npm run build && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/run-tests.cjs",
-    "test:sql": "python3 scripts/test_sql_paies_cloturees.py"
+    "test:sql": "python3 scripts/test_sql_paies_cloturees.py",
+    "personnel:completer": "node scripts/completer-personnel.cjs"
   },
   "dependencies": {
+    "fflate": "^0.8.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.9",
     "lucide-react": "^1.16.0",

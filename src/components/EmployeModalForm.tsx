@@ -6,26 +6,12 @@ import { Employe } from '../types';
 import { createEmploye, updateEmploye } from '../api';
 import { calculerAnciennete, obtenirIndiceAnciennete } from '../local/calcul';
 import { loadConfig } from '../local/config';
-import { X, Award, Info, UserX, UserCheck } from 'lucide-react';
+import { X, Award, Info, UserX, UserCheck, UserRound, Briefcase } from 'lucide-react';
+import { formatMontant, formatMontantSaisie, formatMontantEdition, parseMontantSaisie } from '../local/montants';
 
-const fmt = (val: number | undefined | null) =>
-  val === undefined || val === null
-    ? '0,00'
-    : Number(val).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-const formatInputDisplay = (val: number): string => {
-  if (!val) return '';
-  return Number(val)
-    .toLocaleString('fr-FR', { maximumFractionDigits: 2 })
-    .replace(/\u202f/g, ' ');
-};
-
-const parseInputNumber = (raw: string): number => {
-  const cleaned = raw.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
-  if (cleaned === '' || cleaned === '-' || cleaned === '.') return 0;
-  const n = Number(cleaned);
-  return isNaN(n) ? 0 : Math.max(0, Math.round(n * 100) / 100);
-};
+const fmt = (val: number | undefined | null) => formatMontant(val);
+const formatInputDisplay = (val: number): string => formatMontantSaisie(val);
+const parseInputNumber = (raw: string): number => parseMontantSaisie(raw);
 
 interface MonetaryInputProps {
   value: number;
@@ -34,7 +20,7 @@ interface MonetaryInputProps {
   placeholder?: string;
 }
 
-const MonetaryInput: React.FC<MonetaryInputProps> = ({ value, onChange, className = '', placeholder = '0' }) => {
+const MonetaryInput: React.FC<MonetaryInputProps> = ({ value, onChange, className = '', placeholder = '-' }) => {
   const [text, setText] = useState<string>(() => formatInputDisplay(value));
   const [focused, setFocused] = useState(false);
 
@@ -50,7 +36,7 @@ const MonetaryInput: React.FC<MonetaryInputProps> = ({ value, onChange, classNam
       placeholder={placeholder}
       onFocus={(e) => {
         setFocused(true);
-        setText(value ? String(value).replace('.', ',') : '');
+        setText(formatMontantEdition(value));
         setTimeout(() => e.target.select(), 0);
       }}
       onBlur={() => {
@@ -105,6 +91,26 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
     date_debut_maternite: employe?.date_debut_maternite || '',
     actif: employe ? (Number(employe.actif) === 1 ? 1 : 0) : 1,
     date_inactif: employe?.date_inactif || '',
+    genre: employe?.genre || '',
+    date_naissance: employe?.date_naissance || '',
+    lieu_naissance: employe?.lieu_naissance || '',
+    pere: employe?.pere || '',
+    mere: employe?.mere || '',
+    cin: employe?.cin || '',
+    date_cin: employe?.date_cin || '',
+    lieu_cin: employe?.lieu_cin || '',
+    situation_matrimoniale: employe?.situation_matrimoniale || '',
+    adresse: employe?.adresse || '',
+    service: employe?.service || '',
+    diplome: employe?.diplome || '',
+    etablissement: employe?.etablissement || '',
+    statut: employe?.statut || '',
+    numero_ordre: employe?.numero_ordre || '',
+    nature_contrat: employe?.nature_contrat || '',
+    duree_contrat: employe?.duree_contrat || '',
+    lieu_embauche: employe?.lieu_embauche || '',
+    lieu_travail: employe?.lieu_travail || '',
+    date_effet: employe?.date_effet || '',
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -182,7 +188,7 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 dark:border-slate-700 modal-mobile max-h-[95dvh] flex flex-col">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200 dark:border-slate-700 modal-mobile max-h-[95dvh] flex flex-col">
         <div className="bg-salfa-dark dark:bg-slate-900 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between text-white shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <h3 className="text-sm sm:text-lg font-bold truncate">
@@ -322,6 +328,83 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
               className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono"
             />
           </div>
+
+          <details className="rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30 p-3 sm:p-4" open={!!employe}>
+            <summary className="cursor-pointer text-xs font-extrabold uppercase text-salfa-dark dark:text-sky-300 flex items-center gap-2">
+              <UserRound className="w-4 h-4" /> État civil et coordonnées
+            </summary>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">Genre</label>
+                <select value={form.genre} onChange={(e) => setForm({ ...form, genre: e.target.value })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm">
+                  <option value="">Non précisé</option>
+                  <option value="Masculin">Masculin</option>
+                  <option value="Féminin">Féminin</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">Date de naissance</label>
+                <input type="date" value={form.date_naissance} onChange={(e) => setForm({ ...form, date_naissance: e.target.value })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" />
+              </div>
+              {([
+                ['lieu_naissance', 'Lieu de naissance'],
+                ['pere', 'Père'],
+                ['mere', 'Mère'],
+                ['cin', 'N° CIN'],
+                ['lieu_cin', 'Lieu de délivrance CIN'],
+                ['situation_matrimoniale', 'Situation matrimoniale'],
+              ] as const).map(([key, label]) => (
+                <div key={key}>
+                  <label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">{label}</label>
+                  <input type="text" value={(form as any)[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" />
+                </div>
+              ))}
+              <div>
+                <label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">Date de délivrance CIN</label>
+                <input type="date" value={form.date_cin} onChange={(e) => setForm({ ...form, date_cin: e.target.value })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">Adresse</label>
+                <textarea value={form.adresse} onChange={(e) => setForm({ ...form, adresse: e.target.value })} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" />
+              </div>
+            </div>
+          </details>
+
+          <details className="rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30 p-3 sm:p-4" open={!!employe}>
+            <summary className="cursor-pointer text-xs font-extrabold uppercase text-salfa-dark dark:text-sky-300 flex items-center gap-2">
+              <Briefcase className="w-4 h-4" /> Affectation, diplôme et contrat
+            </summary>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              {([
+                ['service', 'Service d’affectation'],
+                ['diplome', 'Diplôme'],
+                ['etablissement', 'Établissement'],
+                ['statut', 'Statut'],
+                ['numero_ordre', 'N° ordre'],
+                ['duree_contrat', 'Durée du contrat'],
+                ['lieu_embauche', 'Lieu d’embauche'],
+                ['lieu_travail', 'Lieu de travail'],
+              ] as const).map(([key, label]) => (
+                <div key={key}>
+                  <label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">{label}</label>
+                  <input type="text" value={(form as any)[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" />
+                </div>
+              ))}
+              <div>
+                <label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">Nature du contrat</label>
+                <select value={form.nature_contrat} onChange={(e) => setForm({ ...form, nature_contrat: e.target.value })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm">
+                  <option value="">Non précisée</option>
+                  <option value="CDI">CDI</option>
+                  <option value="CDD">CDD</option>
+                  <option value="Autre">Autre</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase mb-1 dark:text-slate-300">Date d’effet du contrat</label>
+                <input type="date" value={form.date_effet} onChange={(e) => setForm({ ...form, date_effet: e.target.value })} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm" />
+              </div>
+            </div>
+          </details>
 
           {/* OPTION : RENDRE LA PERSONNE INACTIVE (MODIFICATION DE LA FICHE SALARIÉ) */}
           {employe && (
