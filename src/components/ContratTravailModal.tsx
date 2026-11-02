@@ -42,21 +42,8 @@ function Section({ titre, children }: { titre: string; children: React.ReactNode
   );
 }
 
-export const ContratApercu: React.FC<{ contrat: ContratDocument }> = ({ contrat }) => (
-  <article className="contrat-sheet" aria-label="Aperçu du contrat de travail">
-    <header className="contrat-entete">
-      <img src={logoContrat} alt="Logo SALFA" className="contrat-logo" />
-      <div className="contrat-entete-texte">
-        <strong>FIANGONANA LOTERANA MALAGASY</strong>
-        <span>(EGLISE LUTHERIENNE MALGACHE - MALAGASY LUTHERAN CHURCH)</span>
-        <strong>SAMPAN’ASA LOTERANA MOMBA NY FAHASALAMANA</strong>
-        <span>DEPARTEMENT DE SANTE – HEALTH DEPARTMENT — SALFA</span>
-        <span>DISPENSAIRE TANAMBAO - TOBY BETELA TOLIARA BP: 99 Tél:94 416 56</span>
-        <span>NIF: 5000767080 — STAT: 851 125 120 120 001 36</span>
-        <span>E-mail: salfa.tulear@moov.mg</span>
-      </div>
-    </header>
-
+const BlocsContrat: React.FC<{ contrat: ContratDocument }> = ({ contrat }) => (
+  <>
     {contrat.blocs.map((bloc, i) => {
       switch (bloc.type) {
         case 'titre':
@@ -69,7 +56,7 @@ export const ContratApercu: React.FC<{ contrat: ContratDocument }> = ({ contrat 
           return (
             <p key={i} className="contrat-champ">
               <strong>{bloc.label}</strong>{' '}
-              <span className={bloc.manquant ? 'contrat-manquant' : undefined}>{bloc.valeur}</span>
+              <span className={bloc.manquant ? 'contrat-manquant' : undefined} dangerouslySetInnerHTML={{ __html: bloc.valeur }} />
             </p>
           );
         case 'article':
@@ -101,8 +88,55 @@ export const ContratApercu: React.FC<{ contrat: ContratDocument }> = ({ contrat 
           return null;
       }
     })}
-  </article>
+  </>
 );
+
+export const ContratApercu: React.FC<{
+  contrat?: ContratDocument;
+  contrats?: ContratDocument[];
+}> = ({ contrat, contrats }) => {
+  if (contrats) {
+    return (
+      <article className="contrat-sheet contrat-multi" aria-label="Aperçu des contrats de travail">
+        <header className="contrat-entete">
+          <img src={logoContrat} alt="Logo SALFA" className="contrat-logo" />
+          <div className="contrat-entete-texte">
+            <strong>FIANGONANA LOTERANA MALAGASY</strong>
+            <span>(EGLISE LUTHERIENNE MALGACHE - MALAGASY LUTHERAN CHURCH)</span>
+            <strong>SAMPAN’ASA LOTERANA MOMBA NY FAHASALAMANA</strong>
+            <span>DEPARTEMENT DE SANTE – HEALTH DEPARTMENT — SALFA</span>
+            <span>DISPENSAIRE TANAMBAO - TOBY BETELA TOLIARA BP: 99 Tél:94 416 56</span>
+            <span>NIF: 5000767080 — STAT: 851 125 120 120 001 36</span>
+            <span>E-mail: salfa.tulear@moov.mg</span>
+          </div>
+        </header>
+        {contrats.map((c, idx) => (
+          <section key={idx} className="contrat-section">
+            <BlocsContrat contrat={c} />
+          </section>
+        ))}
+      </article>
+    );
+  }
+  if (!contrat) return null;
+  return (
+    <article className="contrat-sheet" aria-label="Aperçu du contrat de travail">
+      <header className="contrat-entete">
+        <img src={logoContrat} alt="Logo SALFA" className="contrat-logo" />
+        <div className="contrat-entete-texte">
+          <strong>FIANGONANA LOTERANA MALAGASY</strong>
+          <span>(EGLISE LUTHERIENNE MALGACHE - MALAGASY LUTHERAN CHURCH)</span>
+          <strong>SAMPAN’ASA LOTERANA MOMBA NY FAHASALAMANA</strong>
+          <span>DEPARTEMENT DE SANTE – HEALTH DEPARTMENT — SALFA</span>
+          <span>DISPENSAIRE TANAMBAO - TOBY BETELA TOLIARA BP: 99 Tél:94 416 56</span>
+          <span>NIF: 5000767080 — STAT: 851 125 120 120 001 36</span>
+          <span>E-mail: salfa.tulear@moov.mg</span>
+        </div>
+      </header>
+      <BlocsContrat contrat={contrat} />
+    </article>
+  );
+};
 
 const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmployeId, onClose }) => {
   const tries = useMemo(
@@ -120,12 +154,17 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
   const [busy, setBusy] = useState<'pdf' | 'docx' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'saisie' | 'apercu'>('saisie');
+  const [imprimerTous, setImprimerTous] = useState<boolean>(false);
 
   const emp = tries.find(e => Number(e.id) === Number(selectedId)) || null;
   const donnees = emp ? drafts[emp.id] || initialiserContratDepuisEmploye(emp, paieParEmp.get(Number(emp.id))) : null;
   const contrat = useMemo(() => donnees ? construireContrat(donnees) : null, [donnees]);
   const validation = contrat?.validation || validerContrat(initialiserContratDepuisEmploye({} as Employe));
   const peutExporter = Boolean(emp && contrat && validation.erreurs.length === 0);
+  const tousLesContrats = useMemo(() => tries.map((e) => {
+    const donnees = drafts[e.id] || initialiserContratDepuisEmploye(e, paieParEmp.get(Number(e.id)));
+    return construireContrat(donnees);
+  }), [drafts, tries, paieParEmp]);
 
   const fermer = () => {
     if (dirtyIds.size > 0 && !window.confirm(
@@ -171,6 +210,12 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
   const imprimer = () => {
     if (!peutExporter) return;
     flushSync(() => setMobileTab('apercu'));
+    window.requestAnimationFrame(() => window.print());
+  };
+
+  const imprimerTousContrats = () => {
+    flushSync(() => setMobileTab('apercu'));
+    flushSync(() => setImprimerTous(true));
     window.requestAnimationFrame(() => window.print());
   };
 
@@ -387,6 +432,10 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-bold disabled:opacity-50">
               <Printer className="w-4 h-4" /> Imprimer
             </button>
+            <button type="button" onClick={imprimerTousContrats} disabled={!tries || tries.length === 0 || busy !== null}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold disabled:opacity-50">
+              <FileSignature className="w-4 h-4" /> Tous les contrats
+            </button>
             <button type="button" onClick={() => exporter('pdf')} disabled={!peutExporter || busy !== null}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-bold disabled:opacity-50">
               <FileDown className="w-4 h-4" /> {busy === 'pdf' ? 'PDF…' : 'PDF'}
@@ -399,8 +448,14 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
         </div>
       </div>
 
-      {contrat && createPortal(
-        <div className="contrat-print"><ContratApercu contrat={contrat} /></div>,
+      {createPortal(
+        <div className="contrat-print">
+          {imprimerTous ? (
+            <ContratApercu contrats={tousLesContrats} />
+          ) : (
+            contrat && <ContratApercu contrat={contrat} />
+          )}
+        </div>,
         document.body
       )}
     </>

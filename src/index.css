@@ -722,6 +722,19 @@
   .contrat-print .contrat-entete { break-inside: avoid; page-break-inside: avoid; }
   .contrat-print .contrat-titre { break-after: avoid; page-break-after: avoid; }
   .contrat-print .contrat-article h3 { break-after: avoid; page-break-after: avoid; }
+  .contrat-print .contrat-multi .contrat-section {
+    break-after: page;
+    page-break-after: always;
+  }
+  .contrat-print .contrat-multi .contrat-section:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  /* Éviter la page 3 : la signature commence toujours sur une nouvelle page (page 2 du contrat) */
+  .contrat-print .contrat-signature-bloc {
+    break-before: page;
+    page-break-before: always;
+  }
 }
 
 @media (max-width: 640px) {
