@@ -51,6 +51,12 @@ try {
   assert.ok(validationInitiale.champsManquants.includes('nature_contrat'));
   const projetInitial = model.construireContrat(initial);
   assert.equal(projetInitial.mentionProjet, model.MENTION_PROJET_CONTRAT);
+  assert.equal(model.PLACEHOLDER_CONTRAT, '-', 'une information manquante doit être représentée par un tiret simple');
+  assert.equal(projetInitial.blocs.find(b => b.type === 'champ' && b.label === 'Titulaire de la CIN N° :').valeur, '-');
+  assert.equal(projetInitial.blocs.find(b => b.type === 'article' && b.numero === 1).valeur, '-');
+  const signatureProjet = projetInitial.blocs.find(b => b.type === 'signature');
+  assert.equal(signatureProjet.lieu, '-');
+  assert.equal(signatureProjet.date, '-');
 
   // 2. Montants et dates.
   assert.equal(model.parseMontantContrat('1 234,56'), 1234.56);
@@ -59,7 +65,10 @@ try {
   assert.equal(model.parseMontantContrat('-5'), null);
   assert.equal(model.parseMontantContrat('12,345'), null);
   assert.match(model.formaterMontantContrat('271600'), /271.600,00 Ar/);
+  assert.equal(model.formaterMontantContrat(''), '-');
+  assert.equal(model.formaterMontantContrat('0'), '-');
   assert.equal(model.formaterDateContrat('2020-01-15'), '15/01/2020');
+  assert.equal(model.formaterDateContrat(''), '-');
 
   const complet = {
     ...initial,
@@ -84,6 +93,16 @@ try {
   assert.ok(validationInvalide.erreurs.some(e => e.includes('Salaire de base')));
   assert.ok(validationInvalide.erreurs.some(e => e.includes('Date de naissance')));
 
+  // Le tiret remplace l’ancien libellé, mais ne doit pas faire passer une information manquante pour saisie.
+  const avecTirets = { ...complet, service: '-', date_naissance: '-', indemnite_logement: '-' };
+  const validationTirets = model.validerContrat(avecTirets);
+  assert.equal(validationTirets.complets, false);
+  assert.ok(validationTirets.champsManquants.includes('service'));
+  assert.ok(validationTirets.champsManquants.includes('date_naissance'));
+  assert.ok(!validationTirets.champsManquants.includes('indemnite_logement'), 'un montant à « - » reste un zéro valide');
+  assert.deepEqual(validationTirets.erreurs, []);
+  assert.equal(model.formaterDateContrat('-'), '-');
+
   // 3. Word : le modèle préparé conserve les clauses et tous les jetons sont remplacés.
   const modeleBytes = new Uint8Array(fs.readFileSync('src/assets/contrat-salfa-modele.docx'));
   const valeurs = model.valeursModeleContrat(contratComplet);
@@ -102,10 +121,14 @@ try {
   assert.ok(fichiers['word/media/image1.png'], 'le logo du modèle doit être conservé');
 
   const projetValeurs = model.valeursModeleContrat(projetInitial);
+  for (const cle of ['cin', 'date_naissance', 'lieu_naissance', 'pere', 'mere', 'service', 'nature_duree', 'lieu_embauche', 'lieu_travail', 'indemnite_logement', 'indemnite_responsabilite', 'date_effet', 'lieu_signature', 'date_signature']) {
+    assert.equal(projetValeurs[cle], '-', `le champ Word manquant ${cle} doit afficher un tiret`);
+  }
   const sortieProjet = docx.remplirModeleDocx(modeleBytes, projetValeurs);
   const xmlProjet = strFromU8(unzipSync(sortieProjet)['word/document.xml']);
   assert.ok(xmlProjet.includes(model.MENTION_PROJET_CONTRAT));
-  assert.ok(xmlProjet.includes('À compléter'));
+  assert.ok(xmlProjet.includes('>-</w:t>'), 'le DOCX projet doit contenir des tirets pour les champs manquants');
+  assert.ok(!xmlProjet.includes('À compléter'), 'le DOCX projet ne doit plus afficher l’ancien libellé de champ manquant');
 
   const echappe = docx.remplirModeleDocx(modeleBytes, {
     ...valeurs,
@@ -130,6 +153,8 @@ try {
   assert.ok(joint.includes(model.MENTION_PROJET_CONTRAT.replace('—', '-')) || joint.includes(model.MENTION_PROJET_CONTRAT));
   assert.ok(joint.includes('La jouissance du congé payé annuel'));
   assert.ok(joint.includes('Le tribunal compétent est celui du lieu d’exécution du travail'.replace('’', "'")));
+  assert.ok(textes.some(t => t.s === '-'), 'le PDF projet doit afficher des tirets pour les champs manquants');
+  assert.ok(!joint.includes('À compléter'), 'le PDF projet ne doit plus afficher l’ancien libellé de champ manquant');
   for (const t of textes) {
     assert.ok(t.y >= 0 && t.y <= 297, `texte hors page verticalement : ${t.s} à ${t.y}`);
     assert.ok(t.x >= 0 && t.x <= 210, `texte hors page horizontalement : ${t.s} à ${t.x}`);
@@ -144,6 +169,8 @@ try {
   assert.ok(tab.includes('ContratTravailModal'));
   assert.ok(tab.includes('userRole={effectiveRole}'));
   assert.ok(modal.includes('estRoleAdmin(props.userRole)'));
+  assert.ok(modal.includes('<option value="">{PLACEHOLDER_CONTRAT}</option>'), 'la nature du contrat utilise le même tiret pour le choix vide');
+  assert.ok(!modal.includes('À compléter'), 'l’éditeur de contrat ne doit plus afficher l’ancien libellé de champ manquant');
   assert.ok(modal.includes('createPortal'));
   assert.ok(css.includes('body:has(.contrat-print) #root { display: none !important; }'));
   assert.ok(css.includes('@page contrat-impression { size: A4 portrait;'));

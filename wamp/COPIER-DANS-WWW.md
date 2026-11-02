@@ -39,7 +39,8 @@ Le dossier et le ZIP prêts à copier incluent désormais :
 - les **contrats de travail** : depuis l'onglet *Salariés, Saisie & État de paie*,
   l'administrateur peut ouvrir un contrat prérempli depuis la fiche salarié,
   compléter les champs manquants, l'imprimer en A4 portrait ou l'exporter en
-  PDF / Word. Les exports incomplets portent la mention « PROJET » ;
+  PDF / Word. Les informations manquantes affichent **`-`** dans l'aperçu et les
+  exports ; les exports incomplets conservent la mention « PROJET » ;
 - le complément des fiches salariés depuis **LISTE DE PERSONNEL.xlsx** via
   **Administration → Liste de personnel**. Les colonnes MySQL manquantes sont
   ajoutées automatiquement au démarrage ; aucune réimportation SQL n'est

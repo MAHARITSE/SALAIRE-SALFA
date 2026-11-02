@@ -1,10 +1,11 @@
 // Modèle de contrat de travail SALFA.
 // Les clauses proviennent de « CONTRAT DE TRAVAIL SALFA.docx » et ne sont pas
 // réinterprétées. Les données de paie ne sont jamais modifiées par ce module.
-import { Employe } from '../types';
+import { Employe, PaieMensuelle } from '../types';
 import { formatMontant } from '../local/montants';
 
-export const PLACEHOLDER_CONTRAT = 'À compléter';
+// Valeur affichée pour une information manquante, distincte de la mention PROJET.
+export const PLACEHOLDER_CONTRAT = '-';
 export const MENTION_PROJET_CONTRAT = 'PROJET — À COMPLÉTER AVANT SIGNATURE';
 export const REPRESENTANT_DEFAUT = 'RASOARININDRINA Lalao Voangy';
 
@@ -91,13 +92,24 @@ function texte(v: unknown): string {
   return String(v ?? '').replace(/\s+/g, ' ').trim();
 }
 
+/** Un tiret saisi dans un champ texte/date reste une information manquante. */
+function valeurTexte(v: unknown): string {
+  const s = texte(v);
+  return s === PLACEHOLDER_CONTRAT ? '' : s;
+}
+
 function montantInitial(v: unknown): string {
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 ? String(n).replace('.', ',') : '';
 }
 
-/** Préremplit uniquement ce qui est connu, sans déduire une durée, un service ou un effet. */
-export function initialiserContratDepuisEmploye(emp: Employe): ContratDonnees {
+/** Préremplit uniquement ce qui est connu, sans déduire une durée, un service ou un effet.
+ *  Quand une paie du mois est fournie, l'indemnité de logement reprend LOGT/TRSP et
+ *  l'indemnité de responsabilité reprend RESP/REPRES du tableau de salaire. */
+export function initialiserContratDepuisEmploye(
+  emp: Employe,
+  paie?: Pick<PaieMensuelle, 'logt_trsp' | 'resp_repres'>,
+): ContratDonnees {
   return {
     civilite: /^f/i.test(texte(emp.genre)) ? 'Mme' : /^m/i.test(texte(emp.genre)) ? 'Mr' : '',
     nom_prenoms: texte(emp.nom_prenoms),
@@ -118,11 +130,9 @@ export function initialiserContratDepuisEmploye(emp: Employe): ContratDonnees {
     lieu_travail: texte(emp.lieu_travail),
     classification: texte(emp.categorie),
     salaire_base: Number(emp.base_aj) > 0 ? montantInitial(emp.base_aj) : '',
-    // La fiche regroupe logement/transport et responsabilité/représentation.
-    // On ne les ventile pas automatiquement vers les rubriques du contrat.
-    indemnite_logement: '',
+    indemnite_logement: paie?.logt_trsp ? montantInitial(paie.logt_trsp) : '',
     indemnite_rendement: montantInitial(emp.rendement),
-    indemnite_responsabilite: '',
+    indemnite_responsabilite: paie?.resp_repres ? montantInitial(paie.resp_repres) : '',
     date_effet: texte(emp.date_effet),
     lieu_signature: '',
     date_signature: '',
@@ -148,7 +158,7 @@ export function formaterMontantContrat(raw: string): string {
 }
 
 export function formaterDateContrat(raw: string): string {
-  const s = texte(raw);
+  const s = valeurTexte(raw);
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (!m) return s || PLACEHOLDER_CONTRAT;
   return `${m[3]}/${m[2]}/${m[1]}`;
@@ -174,10 +184,11 @@ export function validerContrat(d: ContratDonnees): ValidationContrat {
   const erreurs: string[] = [];
   const champsManquants: ContratDonneesCles[] = [];
   for (const key of CHAMPS_REQUIS) {
-    const value = texte(d[key]);
+    // Pour les montants, « - » représente zéro ; pour les autres champs, une absence.
+    const value = CHAMPS_MONTANT.includes(key) ? texte(d[key]) : valeurTexte(d[key]);
     if (!value) {
       // Une durée indéterminée est implicite pour un CDI explicitement choisi.
-      if (key === 'duree_contrat' && texte(d.nature_contrat) === 'CDI') continue;
+      if (key === 'duree_contrat' && valeurTexte(d.nature_contrat) === 'CDI') continue;
       champsManquants.push(key);
     }
   }
@@ -189,11 +200,11 @@ export function validerContrat(d: ContratDonnees): ValidationContrat {
     }
   }
   for (const key of CHAMPS_DATE) {
-    const raw = texte(d[key]);
+    const raw = valeurTexte(d[key]);
     if (!raw) continue;
     if (!dateValide(raw)) erreurs.push(`${LIBELLES_CHAMPS_CONTRAT[key]} : date invalide.`);
   }
-  const nature = texte(d.nature_contrat);
+  const nature = valeurTexte(d.nature_contrat);
   if (nature && !(NATURES_CONTRAT as readonly string[]).includes(nature)) {
     erreurs.push('Nature du contrat : choisissez CDI, CDD ou Autre.');
   }
@@ -233,15 +244,15 @@ const CLAUSES = {
 export function construireContrat(donnees: ContratDonnees): ContratDocument {
   const validation = validerContrat(donnees);
   const mentionProjet = validation.complets ? '' : MENTION_PROJET_CONTRAT;
-  const v = (key: ContratDonneesCles) => texte(donnees[key]) || PLACEHOLDER_CONTRAT;
+  const v = (key: ContratDonneesCles) => valeurTexte(donnees[key]) || PLACEHOLDER_CONTRAT;
   const champ = (key: ContratDonneesCles, label: string, valeur?: string, manquant?: boolean): BlocContrat => ({
-    type: 'champ', label, valeur: valeur ?? v(key), manquant: manquant ?? !texte(donnees[key]),
+    type: 'champ', label, valeur: valeur ?? v(key), manquant: manquant ?? validation.champsManquants.includes(key),
   });
-  const identite = [texte(donnees.civilite), texte(donnees.nom_prenoms)].filter(Boolean).join(' ') || PLACEHOLDER_CONTRAT;
-  const nature = texte(donnees.nature_contrat);
-  const duree = texte(donnees.duree_contrat) || (nature === 'CDI' ? 'Durée indéterminée' : '');
+  const identite = [valeurTexte(donnees.civilite), valeurTexte(donnees.nom_prenoms)].filter(Boolean).join(' ') || PLACEHOLDER_CONTRAT;
+  const nature = valeurTexte(donnees.nature_contrat);
+  const duree = valeurTexte(donnees.duree_contrat) || (nature === 'CDI' ? 'Durée indéterminée' : '');
   const natureDuree = [nature, duree].filter(Boolean).join(' — ') || PLACEHOLDER_CONTRAT;
-  const dateEffet = texte(donnees.date_effet) ? formaterDateContrat(donnees.date_effet) : PLACEHOLDER_CONTRAT;
+  const dateEffet = valeurTexte(donnees.date_effet) ? formaterDateContrat(donnees.date_effet) : PLACEHOLDER_CONTRAT;
 
   const blocs: BlocContrat[] = [
     { type: 'titre', texte: 'CONTRAT DE TRAVAIL' },
@@ -250,15 +261,15 @@ export function construireContrat(donnees: ContratDonnees): ContratDocument {
   blocs.push(
     { type: 'paragraphe', texte: `Entre la SAMPAN’ASA LOTERANA MOMBA NY FAHASALAMANA (SALFA), dénommée, l’employeur, représenté par ${v('representant')}` },
     champ('nom_prenoms', 'Mr/Mme/Mlle :', identite),
-    { type: 'champ', label: 'Né(e) le :', valeur: `${formaterDateContrat(donnees.date_naissance)} à ${v('lieu_naissance')}`, manquant: !texte(donnees.date_naissance) || !texte(donnees.lieu_naissance) },
-    { type: 'champ', label: 'Fils / Fille de :', valeur: `${v('pere')} et de : ${v('mere')}`, manquant: !texte(donnees.pere) || !texte(donnees.mere) },
+    { type: 'champ', label: 'Né(e) le :', valeur: `${formaterDateContrat(donnees.date_naissance)} à ${v('lieu_naissance')}`, manquant: validation.champsManquants.includes('date_naissance') || validation.champsManquants.includes('lieu_naissance') },
+    { type: 'champ', label: 'Fils / Fille de :', valeur: `${v('pere')} et de : ${v('mere')}`, manquant: validation.champsManquants.includes('pere') || validation.champsManquants.includes('mere') },
     champ('cin', 'Titulaire de la CIN N° :'),
-    { type: 'champ', label: 'Délivrée le :', valeur: `${formaterDateContrat(donnees.date_cin)} à ${v('lieu_cin')}`, manquant: !texte(donnees.date_cin) || !texte(donnees.lieu_cin) },
+    { type: 'champ', label: 'Délivrée le :', valeur: `${formaterDateContrat(donnees.date_cin)} à ${v('lieu_cin')}`, manquant: validation.champsManquants.includes('date_cin') || validation.champsManquants.includes('lieu_cin') },
     champ('situation_matrimoniale', 'Situation Matrimoniale :'),
     champ('adresse', 'Demeurant à :'),
     { type: 'paragraphe', texte: 'D’autre part, ci-après dénommé(e) l’employé(e) ;' },
     { type: 'paragraphe', texte: 'Il a été d’un commun accord arrêté et convenu ce qui suit :' },
-    { type: 'article', numero: 1, titre: 'SERVICE D’AFFECTATION', valeur: v('service'), manquant: !texte(donnees.service) },
+    { type: 'article', numero: 1, titre: 'SERVICE D’AFFECTATION', valeur: v('service'), manquant: validation.champsManquants.includes('service') },
     { type: 'article', numero: 2, titre: 'NATURE ET DURÉE DE CONTRAT', valeur: natureDuree, manquant: !nature || !duree },
     { type: 'article', numero: 3, titre: '' },
     champ('qualite', 'L’employé est engagé en qualité de :'),
@@ -290,7 +301,7 @@ export function construireContrat(donnees: ContratDonnees): ContratDocument {
     { type: 'paragraphe', texte: CLAUSES.remarque3 },
     { type: 'paragraphe', texte: CLAUSES.remarque4 },
     { type: 'paragraphe', texte: `Article 11 : ce présent contrat prend effet à compter du ${dateEffet}.` },
-    { type: 'signature', lieu: v('lieu_signature'), date: texte(donnees.date_signature) ? formaterDateContrat(donnees.date_signature) : PLACEHOLDER_CONTRAT, representant: v('representant') },
+    { type: 'signature', lieu: v('lieu_signature'), date: valeurTexte(donnees.date_signature) ? formaterDateContrat(donnees.date_signature) : PLACEHOLDER_CONTRAT, representant: v('representant') },
   );
   return { donnees, validation, mentionProjet, blocs };
 }
@@ -298,13 +309,13 @@ export function construireContrat(donnees: ContratDonnees): ContratDocument {
 /** Valeurs injectées dans le modèle Word. Aucun champ vide n'est masqué. */
 export function valeursModeleContrat(doc: ContratDocument): Record<string, string> {
   const d = doc.donnees;
-  const v = (key: ContratDonneesCles) => texte(d[key]) || PLACEHOLDER_CONTRAT;
-  const nature = texte(d.nature_contrat);
-  const duree = texte(d.duree_contrat) || (nature === 'CDI' ? 'Durée indéterminée' : '');
+  const v = (key: ContratDonneesCles) => valeurTexte(d[key]) || PLACEHOLDER_CONTRAT;
+  const nature = valeurTexte(d.nature_contrat);
+  const duree = valeurTexte(d.duree_contrat) || (nature === 'CDI' ? 'Durée indéterminée' : '');
   return {
     mention_projet: doc.mentionProjet,
     representant: v('representant'),
-    identite: [texte(d.civilite), texte(d.nom_prenoms)].filter(Boolean).join(' ') || PLACEHOLDER_CONTRAT,
+    identite: [valeurTexte(d.civilite), valeurTexte(d.nom_prenoms)].filter(Boolean).join(' ') || PLACEHOLDER_CONTRAT,
     date_naissance: formaterDateContrat(d.date_naissance),
     lieu_naissance: v('lieu_naissance'),
     pere: v('pere'),
@@ -324,9 +335,9 @@ export function valeursModeleContrat(doc: ContratDocument): Record<string, strin
     indemnite_logement: formaterMontantContrat(d.indemnite_logement),
     indemnite_rendement: formaterMontantContrat(d.indemnite_rendement),
     indemnite_responsabilite: formaterMontantContrat(d.indemnite_responsabilite),
-    date_effet: texte(d.date_effet) ? formaterDateContrat(d.date_effet) : PLACEHOLDER_CONTRAT,
+    date_effet: valeurTexte(d.date_effet) ? formaterDateContrat(d.date_effet) : PLACEHOLDER_CONTRAT,
     lieu_signature: v('lieu_signature'),
-    date_signature: texte(d.date_signature) ? formaterDateContrat(d.date_signature) : PLACEHOLDER_CONTRAT,
+    date_signature: valeurTexte(d.date_signature) ? formaterDateContrat(d.date_signature) : PLACEHOLDER_CONTRAT,
   };
 }
 
