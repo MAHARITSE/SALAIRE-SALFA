@@ -96,8 +96,8 @@ const CelluleSoldeAnneeEditable: React.FC<{
       aria-label={`${libelleType} — ${nomPrenoms}`}
       title={
         estSaisieManuelle
-          ? `${libelleType} saisi manuellement (${fmtJours(valeur)} j, max 30 j/an indépendant). Vider puis valider (Entrée) pour rétablir le calcul automatique.`
-          : `Saisir directement le ${libelleType.toLowerCase()} de ${nomPrenoms} (0 à 30 j — gestion indépendante par année).`
+          ? `${libelleType} saisi manuellement (${fmtJours(valeur)} j, max 30 j par exercice). Vider puis valider (Entrée) pour rétablir le calcul automatique.`
+          : `Saisir directement le ${libelleType.toLowerCase()} de ${nomPrenoms} (0 à 30 j — un plafond par exercice, consommé du plus ancien au plus récent).`
       }
       value={texte}
       onFocus={(e) => {
@@ -212,7 +212,7 @@ interface ColonnesEtat {
 export function colonnesEtat(annees: number[]): { groupes: string[]; colonnes: ColonnesEtat[] } {
   const groupes = [
     'IDENTIFICATION',
-    'SOLDE DE CONGÉ PAR ANNÉE (MAX 30 J / AN — INDÉPENDANT)',
+    'SOLDE DE CONGÉ PAR ANNÉE (MAX 30 J / EXERCICE — ANCIEN SOLDE CONSOMMÉ EN PREMIER)',
     'CONGÉ',
     'PERMISSION',
     'SUIVI',
@@ -349,7 +349,7 @@ export const EtatCongesEcran: React.FC<{
                   key={c.cle}
                   title={
                     estColAnneeEditable
-                      ? `Saisie directe sur ${c.label} (plafonnée à 30 j/an, gérée indépendamment des autres années)`
+                      ? `Saisie directe sur ${c.label} (plafonnée à 30 j pour cet exercice)`
                       : estColJoursEditable
                         ? 'Modification directe du nombre de jours demandés'
                         : undefined
