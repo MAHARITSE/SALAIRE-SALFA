@@ -313,7 +313,7 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
               {b.id ? 'Modifier la fiche d’absence' : 'Nouvelle fiche d’absence'}
             </h3>
             <p className="text-[10px] sm:text-xs text-slate-300">
-              Congé bloqué à 30 j/an (géré indépendamment), permission 10 j/an — salariés actifs uniquement (inactifs sans droit)
+              Congé 30 j par exercice, l'ancien solde consommé en premier · permission 10 j/an — salariés actifs uniquement (inactifs sans droit)
             </p>
           </div>
           <div className="flex items-center gap-2">

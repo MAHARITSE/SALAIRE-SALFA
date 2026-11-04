@@ -7,6 +7,10 @@
 // que des données plates et la configuration (CongesConfig). Il peut ainsi être
 // testé dans Node (scripts/test-conges.cjs) et utilisé à l'identique par
 // l'écran, l'impression et l'export Excel.
+//
+// Règle de consommation (SALFA) : chaque exercice ouvre au maximum 30 jours ; le
+// congé est imputé FIFO, c'est-à-dire d'abord sur l'ancien solde (exercices
+// antérieurs non prescrits), puis sur l'exercice suivant quand celui-ci est épuisé.
 // ==============================================================================
 
 // ------------------------------------------------------------------------------
@@ -196,9 +200,9 @@ function sanitizeListFeries(raw: any): string {
 }
 
 /**
- * Nettoie et borne une configuration de congés :
- * plafond strict de 30 jours maximum par an et gestion indépendante année par année
- * (aucun report/cumul d'une année sur l'autre).
+ * Nettoie et borne une configuration de congés : plafond strict de 30 jours par
+ * exercice. Les reliquats des exercices successifs restent mobilisables et sont
+ * consommés du plus ancien au plus récent (FIFO : l'ancien solde passe en premier).
  */
 export function sanitizeCongesConfig(raw: any): CongesConfig {
   const src = raw && typeof raw === 'object' ? raw : {};
@@ -538,9 +542,9 @@ export function anneesSuccessives(annee: number, nbAnneesCumul: number = DEFAULT
  * Décompose un solde cumulé sur les N dernières années successives autorisées par
  * le Code du Travail malgache (par défaut les 3 dernières années : N-2, N-1, N,
  * soit au maximum 3 × 30 = 90 jours). Tout droit antérieur à N-2 est prescrit.
- * Consommation FIFO du titre non prescrit le plus ancien :
- * ex. en 2026, un solde de 85 j = 25 j sur 2024 + 30 j sur 2025 + 30 j sur 2026 ;
- * un solde de 55 j = 0 j sur 2024 + 25 j sur 2025 + 30 j sur 2026.
+ * Consommation FIFO du titre non prescrit le plus ancien (l'ancien solde d'abord) :
+ * ex. en 2026, un solde de 85 j = 30 j sur 2024 + 30 j sur 2025 + 25 j sur 2026 ;
+ * un solde de 55 j = 30 j sur 2024 + 25 j sur 2025 + 0 j sur 2026.
  */
 export function decomposerDroitsSuccessifs(
   soldeTotal: number,
@@ -566,19 +570,28 @@ export function decomposerDroitsSuccessifs(
     return { annees, droitsParTitre, titreActif: annee, resteTitreActif: totalBrut };
   }
 
-  const resteAnnee = Number(Math.min(droit, totalBrut).toFixed(2));
-  droitsParTitre[annee] = resteAnnee;
+  // FIFO : les jours restants garnissent d'abord le titre le plus ancien, plafonné
+  // à son droit annuel (30 j), puis l'exercice suivant.
+  let reste = totalBrut;
+  for (const a of annees) {
+    const part = Number(Math.min(droit, reste).toFixed(2));
+    droitsParTitre[a] = part;
+    reste = Number((reste - part).toFixed(2));
+    if (reste <= 0) break;
+  }
+  const titreActif = annees.find((a) => droitsParTitre[a] > 0) ?? annee;
   return {
     annees,
     droitsParTitre,
-    titreActif: annee,
-    resteTitreActif: resteAnnee,
+    titreActif,
+    resteTitreActif: Number((droitsParTitre[titreActif] || 0).toFixed(2)),
   };
 }
 
 /**
  * Décompose un solde cumulé (plafonné aux 3 dernières années = 90 j) selon le mode
- * SALFA par « Titre / Année » (consommation FIFO du titre annuel non prescrit le plus ancien).
+ * SALFA par « Titre / Année » : le titre actif est le reliquat le plus ancien, car le
+ * congé est toujours imputé d'abord sur l'ancien solde, puis sur l'exercice suivant.
  */
 export function decomposerTitreActif(
   soldeTotal: number,
@@ -900,7 +913,6 @@ export function construireEtat(
     const bilansTemp: Record<number, BilanAnnee> = {};
     const soldeCourant: Record<number, number> = {};
     const permCourant: Record<number, number> = {};
-    const colonneDejaOuverte: Record<number, boolean> = {};
 
     for (let annee = debut; annee <= fin; annee++) {
       const eventsAnnee = evenements.filter((c) => Number(c.annee) === annee);
@@ -956,19 +968,29 @@ export function construireEtat(
       };
       soldeCourant[annee] = ouverture;
       permCourant[annee] = permDroit;
-      colonneDejaOuverte[annee] = false;
     }
 
+    /**
+     * Titre/Année en cours de consommation (FIFO) : le reliquat le plus ancien encore
+     * disponible dans la fenêtre des exercices successifs est soldé en premier.
+     */
     const trouverColonneActiveFenetre = (idxAnnee: number): number => {
-      if (idxAnnee < 0) return anneeCourante;
-      const colOrigine = anneesColonnes[idxAnnee];
-      if (soldeCourant[colOrigine] > 0) return colOrigine;
-      const colonnesSuivantesOuvertes = anneesColonnes
-        .slice(idxAnnee + 1)
-        .filter((col) => colonneDejaOuverte[col]);
-      if (!colonnesSuivantesOuvertes.length) return colOrigine;
-      const avecReste = colonnesSuivantesOuvertes.find((col) => soldeCourant[col] > 0);
-      return avecReste ?? colonnesSuivantesOuvertes[colonnesSuivantesOuvertes.length - 1];
+      const premiere = anneesColonnes[0] ?? anneeCourante;
+      const dispo = anneesColonnes.find((col) => soldeCourant[col] > 1e-9);
+      if (dispo !== undefined) return dispo;
+      if (idxAnnee >= 0) return anneesColonnes[Math.min(idxAnnee, anneesColonnes.length - 1)];
+      return premiere;
+    };
+
+    /**
+     * Cumul des jours restants sur les exercices successifs autorisés par la loi,
+     * arrêté à l'année de référence de l'état (c'est le « Congé sisa ambiny » total).
+     */
+    const cumulTitres = (anneeReferenceCumul: number): number => {
+      if (inactif) return 0;
+      let total = 0;
+      for (const a of anneesSuccessives(anneeReferenceCumul, nbSuccessives)) total += soldeCourant[a] ?? 0;
+      return Number(total.toFixed(2));
     };
 
     for (let annee = debut; annee <= fin; annee++) {
@@ -1012,78 +1034,58 @@ export function construireEtat(
           restant_apres: 0,
         };
 
-        let soldeApres = soldeCourant[annee];
         if (c.imputation === 'CONGE') {
           ligne.jours_conge = jours;
           ligne.date_conge = c.date_debut || dateEvenement(c);
           if (inactif) {
             ligne.solde_par_annee[annee] = 0;
-            soldeApres = 0;
             if (estValide(c)) bilan.pris += jours;
             else bilan.attente += jours;
-          } else if (!dansFenetre || idxFenetre < 0) {
-            ligne.solde_par_annee[annee] = Number(soldeCourant[annee].toFixed(2));
-            colonneDejaOuverte[annee] = true;
-            if (estValide(c)) {
-              soldeCourant[annee] -= jours;
-              bilan.pris += jours;
-            } else {
-              bilan.attente += jours;
-            }
-            soldeApres = soldeCourant[annee];
           } else if (!estValide(c)) {
+            // Demande encore dans le circuit : les jours sont réservés et affichés,
+            // mais seul le titre le plus ancien disponible est indiqué (aucune déduction).
             const colActive = trouverColonneActiveFenetre(idxFenetre);
             ligne.solde_par_annee[colActive] = Number(soldeCourant[colActive].toFixed(2));
-            colonneDejaOuverte[colActive] = true;
             bilan.attente += jours;
-            soldeApres = soldeCourant[colActive];
           } else {
+            // Demande validée : consommation FIFO du titre non prescrit le plus ancien.
+            // Le congé est d'abord imputé sur l'ancien solde (exercices antérieurs) ;
+            // quand celui-ci est épuisé, on passe au solde de l'exercice suivant.
             bilan.pris += jours;
-            const dejaDebordeSurSuivante =
-              soldeCourant[annee] <= 0 &&
-              anneesColonnes.slice(idxFenetre + 1).some((col) => colonneDejaOuverte[col]);
-            let kStart = idxFenetre;
-            if (dejaDebordeSurSuivante) {
-              const idxSuivDispo = anneesColonnes.findIndex(
-                (col, idx) => idx > idxFenetre && (soldeCourant[col] > 0 || !colonneDejaOuverte[col])
-              );
-              kStart = idxSuivDispo >= 0 ? idxSuivDispo : anneesColonnes.length - 1;
+            const premierTitreImputable = Math.max(anneesColonnes[0] ?? annee, annee - nbSuccessives + 1);
+            const derniereColonneImputable = Math.min(fin, Math.max(annee, anneeCourante));
+            let restantADeduire = jours;
+            let derniereColImputee = annee;
+
+            if (restantADeduire <= 1e-9) {
+              // Aucun jour à déduire : la ligne affiche simplement le solde du titre actif.
+              const colAffichage = trouverColonneActiveFenetre(idxFenetre);
+              ligne.solde_par_annee[colAffichage] = Number(soldeCourant[colAffichage].toFixed(2));
+              derniereColImputee = colAffichage;
             }
 
-            let restantADeduire = jours;
-            let derniereColImputee = anneesColonnes[kStart];
-            if (restantADeduire <= 0) {
-              ligne.solde_par_annee[derniereColImputee] = Number(soldeCourant[derniereColImputee].toFixed(2));
-              colonneDejaOuverte[derniereColImputee] = true;
-              soldeApres = soldeCourant[derniereColImputee];
-            } else {
-              for (let k = kStart; k < anneesColonnes.length && restantADeduire > 1e-9; k++) {
-                const col = anneesColonnes[k];
-                const estDerniereCol = k === anneesColonnes.length - 1;
-                const dispo = soldeCourant[col];
-                ligne.solde_par_annee[col] = Number(dispo.toFixed(2));
-                colonneDejaOuverte[col] = true;
-                derniereColImputee = col;
+            for (let col = premierTitreImputable; col <= derniereColonneImputable && restantADeduire > 1e-9; col++) {
+              const estDerniereCol = col === derniereColonneImputable;
+              const dispo = soldeCourant[col] ?? 0;
+              // Un exercice déjà soldé est sauté : on ne « remplit » pas un solde épuisé.
+              if (!estDerniereCol && dispo <= 1e-9) continue;
 
-                let absorbe = 0;
-                if (estDerniereCol) {
-                  absorbe = restantADeduire;
-                } else if (dispo > 0) {
-                  absorbe = Math.min(restantADeduire, dispo);
-                }
+              ligne.solde_par_annee[col] = Number(dispo.toFixed(2));
+              derniereColImputee = col;
 
-                if (absorbe > 0 || estDerniereCol) {
-                  soldeCourant[col] = Number((soldeCourant[col] - absorbe).toFixed(4));
-                  restantADeduire = Number((restantADeduire - absorbe).toFixed(4));
-                  if (col !== annee && absorbe > 0) {
-                    bilan.debordementSortant = Number(((bilan.debordementSortant || 0) + absorbe).toFixed(4));
-                    bilansTemp[col].debordementEntrant = Number(
-                      ((bilansTemp[col].debordementEntrant || 0) + absorbe).toFixed(4)
-                    );
-                  }
-                }
+              const absorbe = estDerniereCol ? restantADeduire : Math.min(restantADeduire, dispo);
+              if (absorbe <= 0) continue;
+
+              soldeCourant[col] = Number((dispo - absorbe).toFixed(4));
+              restantADeduire = Number((restantADeduire - absorbe).toFixed(4));
+              if (col !== annee) {
+                // Jours pris sur un autre exercice que celui de la fiche : traçabilité
+                // (le débordement entre/sortant alimente la saisie du solde final).
+                bilan.debordementSortant = Number(((bilan.debordementSortant || 0) + absorbe).toFixed(4));
+                bilansTemp[col].debordementEntrant = Number(
+                  ((bilansTemp[col].debordementEntrant || 0) + absorbe).toFixed(4)
+                );
               }
-              soldeApres = soldeCourant[derniereColImputee];
             }
           }
         } else if (c.imputation === 'PERMISSION') {
@@ -1099,37 +1101,31 @@ export function construireEtat(
           ligne.perm_restant = inactif ? 0 : Number(permCourant[annee].toFixed(2));
           if (inactif) {
             ligne.solde_par_annee[annee] = 0;
-            soldeApres = 0;
           } else if (dansFenetre && idxFenetre >= 0) {
             const colActive = trouverColonneActiveFenetre(idxFenetre);
             ligne.solde_par_annee[colActive] = Number(soldeCourant[colActive].toFixed(2));
-            colonneDejaOuverte[colActive] = true;
-            soldeApres = soldeCourant[colActive];
           } else {
             ligne.solde_par_annee[annee] = Number(soldeCourant[annee].toFixed(2));
-            colonneDejaOuverte[annee] = true;
-            soldeApres = soldeCourant[annee];
           }
         } else {
           ligne.examen_jours = total;
           ligne.date_conge = c.date_debut || dateEvenement(c);
           if (inactif) {
             ligne.solde_par_annee[annee] = 0;
-            soldeApres = 0;
           } else if (dansFenetre && idxFenetre >= 0) {
             const colActive = trouverColonneActiveFenetre(idxFenetre);
             ligne.solde_par_annee[colActive] = Number(soldeCourant[colActive].toFixed(2));
-            colonneDejaOuverte[colActive] = true;
-            soldeApres = soldeCourant[colActive];
           } else {
             ligne.solde_par_annee[annee] = Number(soldeCourant[annee].toFixed(2));
-            colonneDejaOuverte[annee] = true;
-            soldeApres = soldeCourant[annee];
           }
           if (estValide(c)) bilan.examenPris += total;
           else bilan.examenAttente += total;
         }
-        ligne.restant_apres = inactif ? 0 : Number((c.imputation === 'PERMISSION' ? permCourant[annee] : soldeApres).toFixed(2));
+        // « Congé restant » après la demande : cumul des reliquats des exercices
+        // successifs (le titre le plus ancien est consommé en premier).
+        ligne.restant_apres = inactif
+          ? 0
+          : Number((c.imputation === 'PERMISSION' ? permCourant[annee] : cumulTitres(anneeCourante)).toFixed(2));
         if (dansFenetre) lignesAnnee.push(ligne);
         bilan.nbDemandes++;
         if (c.statut !== 'VALIDE') {
@@ -1180,13 +1176,13 @@ export function construireEtat(
       remplacements: '',
       observations: '',
       jours: 0,
-      restant_apres: inactif ? 0 : ((p.bilans[anneeCourante] || p.bilans[derniereAnnee])?.fin || 0),
+      restant_apres: 0,
     };
     for (const a of p.annees) soldeLigne.solde_par_annee[a] = inactif ? 0 : (p.bilans[a] ? p.bilans[a].fin : 0);
     p.lignes.push(soldeLigne);
 
     // Les années hors fenêtre (mais dans la fenêtre d'affichage) doivent quand même
-    // apparaître avec leur solde de fin indépendant, plafonné à 30 j (ou 0 j si inactif).
+    // apparaître avec leur solde de fin, plafonné à 30 j (ou 0 j si inactif).
     for (const a of p.annees) {
       if (!p.bilans[a]) {
         const ouvertA = !inactif && (!anneeEmbauche || a >= anneeEmbauche);
@@ -1202,9 +1198,9 @@ export function construireEtat(
     }
     const bilanCourant = p.bilans[anneeCourante] || p.bilans[Math.max(...Object.keys(p.bilans).map(Number))] || null;
     const anneeReference = bilanCourant ? bilanCourant.annee : anneeCourante;
-    p.soldeActuel = inactif ? 0 : (bilanCourant ? bilanCourant.fin : 0);
+    const anneesTitres = anneesSuccessives(anneeReference, nbSuccessives);
     const droitsParTitreIndependants: Record<number, number> = {};
-    for (const a of anneesSuccessives(anneeReference, nbSuccessives)) {
+    for (const a of anneesTitres) {
       if (inactif) {
         droitsParTitreIndependants[a] = 0;
       } else if (p.bilans[a]) {
@@ -1214,8 +1210,15 @@ export function construireEtat(
       }
     }
     p.droitsParTitre = droitsParTitreIndependants;
-    p.titreActif = anneeReference;
-    p.resteTitreActif = inactif ? 0 : p.soldeActuel;
+    // « Congé sisa ambiny » : cumul des reliquats des exercices successifs (30 j/an max).
+    const cumulRestant = inactif
+      ? 0
+      : Number(anneesTitres.reduce((somme, a) => somme + (Number(p.bilans[a]?.fin) || 0), 0).toFixed(2));
+    p.soldeActuel = cumulRestant;
+    soldeLigne.restant_apres = cumulRestant;
+    // Titre actif = reliquat le plus ancien encore disponible (consommé en premier en FIFO).
+    p.titreActif = anneesTitres.find((a) => (droitsParTitreIndependants[a] || 0) > 1e-9) ?? anneeReference;
+    p.resteTitreActif = inactif ? 0 : Number((droitsParTitreIndependants[p.titreActif] || 0).toFixed(2));
     p.permissionActuelle = inactif ? 0 : (bilanCourant ? bilanCourant.permFin : 0);
     if (bilanCourant && !inactif) {
       totaux.nbSalaries++;
@@ -1224,8 +1227,8 @@ export function construireEtat(
       totaux.joursConge += bilanCourant.pris;
       totaux.joursPermission += bilanCourant.permPris;
       totaux.joursExamen += bilanCourant.examenPris;
-      totaux.totalSolde += bilanCourant.fin;
-      if (bilanCourant.fin < 0) totaux.depassements++;
+      totaux.totalSolde += cumulRestant;
+      if (cumulRestant < 0) totaux.depassements++;
     }
     parcours.push(p);
   }
@@ -1254,9 +1257,9 @@ export interface SoldeSaisie {
   restant: number;
   debordementEntrant?: number;
   debordementSortant?: number;
-  /** Détail des jours restants indépendants sur chaque année affichée (ex. { 2024: 10, 2025: 9, 2026: 5 }). */
+  /** Détail des jours restants sur chaque exercice affiché (ex. { 2024: 10, 2025: 9, 2026: 5 }). */
   droitsParTitre: Record<number, number>;
-  /** Titre/Année actif en cours (géré indépendamment année par année). */
+  /** Titre/Année actif : reliquat le plus ancien encore disponible (consommé en premier). */
   titreActif: number;
   /** Jours restants sur le Titre/Année actif (« Congé sisa ambiny »). */
   resteTitreActif: number;
@@ -1306,7 +1309,9 @@ export function calculerSoldes(
         depassement: false,
       };
     }
-    const restant = Number((b.fin).toFixed(2));
+    // Le solde disponible cumule les reliquats des exercices successifs (30 j/an max) :
+    // c'est l'ancien solde qui est consommé en premier, puis le suivant.
+    const restant = Number(p.soldeActuel.toFixed(2));
     return {
       employe_id: p.employe_id,
       numero_matricule: p.numero_matricule,
@@ -1326,15 +1331,15 @@ export function calculerSoldes(
       debordementEntrant: Number((b.debordementEntrant || 0).toFixed(2)),
       debordementSortant: Number((b.debordementSortant || 0).toFixed(2)),
       droitsParTitre: { ...p.droitsParTitre },
-      titreActif: annee,
-      resteTitreActif: restant,
+      titreActif: p.titreActif,
+      resteTitreActif: Number(p.resteTitreActif.toFixed(2)),
       permDroit: b.permDroit,
       permPris: Number((b.permPris).toFixed(2)),
       permAttente: Number((b.permAttente).toFixed(2)),
       permRestant: Number((b.permFin).toFixed(2)),
       examenJours: Number((b.examenPris + b.examenAttente).toFixed(2)),
       nbDemandes: b.nbDemandes,
-      depassement: Number((b.fin - b.attente - b.permAttente).toFixed(2)) < 0,
+      depassement: Number((restant - b.attente - b.permAttente).toFixed(2)) < 0,
     };
   });
 }
@@ -1699,7 +1704,7 @@ export function calculerSyntheseCongesPeriode(
         conge_pris_mois: 0,
         conge_pris_annee: s ? s.pris : 0,
         conge_restant: sommeDroitsRestantsParTitre(s),
-        conge_titre_actif: annee,
+        conge_titre_actif: s ? s.titreActif : annee,
         conge_reste_titre: restantTitre,
         permission_pris_mois: 0,
         permission_restante: s ? s.permRestant : 0,
@@ -1755,7 +1760,7 @@ export function calculerSyntheseCongesPeriode(
       conge_pris_mois: Number(congeMois.toFixed(2)),
       conge_pris_annee: Number(congeJusquaMois.toFixed(2)),
       conge_restant: congeRestant,
-      conge_titre_actif: annee,
+      conge_titre_actif: soldeAuMois ? soldeAuMois.titreActif : annee,
       conge_reste_titre: congeRestantTitre,
       permission_pris_mois: Number(permMois.toFixed(2)),
       permission_restante: permRestante,

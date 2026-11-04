@@ -263,14 +263,13 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
     const s = soldes[c.employe_id];
     if (!s) return null;
     const anneeFiche = c.annee || s.annee;
-    const restantAnnee =
-      s.droitsParTitre && s.droitsParTitre[anneeFiche] !== undefined
-        ? s.droitsParTitre[anneeFiche]
-        : s.restant;
+    // Solde « congé » = cumul des reliquats des exercices successifs : la fiche solde
+    // d'abord l'ancien solde, puis l'exercice suivant.
+    const restantCumul = s.restant;
     const j = joursAffiches(c);
     const estDejaDeduit = c.statut === 'VALIDE';
-    const soldeAvant = c.imputation === 'CONGE' ? (estDejaDeduit ? restantAnnee + j : restantAnnee) : restantAnnee;
-    const soldeApres = c.imputation === 'CONGE' ? (estDejaDeduit ? restantAnnee : restantAnnee - j) : restantAnnee;
+    const soldeAvant = c.imputation === 'CONGE' ? (estDejaDeduit ? restantCumul + j : restantCumul) : restantCumul;
+    const soldeApres = c.imputation === 'CONGE' ? (estDejaDeduit ? restantCumul : restantCumul - j) : restantCumul;
     const permAvant = c.imputation === 'PERMISSION' ? (estDejaDeduit ? s.permRestant + j : s.permRestant) : s.permRestant;
     const permApres = c.imputation === 'PERMISSION' ? (estDejaDeduit ? s.permRestant : s.permRestant - j) : s.permRestant;
     return {
@@ -532,8 +531,9 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
 
         <p className="text-[11px] text-slate-500 dark:text-slate-400">
           En-têtes ↕ : tri croissant, décroissant, puis ordre initial. <br />
-          <b>Règle des congés SALFA</b> : <b>{encadre(Math.min(30, config.joursCongeParAn))} jours de congé maximum tous les ans</b>, chaque année ({anneesLoi.join(', ')}) étant{' '}
-          <b>gérée indépendamment</b> (aucun report ni cumul d'une année sur l'autre), et <b>{encadre(config.joursPermissionParAn)} jours de permission</b> par an.{' '}
+          <b>Règle des congés SALFA</b> : <b>{encadre(Math.min(30, config.joursCongeParAn))} jours de congé maximum par exercice</b> ({anneesLoi.join(', ')}) et{' '}
+          <b>consommation du plus ancien solde en premier</b> : le congé est déduit de l'ancien solde, puis de l'exercice suivant quand il est épuisé ;{' '}
+          <b>{encadre(config.joursPermissionParAn)} jours de permission</b> par an.{' '}
           <b>Les personnes inactives n'ont plus aucun droit aux congés (0 j).</b>
         </p>
       </div>
@@ -984,7 +984,7 @@ const ReferentielAbsence: React.FC<{ config: CongesConfig; onClose: () => void }
         <div className="rounded-lg bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 p-2.5">
           <div className="font-bold uppercase text-[10px] text-slate-500 mb-1">Droits annuels appliqués</div>
           <ul className="space-y-1 list-disc pl-4">
-            <li>Congé : <b>{encadre(Math.min(30, config.joursCongeParAn))} jours maximum tous les ans</b>, <b>géré indépendamment année par année</b> (aucun report ni cumul d'une année sur l'autre).</li>
+            <li>Congé : <b>{encadre(Math.min(30, config.joursCongeParAn))} jours maximum par exercice</b> ; le reliquat d'une année reste mobilisable et <b>l'ancien solde est consommé en premier</b> (puis l'exercice suivant).</li>
             <li>Permission : <b>{encadre(config.joursPermissionParAn)} jours par an</b> pour les événements 1* à 5*.</li>
             <li>Examen médical : consultation, dentaire, pré-natale sur « Taratasy fanamarihana avy @ dokotera », sans décompte.</li>
             <li>Période demandée incluse (<i>Du … au …</i>) et <b>Daty fiverenana miasa</b> ajustée automatiquement au lendemain de la fin demandée ({config.exclureDimanche ? 'dimanche non décompté' : 'dimanche décompté'}{config.exclureSamedi ? ', samedi non décompté' : ''}{config.joursFeries ? `, ${config.joursFeries.trim().split(/[\s,;]+/).length} jour(s) férié(s)` : ''}).</li>

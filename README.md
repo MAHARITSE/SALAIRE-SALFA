@@ -346,6 +346,11 @@ reprend fidèlement :
   *Fitsipika Anatiny* : permissions de 10 j/an, congés de 30 j/an plafonnés à 90 j,
   examens médicaux sur justificatif médical, soldes *sisa ambiny* / *Titre-Année* /
   *sisa tavela*, et circuit de visas *Ny mpangataka → Chef de Service → Médecin Chef → Gestionnaire*) ;
+- la **règle de consommation FIFO** : chaque exercice ouvre au maximum 30 jours; un congé
+  validé est imputé **d'abord sur l'ancien solde** (exercices antérieurs non prescrits),
+  puis sur l'exercice suivant quand celui-ci est épuisé. Ex. soldes 2024 = 0, 2025 = 27,
+  2026 = 30 j et un congé de 20 j en novembre 2026 : 2025 passe à 7 j et 2026 reste à 30 j
+  (titre actif = 2025, cumul restant = 37 j) ;
 - le **`CONTROLE CONGE A JOUR SALFA 2026.xlsx`** contient les soldes restants par salarié
   pour **2024, 2025 et 2026** (43 salariés; les cellules vides valent 0). Le SQL WAMP
   (**`wamp/sql/salfa_conges_excel.sql`**, régénérable via `npm run sql:conges`) importe

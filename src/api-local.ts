@@ -3061,7 +3061,12 @@ export async function importerConges(
         cible = Math.min(cfg.plafondCumulConge, Math.max(0, cfg.plafondCumulConge - prisEnAnneeRef), cible);
       }
 
-      const ecartNet = Math.round((cible - (soldeApresPurge ? soldeApresPurge.restant : 0)) * 100) / 100;
+      // La cible porte sur la colonne de l'exercice (30 j/an) : on compare au reliquat
+      // du titre de cette année, pas au cumul des exercices successifs.
+      const resteAnneeRef = soldeApresPurge
+        ? Number(soldeApresPurge.droitsParTitre?.[fin.anneeRef] ?? 0)
+        : 0;
+      const ecartNet = Math.round((cible - resteAnneeRef) * 100) / 100;
       if (Math.abs(ecartNet) < 0.01) continue;
       liste.push(normaliserConge({
         id: nextCongeId(),

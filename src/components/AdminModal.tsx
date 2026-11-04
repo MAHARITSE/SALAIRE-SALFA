@@ -563,13 +563,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                 <Info className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>
                   Ces réglages alimentent l'onglet <b>Congés & Permissions</b> (comptable) :{' '}
-                  <b>congé bloqué à 30 jours maximum tous les ans</b> et <b>géré indépendamment année par année</b> (aucun report ni cumul d'une année sur l'autre sur 2024, 2025, 2026…), permission de 10 jours par an, examens médicaux sur justificatif du médecin.
+                  <b>30 jours de congé maximum par exercice</b> (2024, 2025, 2026…), les reliquats des exercices successifs restant mobilisables : le congé est <b>imputé d'abord sur l'ancien solde</b>, puis sur l'exercice suivant quand celui-ci est épuisé, permission de 10 jours par an, examens médicaux sur justificatif du médecin.
                 </span>
               </div>
 
               <div className="bg-slate-50 dark:bg-slate-700/30 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-4 space-y-3">
                 <h4 className="text-[11px] sm:text-xs font-extrabold text-salfa-dark dark:text-white uppercase tracking-wider border-b dark:border-slate-600 pb-2 flex items-center gap-2">
-                  <CalendarCheck2 className="w-4 h-4 text-salfa-teal" />Droits annuels indépendants (plafond 30 j / an)
+                  <CalendarCheck2 className="w-4 h-4 text-salfa-teal" />Droits annuels (plafond 30 j / exercice)
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
@@ -585,7 +585,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                   <div>
                     <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Plafond par année (jours)</label>
                     <input type="number" readOnly value={Math.min(30, congies.joursCongeParAn)} className="w-full rounded-lg border dark:border-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-200 px-3 py-2 text-sm font-mono font-bold" />
-                    <span className="text-[10px] text-slate-500">Chaque année est indépendante (max 30 j)</span>
+                    <span className="text-[10px] text-slate-500">Max 30 j par exercice</span>
                   </div>
                   <div>
                     <label className="block text-[11px] sm:text-xs font-bold mb-1 dark:text-slate-300">Permission par an (jours)</label>
@@ -597,7 +597,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div className="flex items-start gap-2 text-[11px] sm:text-xs text-emerald-800 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg px-2.5 py-2">
                     <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-                    <span><b>Gestion indépendante activée :</b> chaque année repart à 30 j maximum sans report de l'année précédente.</span>
+                    <span><b>Consommation FIFO activée :</b> chaque exercice plafonne à 30 j et le congé solde d'abord l'ancien solde, puis l'exercice suivant.</span>
                   </div>
                   <label className="flex items-start gap-2 text-[11px] sm:text-xs cursor-pointer"><input type="checkbox" className="mt-0.5 rounded" checked={congies.examenSurPermission} onChange={(e) => majConges('examenSurPermission', e.target.checked)} /><span>Un <b>examen médical</b> décompte aussi la permission.</span></label>
                   <label className="flex items-start gap-2 text-[11px] sm:text-xs cursor-pointer"><input type="checkbox" className="mt-0.5 rounded" checked={congies.bloquerDepassement} onChange={(e) => majConges('bloquerDepassement', e.target.checked)} /><span><b>Bloquer</b> une demande validée dépassant le plafond de 30 j de l'année (sinon simple rappel).</span></label>

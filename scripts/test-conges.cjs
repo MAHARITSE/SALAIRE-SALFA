@@ -78,7 +78,9 @@ assert.equal(C.calculerDateFin('2026-06-05', 2, cfg), '2026-06-06', '05/06/2026 
 assert.equal(C.calculerDateRetour('2026-06-05', 2, cfg), '2026-06-07', '05/06/2026 au 06/06/2026 -> Daty fiverenana miasa 07/06/2026');
 assert.equal(C.calculerDateFin('2026-11-02', 3, cfg), '2026-11-04', '02/11 au 04/11 = 3 jours');
 assert.equal(C.calculerDateRetour('2026-11-02', 3, cfg), '2026-11-05', 'date de reprise le lendemain de la fin demandée');
-assert.deepEqual(C.decomposerTitreActif(25, 2026, 30, 2022), { titreActif: 2026, resteTitreActif: 25 }, 'décomposition indépendante par année (plafonnée à 30 j)');
+assert.deepEqual(C.decomposerTitreActif(25, 2026, 30, 2022), { titreActif: 2024, resteTitreActif: 25 }, 'décomposition FIFO : le titre le plus ancien (2024) est servi en premier');
+assert.deepEqual(C.decomposerTitreActif(55, 2026, 30, 2020), { titreActif: 2024, resteTitreActif: 30 }, '55 j = 30 j sur 2024 puis le titre actif devient 2025');
+assert.deepEqual(C.decomposerDroitsSuccessifs(25, 2026, 30, 2022, 3).droitsParTitre, { 2024: 25, 2025: 0, 2026: 0 }, '25 j se posent d’abord sur l’ancien solde 2024');
 
 // Période incluse Du … au … : 05/06 au 05/06 = 1 j, 05/06 au 06/06 = 2 j, options dimanche/samedi/férié respectées.
 assert.equal(C.joursDemandesPour({ date_debut: '2026-06-05', date_fin: '2026-06-05' }, cfg), 1, '05/06/2026 au 05/06/2026 = 1 congé');
@@ -136,36 +138,43 @@ const congeChevauchant = C.normaliserConge({
 });
 const syntheseAvantConge = C.calculerSyntheseCongesPeriode(titulaireCumul, titresCumules, cfg, 2026, 'OCTOBRE').get(900);
 assert.equal(syntheseAvantConge.conge_restant, 85, 'le bulletin cumule les 25 + 30 + 30 jours des titres non prescrits');
-assert.equal(syntheseAvantConge.conge_reste_titre, 30, 'le solde du titre courant reste affiché séparément');
+assert.equal(syntheseAvantConge.conge_titre_actif, 2024, 'FIFO : le titre actif est le plus ancien non soldé');
+assert.equal(syntheseAvantConge.conge_reste_titre, 25, 'le reliquat du titre actif (2024) est affiché séparément');
 const syntheseOctobreConge = C.calculerSyntheseCongesPeriode(titulaireCumul, [...titresCumules, congeChevauchant], cfg, 2026, 'OCTOBRE').get(900);
 assert.equal(syntheseOctobreConge.conge_pris_annee, 3, 'seuls les jours de congé échus avant la fin octobre sont comptés');
 assert.equal(syntheseOctobreConge.conge_restant, 82, 'le cumul restant déduit les jours déjà pris au titre courant');
-assert.equal(syntheseOctobreConge.conge_reste_titre, 27, 'le titre courant reflète les jours consommés en octobre');
+assert.equal(syntheseOctobreConge.conge_reste_titre, 22, 'les 3 jours d’octobre sont pris sur l’ancien solde 2024 (25 → 22)');
 const syntheseNovembreConge = C.calculerSyntheseCongesPeriode(titulaireCumul, [...titresCumules, congeChevauchant], cfg, 2026, 'NOVEMBRE').get(900);
 assert.equal(syntheseNovembreConge.conge_pris_annee, 6, 'le cumul annuel inclut tout le congé chevauchant en novembre');
 assert.equal(syntheseNovembreConge.conge_restant, 79, 'le solde cumulé est actualisé après la fin du congé');
-assert.equal(syntheseNovembreConge.conge_reste_titre, 24, 'le solde du titre actif est actualisé en novembre');
+assert.equal(syntheseNovembreConge.conge_reste_titre, 19, 'le solde du titre 2024 est actualisé en novembre (25 → 19)');
 
 const etat = C.construireEtat(employes, conges, cfg, { annee: 2027, nbAnnees: 4 });
 assert.deepEqual(etat.annees, [2024, 2025, 2026, 2027], 'fenêtre de quatre colonnes d’années');
 const p1 = etat.parcours.find((p) => p.employe_id === 1);
 assert.deepEqual(Object.keys(p1.bilans).map(Number), [2024, 2025, 2026, 2027]);
+// Règle FIFO : chaque demande consomme d'abord le reliquat le plus ancien, puis l'exercice suivant.
 assert.equal(p1.bilans[2024].ouverture, 30, 'droit de 30 jours en 2024');
-assert.equal(p1.bilans[2024].fin, 0, 'tout le droit de 2024 est consommé');
-assert.equal(p1.bilans[2025].ouverture, 30, '2025 repart indépendamment à 30 jours');
-assert.equal(p1.bilans[2025].fin, 15, '15 jours consommés en 2025 -> reste 15 j sur 2025');
-assert.equal(p1.bilans[2026].ouverture, 30, 'aucun report des 15 j de 2025 : 2026 repart à 30 jours');
-assert.equal(p1.bilans[2026].pris, 30, '30 jours validés en 2026');
+assert.equal(p1.bilans[2024].fin, 0, 'tout le droit de 2024 est consommé par le congé de 2024');
+assert.equal(p1.bilans[2025].ouverture, 30, '2025 ouvre ses 30 jours');
+assert.equal(p1.bilans[2025].fin, 0, 'les 30 jours de 2026 soldent les 15 j restants de 2025 puis prennent 15 j sur 2026');
+assert.equal(p1.bilans[2025].debordementEntrant, 15, '15 jours de la fiche 2026 imputés sur l’ancien solde 2025');
+assert.equal(p1.bilans[2026].ouverture, 30, '2026 ouvre ses 30 jours');
+assert.equal(p1.bilans[2026].pris, 30, '30 jours validés en 2026 (imputés sur 2025 puis 2026)');
+assert.equal(p1.bilans[2026].debordementSortant, 15, '15 des 30 jours de 2026 sont sortis sur l’exercice 2025');
 assert.equal(p1.bilans[2026].attente, 5, '5 jours réservés par la demande en attente');
 assert.equal(p1.bilans[2026].fin, 0, 'solde épuisé en fin 2026');
 assert.equal(p1.bilans[2026].permPris, 5, 'cinq jours de permission consommés');
 assert.equal(p1.bilans[2026].permFin, 5, 'reste 5 jours de permission');
 assert.equal(p1.bilans[2026].examenPris, 1, 'jour d’examen médical suivi sans décompte');
-assert.equal(p1.bilans[2027].ouverture, 30, '2027 repart indépendamment à 30 jours');
-assert.equal(p1.bilans[2027].fin, -6, 'archive 36 jours sur 30 restant isolée sur 2027');
-// Le dépassement éventuel de 2027 ne se répercute PAS sur 2028 : 2028 repart indépendamment à 30 j.
+assert.equal(p1.bilans[2027].ouverture, 30, '2027 ouvre ses 30 jours');
+assert.equal(p1.bilans[2027].fin, 9, '36 jours en 2027 : 15 j restants de 2026 puis 21 j sur 2027 -> reste 9 j');
+assert.equal(p1.bilans[2027].debordementSortant, 15, 'la fiche 2027 a soldé les 15 j restants de 2026');
+assert.equal(p1.soldeActuel, 9, 'cumul des reliquats des exercices successifs (2025-2027)');
+assert.equal(p1.titreActif, 2027, 'titre actif = reliquat le plus ancien non soldé');
+// L'exercice suivant repart à 30 j : le solde 2028 ne porte aucun report négatif.
 const solde2028 = C.calculerSoldes(employes, [...conges, fiche(1, 2028, '2028-01-10', 15)], cfg, 2028);
-assert.equal(solde2028.find((s) => s.employe_id === 1).ouverture, 30, '2028 repart indépendamment à 30 jours sans report négatif ni positif');
+assert.equal(solde2028.find((s) => s.employe_id === 1).ouverture, 30, '2028 repart à 30 jours sans report négatif ni positif');
 
 // Le plafond de 30 jours borne chaque année, même sans aucune saisie.
 const p3 = etat.parcours.find((p) => p.employe_id === 3);
@@ -181,19 +190,54 @@ assert.equal(p2.bilans[2025].pris, 0, 'la demande refusée n’est pas déduite'
 // Une ligne par demande, solde affiché avant déduction (comme le classeur).
 const lignesConge1 = p1.lignes.filter((l) => l.type === 'DEMANDE' && l.annee === 2026 && l.jours_conge > 0);
 assert.equal(lignesConge1.length, 2, 'une ligne par demande, y compris celle en attente');
-assert.equal(lignesConge1[0].solde_par_annee[2026], 30, 'le classeur porte le solde avant la demande (30 j)');
+assert.deepEqual(lignesConge1[0].solde_par_annee, { 2025: 15, 2026: 30 }, 'la fiche 2026 affiche l’ancien solde 2025 (15 j) puis celui de 2026 (30 j) avant déduction');
 assert.equal(lignesConge1[0].jours_conge, 30);
 assert.equal(lignesConge1[0].situation, 'Validée');
 assert.equal(lignesConge1[1].jours_conge, 5, 'la demande en attente est affichée avec ses jours');
-assert.equal(lignesConge1[1].solde_par_annee[2026], 0, 'mais ne déduit pas le solde');
+assert.equal(lignesConge1[1].solde_par_annee[2026], 15, 'le reliquat du titre actif est indiqué, sans être déduit');
 assert.equal(lignesConge1[1].situation, 'En attente');
 const permissions2026 = p1.lignes.filter((l) => l.perm_jours > 0);
 assert.deepEqual(permissions2026.map((l) => [l.perm_droit, l.perm_jours, l.perm_restant]), [[10, 3, 7], [10, 2, 5]], 'bloc permission : droit, jours, restant');
 const soldesFinaux = p1.lignes.filter((l) => l.type === 'SOLDE_FINAL');
 assert.equal(soldesFinaux.length, 1, 'une seule ligne de solde par salarié');
-assert.deepEqual(soldesFinaux[0].solde_par_annee, { 2024: 0, 2025: 15, 2026: 0, 2027: -6 }, 'le solde de fin indépendant de chaque année');
+assert.deepEqual(soldesFinaux[0].solde_par_annee, { 2024: 0, 2025: 0, 2026: 0, 2027: 9 }, 'le solde de fin de chaque année après consommation FIFO');
 assert.equal(p2.lignes.filter((l) => l.type === 'SOLDE_FINAL')[0].motif.includes('aucune demande'), false);
 assert.equal(p3.lignes.length, 1, 'un salarié sans demande ne pèse qu’une ligne dans l’état');
+
+// Cas client : soldes 2024 = 0 j, 2025 = 27 j, 2026 = 30 j, puis congé de 20 j du 07/11 au 26/11/2026.
+// Le congé doit solder l'ancien solde 2025 avant de toucher les 30 j de 2026.
+const empCas = [{ id: 950, numero_matricule: 950, nom_prenoms: 'RAVELOSON TAHINISOA PRESSYLLA', date_embauche: '2020-01-01', actif: 1 }];
+const ouverturesCas = [[2024, 0], [2025, 27], [2026, 30]].map(([annee, jours], index) => C.normaliserConge({
+  id: 960 + index, employe_id: 950, numero_matricule: 950, annee,
+  categorie: 'AJUSTEMENT', imputation: 'AUCUNE', ajustement_type: 'OUVERTURE', statut: 'VALIDE',
+  date_debut: `${annee}-01-01`, date_demande: `${annee}-01-01`, jours_demandes: jours,
+}));
+const congeNovembre = C.normaliserConge({
+  id: 970, employe_id: 950, numero_matricule: 950, annee: 2026,
+  categorie: 'CONGE', imputation: 'CONGE', statut: 'VALIDE',
+  date_demande: '2026-11-02', date_debut: '2026-11-07', date_fin: '2026-11-26',
+  date_retour: '2026-11-27', jours_demandes: 20,
+});
+const etatCas = C.construireEtat(empCas, [...ouverturesCas, congeNovembre], cfg, { annee: 2026, nbAnnees: 3 });
+const pCas = etatCas.parcours[0];
+assert.deepEqual(pCas.droitsParTitre, { 2024: 0, 2025: 7, 2026: 30 }, 'les 20 jours sont retirés de l’ancien solde 2025 ; les 30 j de 2026 restent intacts');
+assert.equal(pCas.bilans[2025].fin, 7, 'ancien solde 2025 soldé de 20 jours (27 -> 7)');
+assert.equal(pCas.bilans[2026].fin, 30, 'le solde 2026 n’est pas touché tant que 2025 n’est pas épuisé');
+assert.equal(pCas.titreActif, 2025, 'le titre actif reste 2025 tant qu’il reste des jours');
+assert.equal(pCas.resteTitreActif, 7, 'reste 7 jours sur le titre 2025');
+assert.equal(pCas.soldeActuel, 37, 'cumul restant 7 + 30 = 37 jours');
+const ligneNovembre = pCas.lignes.find((l) => l.conge_id === 970);
+assert.deepEqual(ligneNovembre.solde_par_annee, { 2025: 27 }, 'la fiche affiche l’ancien solde 2025 avant déduction');
+assert.equal(ligneNovembre.restant_apres, 37, 'congé restant après la demande = 37 j');
+assert.equal(C.controleSolde(empCas, [...ouverturesCas, congeNovembre], cfg, 950, 2026, { imputation: 'CONGE', jours_demandes: 20 }).disponible, 37, 'le contrôle de saisie cumule l’ancien solde et l’exercice en cours');
+// Un second congé de 30 j en décembre 2026 solde les 7 j de 2025 puis prend 23 j sur 2026.
+const congeDecembre = C.normaliserConge({
+  id: 971, employe_id: 950, numero_matricule: 950, annee: 2026,
+  categorie: 'CONGE', imputation: 'CONGE', statut: 'VALIDE',
+  date_demande: '2026-12-01', date_debut: '2026-12-02', date_fin: '2026-12-31', jours_demandes: 30,
+});
+const etatCas2 = C.construireEtat(empCas, [...ouverturesCas, congeNovembre, congeDecembre], cfg, { annee: 2026, nbAnnees: 3 });
+assert.deepEqual(etatCas2.parcours[0].droitsParTitre, { 2024: 0, 2025: 0, 2026: 7 }, 'quand l’ancien solde est terminé, le congé passe au solde suivant (2026 : 30 -> 7)');
 
 // Soldes de saisie et contrôle de dépassement.
 const soldes = C.calculerSoldes(employes, conges, cfg, 2026);
@@ -360,7 +404,8 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.ok(EtatUi.colonnesEtat([2025, 2026]).colonnes.some((c) => c.cle === 'date_retour' && c.label === 'Daty fiverenana miasa'), 'colonne Daty fiverenana miasa dans l’état');
   const soldeFinalTinahiny = parcoursTinahiny.lignes.find((l) => l.type === 'SOLDE_FINAL');
   assert.equal(EtatUi.valeurCellule(soldeFinalTinahiny, 'jours_conge', parcoursTinahiny, [2025, 2026]), '0', 'aucun jour de demande détaillée dans le relevé');
-  assert.equal(EtatUi.valeurCellule(soldeFinalTinahiny, 'conge_restant', parcoursTinahiny, [2025, 2026]), '30', 'solde source affiché dans l’état');
+  // « Congé restant » = cumul des reliquats non prescrits (0 + 10 + 30), consommés FIFO.
+  assert.equal(EtatUi.valeurCellule(soldeFinalTinahiny, 'conge_restant', parcoursTinahiny, [2025, 2026]), '40', 'cumul des soldes source affiché dans l’état');
 
   // Suppression : le comptable ne touche pas une fiche validée, l'administrateur si.
   const idValidee = hosp.id;
@@ -482,12 +527,13 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal(C.sanitizeCongesConfig({ joursCongeParAn: 45, nbAnneesCumul: 3, plafondCumulConge: 150, reportAutorise: true }).plafondCumulConge, 30, 'plafond borné à 30 j/an');
   assert.deepEqual(C.anneesSuccessives(2026), [2024, 2025, 2026], 'les 3 années affichées en 2026 = [2024, 2025, 2026]');
 
+  // Décomposition FIFO : l'ancien solde est servi en premier, plafonné à 30 j par exercice.
   const dec25 = C.decomposerDroitsSuccessifs(25, 2026, 30, 2020, 3);
-  assert.deepEqual(dec25.droitsParTitre, { 2024: 0, 2025: 0, 2026: 25 });
-  assert.equal(dec25.titreActif, 2026);
+  assert.deepEqual(dec25.droitsParTitre, { 2024: 25, 2025: 0, 2026: 0 });
+  assert.equal(dec25.titreActif, 2024, 'titre actif = exercice le plus ancien non soldé');
   const dec120 = C.decomposerDroitsSuccessifs(120, 2026, 30, 1995, 3);
-  assert.deepEqual(dec120.droitsParTitre, { 2024: 0, 2025: 0, 2026: 30 }, 'plafonné à 30 j sur l’année active');
-  assert.equal(dec120.titreActif, 2026, 'titre actif = année courante');
+  assert.deepEqual(dec120.droitsParTitre, { 2024: 30, 2025: 30, 2026: 30 }, 'plafonné à 30 j par exercice successif');
+  assert.equal(dec120.titreActif, 2024, 'consommation du titre le plus ancien en premier');
 
   // Gestion indépendante sur un salarié sans prise de congé sur 4 exercices :
   // chaque exercice reste indépendant à 30 j, report = 0, prescrits = 0.
@@ -499,22 +545,30 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   const etatDefaut2026 = await api.fetchEtatConges(2026);
   assert.deepEqual(etatDefaut2026.annees, [2024, 2025, 2026], 'état par défaut = [2024, 2025, 2026]');
 
-  // Tous les salariés SALFA en 2026 respectent le plafond de 30 j/an et l'indépendance annuelle.
+  // Tous les salariés SALFA en 2026 : 30 j maximum par exercice, cumul des 3 exercices.
   const sit2026Verif = await api.fetchSituationConges(2026, false);
   for (const s of sit2026Verif) {
     assert.ok(s.ouverture <= 30, `Mat ${s.numero_matricule} : ouverture ${s.ouverture} <= 30 j`);
-    assert.ok(s.restant <= 30, `Mat ${s.numero_matricule} : restant ${s.restant} <= 30 j`);
+    for (const [a, jours] of Object.entries(s.droitsParTitre)) {
+      assert.ok(jours <= 30, `Mat ${s.numero_matricule} : reliquat ${a} = ${jours} <= 30 j`);
+    }
+    const cumulTitres = Object.values(s.droitsParTitre).reduce((n, v) => n + v, 0);
+    assert.equal(s.restant, Number(cumulTitres.toFixed(2)), `Mat ${s.numero_matricule} : restant = cumul des titres`);
+    assert.ok(s.restant <= 90, `Mat ${s.numero_matricule} : restant ${s.restant} <= 90 j (3 × 30)`);
     assert.equal(s.report, 0, `Mat ${s.numero_matricule} : report nul`);
-    assert.equal(s.titreActif, 2026, `Mat ${s.numero_matricule} : titre actif = 2026`);
+    const premierTitre = [2024, 2025, 2026].find((a) => (s.droitsParTitre[a] || 0) > 0) || 2026;
+    assert.equal(s.titreActif, premierTitre, `Mat ${s.numero_matricule} : titre actif = reliquat le plus ancien`);
   }
   const vazison = sit2026Verif.find((s) => s.numero_matricule === 20);
   const raharilalaintsoa = sit2026Verif.find((s) => s.numero_matricule === 32);
   assert.equal(vazison.ouverture, 30, 'Mat 20 : solde annuel 2026 = 30 j');
-  assert.equal(vazison.restant, 30, 'Mat 20 : solde restant importé en 2026');
+  assert.equal(vazison.restant, 69, 'Mat 20 : cumul des soldes importés 9 + 30 + 30');
+  assert.equal(vazison.titreActif, 2024, 'Mat 20 : l’ancien solde 2024 (9 j) est consommé en premier');
+  assert.equal(vazison.resteTitreActif, 9, 'Mat 20 : reliquat du titre actif 2024');
   assert.equal(vazison.droitsParTitre[2024], 9, 'Mat 20 : solde 2024 importé = 9 j');
   assert.equal(vazison.droitsParTitre[2025], 30, 'Mat 20 : solde 2025 importé = 30 j');
   assert.equal(raharilalaintsoa.ouverture, 30, 'Mat 32 : solde annuel 2026 = 30 j');
-  assert.equal(raharilalaintsoa.restant, 30, 'Mat 32 : solde restant importé en 2026');
+  assert.equal(raharilalaintsoa.restant, 70, 'Mat 32 : cumul des soldes importés 10 + 30 + 30');
 
   // Toute tentative de demander un congé en 2026 sur un titre ancien (< 2024) est refusée.
   const refusPrescrit = await api.creerConge({
@@ -546,7 +600,8 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   const mat47Juin = paiesJuin.employes.find((p) => p.numero_matricule === 47);
   assert.equal(mat47Juin.conge_pris_mois, 0);
   assert.equal(mat47Juin.conge_restant, 85, 'Mat 47 : solde cumulé 2024-2026 repris à 85 j');
-  assert.equal(mat47Juin.conge_reste_titre, 30, 'Mat 47 : le solde du titre actif reste à 30 j');
+  assert.equal(mat47Juin.conge_titre_actif, 2024, 'Mat 47 : titre actif = ancien solde 2024');
+  assert.equal(mat47Juin.conge_reste_titre, 25, 'Mat 47 : reliquat du titre 2024 = 25 j (servi en premier)');
 
   const paiesJuil = await api.fetchPaiesMois(2026, 'JUILLET');
   const mat47Juil = paiesJuil.employes.find((p) => p.numero_matricule === 47);
@@ -561,8 +616,8 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal(mat1Oct.conge_titre_actif, 2026);
   assert.equal(mat1Oct.conge_reste_titre, 26);
   assert.equal(mat47Oct.conge_restant, 85);
-  assert.equal(mat47Oct.conge_titre_actif, 2026);
-  assert.equal(mat47Oct.conge_reste_titre, 30);
+  assert.equal(mat47Oct.conge_titre_actif, 2024);
+  assert.equal(mat47Oct.conge_reste_titre, 25);
   assert.ok(paiesOct.totaux.total_conge_restant > 0, 'Total des congés restants calculé sur l’état de paie');
 
   // Vérification de l'État des Congés : soldes importés affichés à l'identique.
@@ -657,7 +712,8 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal(mat1_2026.bilans[2026].fin, 4, 'solde final 2026 fixé exactement à 4 j');
   const mat1PaieOctobre = (await api.fetchPaiesMois(2026, 'OCTOBRE')).employes.find((p) => p.numero_matricule === 1);
   assert.equal(mat1PaieOctobre.conge_restant, 64, 'bulletin : 30 j en 2024 + 30 j en 2025 + 4 j en 2026');
-  assert.equal(mat1PaieOctobre.conge_reste_titre, 4, 'bulletin : solde du titre actif = 4 j');
+  assert.equal(mat1PaieOctobre.conge_titre_actif, 2024, 'bulletin : FIFO, le titre le plus ancien est consommé en premier');
+  assert.equal(mat1PaieOctobre.conge_reste_titre, 30, 'bulletin : reliquat du titre 2024 = 30 j');
   assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2026, null, meta)).success, true, 'réinitialisation 2026 acceptée');
 
   // 4) Saisie 2024 sur un salarié embauché en 2025 (aucun blocage dans [0..30]) + reset
@@ -666,6 +722,9 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal((await api.saisirSoldeAnnee(parcMat63.employe_id, 2024, null, meta)).success, true);
 
   // 5) Modification en ligne : créer une demande de test, sans en déduire du relevé source.
+  // On solde d'abord les anciens soldes 2024/2025 pour isoler le solde de test de 5 j en 2026.
+  assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2024, 0, meta, 'OUVERTURE')).success, true, 'ancien solde 2024 soldé pour le test');
+  assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2025, 0, meta, 'OUVERTURE')).success, true, 'ancien solde 2025 soldé pour le test');
   assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2026, 5, meta, 'OUVERTURE')).success, true, 'solde de test fixé à 5 j');
   const demandeTestMat1 = await api.creerConge({
     employe_id: parcMat1.employe_id,
@@ -686,15 +745,18 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal(joursOrigMat1, 3, 'demande de test de 3 jours');
   assert.equal((await api.modifierConge(premiereDemandeMat1.conge_id, { jours_demandes: joursOrigMat1 + 2 }, meta)).success, true);
   assert.equal((await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1).soldeActuel, 0, 'solde recalculé après modification : 5 - 5 = 0');
-  assert.equal((await api.modifierConge(premiereDemandeMat1.conge_id, { jours_demandes: joursOrigMat1 + 10 }, meta)).success, false, 'dépassement du solde de test refusé');
+  assert.equal((await api.modifierConge(premiereDemandeMat1.conge_id, { jours_demandes: joursOrigMat1 + 10 }, meta)).success, false, 'dépassement du solde cumulé de test refusé');
   assert.equal((await api.modifierConge(premiereDemandeMat1.conge_id, { jours_demandes: joursOrigMat1 }, meta)).success, true, 'demande remise à 3 jours');
   assert.equal((await api.deciderConge(demandeTestMat1.id, 'REOUVRIR', { ...meta, role: 'Administrateur' })).success, true, 'demande rouverte après vérification');
   assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2026, null, meta)).success, true, 'réinitialisation du solde temporaire 2026');
+  assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2024, null, meta)).success, true, 'réinitialisation du solde temporaire 2024');
+  assert.equal((await api.saisirSoldeAnnee(parcMat1.employe_id, 2025, null, meta)).success, true, 'réinitialisation du solde temporaire 2025');
 
   const mat1Reset = (await api.fetchEtatConges(2026)).parcours.find((p) => p.numero_matricule === 1);
   assert.equal(mat1Reset.bilans[2024].ouverture, 30, 'réinitialisation 2024 : droit automatique');
   assert.equal(mat1Reset.bilans[2024].ouvertureSaisie, false);
-  assert.equal(mat1Reset.soldeActuel, 30, 'la demande rouverte ne consomme pas le solde automatique');
+  assert.deepEqual(mat1Reset.droitsParTitre, { 2024: 30, 2025: 30, 2026: 30 }, 'la demande rouverte ne consomme aucun titre');
+  assert.equal(mat1Reset.soldeActuel, 90, 'cumul des trois exercices restés intacts (30 + 30 + 30)');
 
   // ----------------------------------------------------------------------------
   // 6bis. Les personnes inactives n'ont plus aucun droit aux congés (droit = 0, solde = 0, saisie bloquée)
@@ -762,7 +824,9 @@ assert.equal(C.retrouverEmploye('INCONNU Pascal', employes), null, 'aucune corre
   assert.equal((await api.deciderConge(demAvantInact.id, 'REFUSE', { ...meta, motif: 'Salarié devenu inactif' })).success, true, 'refus autorisé pour clore la demande');
   await api.supprimerConge(demAvantInact.id, { utilisateur: 'admin', role: 'Administrateur' });
   await api.toggleActifEmploye(empTestInact.id, true);
-  assert.equal((await api.fetchSituationConges(2026, false)).find((s) => s.employe_id === empTestInact.id).restant, 30, 'réactivation -> retrouve son droit automatique 2026 de 30 j');
+  const reactive = (await api.fetchSituationConges(2026, false)).find((s) => s.employe_id === empTestInact.id);
+  assert.equal(reactive.restant, 90, 'réactivation -> retrouve le cumul automatique 2024 + 2025 + 2026 (30 j par exercice)');
+  assert.deepEqual(reactive.droitsParTitre, { 2024: 30, 2025: 30, 2026: 30 }, 'les trois exercices successifs sont rouverts');
 
   // ----------------------------------------------------------------------------
   // 6ter. Le relevé de Victor contient uniquement trois soldes annuels importés.
