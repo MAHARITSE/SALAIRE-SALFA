@@ -183,6 +183,18 @@ node scripts/generer_sql_conges_wamp.cjs "CONTROL DE CONGE SALFA TOLIARA 2024-20
 Le relevé annuel remplace les précédentes lignes issues de l'import Excel, mais
 les saisies manuelles restent conservées.
 
+### 2.3 Règle de consommation des congés (version du 4 novembre 2026)
+
+Un congé validé est imputé **d'abord sur l'ancien solde** (exercices antérieurs
+non prescrits), puis sur l'exercice suivant quand celui-ci est épuisé. Exemple
+avec les soldes 2024 = 0 j, 2025 = 27 j, 2026 = 30 j et une fiche de 20 jours en
+novembre 2026 : **2025 passe à 7 j et 2026 reste à 30 j** (titre actif = 2025,
+cumul restant = 37 j).
+
+Cette règle est calculée **par l'application** (le navigateur), pas par MySQL :
+**aucun import SQL n'est nécessaire** pour en bénéficier. Après avoir copié le
+nouveau dossier `Salaire_salfa`, actualisez le navigateur avec **Ctrl+F5**.
+
 ## 3. Sur chaque poste client Windows
 
 Copier `LANCER.bat` **et** `chercher-serveur.ps1` dans un même dossier puis
