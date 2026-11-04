@@ -32,6 +32,25 @@ Les futurs mois créés dans l’application restent ouverts jusqu’à leur cl�
 Ne copiez dans `www` **que** le dossier `Salaire_salfa` prêt à l'emploi :
 jamais le dossier `wamp\` complet, ni le fichier SQL, ni `salfa-config.php`.
 
+## Mise à jour du 4 novembre 2026
+
+Le dossier et le ZIP prêts à copier incluent désormais :
+
+- les **congés** : un congé validé se déduit **d'abord de l'ancien solde**, puis
+  de l'exercice suivant quand celui-ci est épuisé. Avec les soldes 2024 = 0 j,
+  2025 = 27 j, 2026 = 30 j, une fiche de 20 jours en novembre 2026 donne
+  **2025 = 7 j** et **2026 = 30 j** (titre actif 2025, cumul restant 37 j) ;
+- le **titre actif** affiché est le reliquat le plus ancien encore disponible et
+  les colonnes « Cumul (3 ans) » / « Congé Restant » totalisent les exercices
+  successifs (plafond inchangé : 30 j par exercice) ;
+- les libellés de l'écran Congés & Permissions, de l'état et de la fiche
+  d'absence reprennent cette règle.
+
+Aucune réimportation SQL n'est nécessaire : la règle est appliquée par
+l'application. Copiez le nouveau dossier (ou décompressez le ZIP), puis
+actualisez avec **Ctrl+F5**. Les soldes et fiches déjà saisis dans MySQL sont
+conservés.
+
 ## Mise à jour du 2 novembre 2026
 
 Le dossier et le ZIP prêts à copier incluent désormais :
