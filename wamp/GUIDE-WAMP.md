@@ -191,6 +191,13 @@ avec les soldes 2024 = 0 j, 2025 = 27 j, 2026 = 30 j et une fiche de 20 jours en
 novembre 2026 : **2025 passe à 7 j et 2026 reste à 30 j** (titre actif = 2025,
 cumul restant = 37 j).
 
+Chaque état porte sur les 3 derniers exercices et n'intègre que les fiches de son
+année ou antérieures : une fiche saisie sur un exercice futur (par exemple 2027)
+ne modifie pas les soldes de l'année en cours, et l'imputation FIFO remonte
+l'historique complet du salarié (un reliquat 2024 est consommé avant 2025).
+Ajouter l'année 2027 dans l'application ne provoque donc aucune erreur : la
+fenêtre affichée devient 2025-2027 et 2024 sort simplement de l'état 2027.
+
 Cette règle est calculée **par l'application** (le navigateur), pas par MySQL :
 **aucun import SQL n'est nécessaire** pour en bénéficier. Après avoir copié le
 nouveau dossier `Salaire_salfa`, actualisez le navigateur avec **Ctrl+F5**.

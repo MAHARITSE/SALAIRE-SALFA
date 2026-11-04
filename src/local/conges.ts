@@ -860,13 +860,19 @@ export function construireEtat(
 
   for (const emp of employsTries) {
     const cle = Number(emp.id) || -Math.abs(Number(emp.numero_matricule) || 0);
-    const evenements = (parEmploye.get(cle) || []).slice().sort((a, b) => {
-      const da = comparaisonDate(dateEvenement(a), dateEvenement(b));
-      if (da !== 0) return da;
-      const ta = tourDeTable(a) - tourDeTable(b);
-      if (ta !== 0) return ta;
-      return Number(a.id) - Number(b.id);
-    });
+    // Les fiches postérieures à l'exercice de l'état (ex. une fiche 2027 consultée
+    // depuis l'état 2026) ne modifient pas les soldes de l'exercice affiché : elles
+    // n'entrent dans le calcul que lorsque l'état porte sur leur propre année.
+    const evenements = (parEmploye.get(cle) || [])
+      .filter((c) => (Number(c.annee) || anneeCourante) <= anneeCourante)
+      .slice()
+      .sort((a, b) => {
+        const da = comparaisonDate(dateEvenement(a), dateEvenement(b));
+        if (da !== 0) return da;
+        const ta = tourDeTable(a) - tourDeTable(b);
+        if (ta !== 0) return ta;
+        return Number(a.id) - Number(b.id);
+      });
 
     let premiere = anneeCourante;
     let derniere = anneeCourante;
@@ -1052,7 +1058,9 @@ export function construireEtat(
             // Le congé est d'abord imputé sur l'ancien solde (exercices antérieurs) ;
             // quand celui-ci est épuisé, on passe au solde de l'exercice suivant.
             bilan.pris += jours;
-            const premierTitreImputable = Math.max(anneesColonnes[0] ?? annee, annee - nbSuccessives + 1);
+            // Plancher = début de l'historique connu du salarié (indépendant des colonnes
+            // affichées) et limite de prescription : 3 derniers exercices avant la fiche.
+            const premierTitreImputable = Math.max(debut, annee - nbSuccessives + 1);
             const derniereColonneImputable = Math.min(fin, Math.max(annee, anneeCourante));
             let restantADeduire = jours;
             let derniereColImputee = annee;

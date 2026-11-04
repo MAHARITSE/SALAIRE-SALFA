@@ -351,6 +351,13 @@ reprend fidèlement :
   puis sur l'exercice suivant quand celui-ci est épuisé. Ex. soldes 2024 = 0, 2025 = 27,
   2026 = 30 j et un congé de 20 j en novembre 2026 : 2025 passe à 7 j et 2026 reste à 30 j
   (titre actif = 2025, cumul restant = 37 j) ;
+- la **portée de l'exercice** : un état porte sur les 3 derniers exercices
+  (`anneesSuccessives`) et ne tient compte que des fiches **de son année ou antérieures**.
+  Une fiche validée sur un exercice futur (ex. 2027 saisi dès 2026) ne modifie donc pas
+  l'état 2026 : elle s'impute à partir de 2027 et son imputation reste FIFO sur l'historique
+  du salarié (un reliquat 2024 non prescrit est consommé avant 2025). Ajouter l'année 2027
+  ne provoque aucune erreur de calcul ; la fenêtre affichée devient 2025-2027 et 2024
+  sort simplement de l'état 2027 ;
 - le **`CONTROLE CONGE A JOUR SALFA 2026.xlsx`** contient les soldes restants par salarié
   pour **2024, 2025 et 2026** (43 salariés; les cellules vides valent 0). Le SQL WAMP
   (**`wamp/sql/salfa_conges_excel.sql`**, régénérable via `npm run sql:conges`) importe

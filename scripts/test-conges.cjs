@@ -239,18 +239,43 @@ const congeDecembre = C.normaliserConge({
 const etatCas2 = C.construireEtat(empCas, [...ouverturesCas, congeNovembre, congeDecembre], cfg, { annee: 2026, nbAnnees: 3 });
 assert.deepEqual(etatCas2.parcours[0].droitsParTitre, { 2024: 0, 2025: 0, 2026: 7 }, 'quand l’ancien solde est terminé, le congé passe au solde suivant (2026 : 30 -> 7)');
 
+// Une fiche saisie sur un exercice futur ne modifie pas l'état de l'exercice en cours.
+const etat2026Seul = C.construireEtat(employes, conges, cfg, { annee: 2026, nbAnnees: 3 });
+const p1Seul = etat2026Seul.parcours.find((p) => p.employe_id === 1);
+assert.equal(p1Seul.bilans[2026].fin, 15, 'le congé de 2027 n’est pas déduit de l’état 2026');
+assert.equal(p1Seul.soldeActuel, 15, 'cumul 2026 = reliquat de l’exercice 2026 uniquement');
+
+// Une fiche antérieure conserve son imputation FIFO complète, même consultée depuis une année plus récente.
+const emp2027 = [{ id: 980, numero_matricule: 980, nom_prenoms: 'TEST ANTÉRIEUR', date_embauche: '2020-01-01', actif: 1 }];
+const ouvertures2027 = [[2024, 9], [2025, 30], [2026, 30]].map(([annee, jours], index) => C.normaliserConge({
+  id: 981 + index, employe_id: 980, numero_matricule: 980, annee,
+  categorie: 'AJUSTEMENT', imputation: 'AUCUNE', ajustement_type: 'OUVERTURE', statut: 'VALIDE',
+  date_debut: `${annee}-01-01`, date_demande: `${annee}-01-01`, jours_demandes: jours,
+}));
+const conge2026 = C.normaliserConge({
+  id: 985, employe_id: 980, numero_matricule: 980, annee: 2026,
+  categorie: 'CONGE', imputation: 'CONGE', statut: 'VALIDE',
+  date_demande: '2026-03-01', date_debut: '2026-03-02', date_fin: '2026-04-05', jours_demandes: 30,
+});
+const histo2027 = C.construireEtat(emp2027, [...ouvertures2027, conge2026], cfg, { annee: 2027, nbAnnees: 3 }).parcours[0];
+assert.deepEqual(histo2027.droitsParTitre, { 2025: 9, 2026: 30, 2027: 30 }, 'le congé 2026 a consommé les 9 j de 2024 puis 21 j de 2025 : 2025 garde 9 j');
+assert.equal(histo2027.soldeActuel, 69, 'cumul 2027 = 9 + 30 + 30, sans perdre le reliquat 2025');
+const histo2026 = C.construireEtat(emp2027, [...ouvertures2027, conge2026], cfg, { annee: 2026, nbAnnees: 3 }).parcours[0];
+assert.deepEqual(histo2026.droitsParTitre, { 2024: 0, 2025: 9, 2026: 30 }, 'même imputation vue depuis 2026');
+assert.equal(histo2026.soldeActuel, 39, 'cumul 2026 = 9 + 30');
+
 // Soldes de saisie et contrôle de dépassement.
 const soldes = C.calculerSoldes(employes, conges, cfg, 2026);
 const s1 = soldes.find((s) => s.employe_id === 1);
 assert.equal(s1.ouverture, 30);
 assert.equal(s1.pris, 30);
 assert.equal(s1.attente, 5);
-assert.equal(s1.restant, 0, 'le solde 2026 est entièrement consommé');
+assert.equal(s1.restant, 15, 'le solde 2026 s’arrête à l’exercice 2026 (le congé validé en 2027 ne rétroagit pas sur 2026)');
 assert.equal(s1.permRestant, 5);
 assert.equal(s1.nbDemandes, 5);
 const controle = C.controleSolde(employes, conges, cfg, 1, 2026, { imputation: 'CONGE', jours_demandes: 20 });
-assert.equal(controle.disponible, 0, 'le solde 2026 est épuisé');
-assert.equal(controle.apresDemande, -20, 'vingt jours dépasseraient le solde');
+assert.equal(controle.disponible, 15, 'le solde disponible en 2026 est le reliquat de l’exercice');
+assert.equal(controle.apresDemande, -5, 'vingt jours dépasseraient le solde');
 assert.equal(controle.suffisant, false);
 assert.equal(C.controleSolde(employes, conges, cfg, 1, 2026, { imputation: 'PERMISSION', jours_demandes: 5 }).suffisant, true, 'permission encore disponible');
 assert.equal(C.controleSolde(employes, conges, cfg, 1, 2026, { imputation: 'AUCUNE', jours_demandes: 99 }).suffisant, true, 'examen médical jamais bloquant');

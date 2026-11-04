@@ -44,7 +44,12 @@ Le dossier et le ZIP prêts à copier incluent désormais :
   les colonnes « Cumul (3 ans) » / « Congé Restant » totalisent les exercices
   successifs (plafond inchangé : 30 j par exercice) ;
 - les libellés de l'écran Congés & Permissions, de l'état et de la fiche
-  d'absence reprennent cette règle.
+  d'absence reprennent cette règle ;
+- **exercice futur** : un état ne tient compte que des fiches de son année ou
+  antérieures. Une fiche 2027 validée ne modifie donc pas les soldes 2026, et son
+  imputation remonte l'historique du salarié (reliquat 2024 consommé avant 2025).
+  Passer l'application en 2027 ne provoque aucune erreur : la fenêtre devient
+  2025-2027 et 2024 sort de l'état 2027.
 
 Aucune réimportation SQL n'est nécessaire : la règle est appliquée par
 l'application. Copiez le nouveau dossier (ou décompressez le ZIP), puis
