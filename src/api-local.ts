@@ -174,6 +174,7 @@ export async function creerUtilisateur(data: {
   const record = { id, username, nom_complet, role, actif: 1, password_hash };
   store.utilisateurs.push(record);
   if (!saveStore()) {
+    store.utilisateurs.pop();
     return { success: false, message: 'Sauvegarde locale impossible.' };
   }
   return {
@@ -228,10 +229,14 @@ export async function modifierUtilisateur(
     }
   }
 
+  const avant = { username: cible.username, nom_complet: cible.nom_complet, role: cible.role };
   cible.username = username;
   cible.nom_complet = nom_complet;
   cible.role = role;
-  if (!saveStore()) return { success: false, message: 'Sauvegarde locale impossible.' };
+  if (!saveStore()) {
+    Object.assign(cible, avant);
+    return { success: false, message: 'Sauvegarde locale impossible.' };
+  }
 
   if (sessionActive && Number(sessionActive.id) === Number(id)) {
     sessionActive = { ...sessionActive, username, nom_complet, role };
@@ -256,8 +261,13 @@ export async function changerMotDePasseUtilisateur(
   const cible = (store.utilisateurs || []).find((u: any) => Number(u.id) === Number(id));
   if (!cible) return { success: false, message: 'Utilisateur introuvable.' };
 
-  cible.password_hash = await hashPassword(password);
-  if (!saveStore()) return { success: false, message: 'Sauvegarde locale impossible.' };
+  const password_hash = await hashPassword(password);
+  const ancienHash = cible.password_hash;
+  cible.password_hash = password_hash;
+  if (!saveStore()) {
+    cible.password_hash = ancienHash;
+    return { success: false, message: 'Sauvegarde locale impossible.' };
+  }
   return { success: true };
 }
 
@@ -284,8 +294,12 @@ export async function toggleActifUtilisateur(
     }
   }
 
+  const ancienActif = cible.actif;
   cible.actif = actif ? 1 : 0;
-  if (!saveStore()) return { success: false, message: 'Sauvegarde locale impossible.' };
+  if (!saveStore()) {
+    cible.actif = ancienActif;
+    return { success: false, message: 'Sauvegarde locale impossible.' };
+  }
   return { success: true };
 }
 
@@ -311,7 +325,10 @@ export async function supprimerUtilisateur(
   }
 
   store.utilisateurs.splice(idx, 1);
-  if (!saveStore()) return { success: false, message: 'Sauvegarde locale impossible.' };
+  if (!saveStore()) {
+    store.utilisateurs.splice(idx, 0, cible);
+    return { success: false, message: 'Sauvegarde locale impossible.' };
+  }
   return { success: true };
 }
 
