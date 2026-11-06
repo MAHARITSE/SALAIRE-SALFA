@@ -582,10 +582,16 @@
     display: block !important; overflow: visible !important; width: auto !important; max-width: none !important;
     min-height: 0 !important; height: auto !important; padding: 0 !important; margin: 0 !important;
   }
-  .fiche-print { page: fiche-absence; display: block !important; margin: 0 !important; }
+  .fiche-print { page: fiche-absence; display: block !important; width: 100% !important; margin: 0 !important; }
   .fiche-print .fiche-sheet {
-    width: auto; min-height: 0; border: 0; padding: 0; margin: 0; box-shadow: none;
-    background: #fff; color: #000; font-size: 9.5pt; page-break-after: auto; break-after: auto;
+    page: fiche-absence;
+    /* La réduction conserve la largeur utile A4 tout en garantissant assez de
+       hauteur pour que chaque fiche complète tienne sur une seule page. */
+    zoom: 0.78;
+    width: 128.2%; min-height: 0; border: 0; padding: 0; margin: 0 0 0 -14.1%;
+    box-shadow: none; background: #fff; color: #000; font-size: 9.5pt;
+    page-break-after: auto !important; break-after: auto !important;
+    page-break-inside: avoid; break-inside: avoid-page;
   }
   /* Sauter avant les fiches suivantes plutôt qu'après la dernière : cela évite
      qu'un navigateur ajoute une page blanche à la fin de l'impression. */
