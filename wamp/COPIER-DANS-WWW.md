@@ -32,6 +32,15 @@ Les futurs mois créés dans l’application restent ouverts jusqu’à leur cl�
 Ne copiez dans `www` **que** le dossier `Salaire_salfa` prêt à l'emploi :
 jamais le dossier `wamp\` complet, ni le fichier SQL, ni `salfa-config.php`.
 
+## Mise à jour du 6 novembre 2026
+
+Le dossier `Salaire_salfa` et son ZIP prêts à copier incluent désormais les corrections de la partie Congés :
+
+- la fiche de congé / permission affiche uniquement **Annuler** et **Enregistrer** ; le bouton **Enregistrer** sauvegarde, valide et lance l’impression de la fiche ;
+- l’impression des fiches d’absence et de permission n’ajoute plus de page blanche après la dernière fiche.
+
+Aucune modification SQL ni réimportation n’est nécessaire. Pour mettre à jour une installation existante, remplacez les fichiers de l’application comme décrit ci-dessous, conservez la base MySQL et la configuration, puis actualisez avec **Ctrl+F5**.
+
 ## Mise à jour du 4 novembre 2026
 
 Le dossier et le ZIP prêts à copier incluent désormais :
