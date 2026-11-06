@@ -17,7 +17,7 @@ import { BulletinHeaderModal } from '../BulletinHeaderModal';
 import { setRemoteCongeHeader } from '../../bulletin/header';
 import { WAMP } from '../../runtime';
 import { correspondRecherche, normaliserRecherche } from '../../local/recherche';
-import { X, Save, Printer, Eye, PenLine, CalendarClock, Info, CheckCircle2, Download, Settings2 } from 'lucide-react';
+import { X, Save, Eye, PenLine, CalendarClock, Info, CheckCircle2, Download, Settings2 } from 'lucide-react';
 
 export interface BrouillonConge extends Partial<CongeAbsence> {
   id?: number;
@@ -695,14 +695,8 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
           </div>
           <div className="flex gap-2">
             <button onClick={onClose} className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-slate-200 dark:bg-slate-600 text-sm font-semibold">Annuler</button>
-            <button onClick={() => enregistrer({ imprimerApres: false, valider: false })} disabled={enCours || estInactifSelectionne} className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-salfa-dark hover:bg-salfa-teal text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+            <button onClick={() => enregistrer({ imprimerApres: true, valider: true })} disabled={enCours || estInactifSelectionne} className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-salfa-dark hover:bg-salfa-teal text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50" title="Enregistrer, valider et imprimer la fiche">
               <Save className="w-4 h-4" />{enCours ? '…' : 'Enregistrer'}
-            </button>
-            <button onClick={() => enregistrer({ imprimerApres: true, valider: false })} disabled={enCours || estInactifSelectionne} className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-              <Printer className="w-4 h-4" />Enregistrer + imprimer
-            </button>
-            <button onClick={() => enregistrer({ imprimerApres: false, valider: true })} disabled={enCours || estInactifSelectionne || b.categorie === 'AJUSTEMENT'} className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50" title="Enregistrer et valider directement (fiche déjà signée)">
-              <CheckCircle2 className="w-4 h-4" />Enregistrer et valider
             </button>
           </div>
         </div>
