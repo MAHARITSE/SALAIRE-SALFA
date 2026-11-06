@@ -582,20 +582,18 @@
     display: block !important; overflow: visible !important; width: auto !important; max-width: none !important;
     min-height: 0 !important; height: auto !important; padding: 0 !important; margin: 0 !important;
   }
-  .fiche-print { page: fiche-absence; display: block !important; width: 100% !important; margin: 0 !important; }
+  .fiche-print { page: fiche-absence; display: block !important; margin: 0 !important; }
   .fiche-print .fiche-sheet {
     page: fiche-absence;
-    /* La réduction conserve la largeur utile A4 tout en garantissant assez de
-       hauteur pour que chaque fiche complète tienne sur une seule page. */
-    zoom: 0.78;
-    width: 128.2%; min-height: 0; border: 0; padding: 0; margin: 0 0 0 -14.1%;
-    box-shadow: none; background: #fff; color: #000; font-size: 9.5pt;
+    /* Garder le format d'origine de la fiche ; seules les règles de pagination
+       changent pour supprimer le saut après la dernière feuille. */
+    width: auto; min-height: 0; border: 0; padding: 0; margin: 0; box-shadow: none;
+    background: #fff; color: #000; font-size: 9.5pt;
     page-break-after: auto !important; break-after: auto !important;
-    page-break-inside: avoid; break-inside: avoid-page;
   }
-  /* Sauter avant les fiches suivantes plutôt qu'après la dernière : cela évite
-     qu'un navigateur ajoute une page blanche à la fin de l'impression. */
+  /* Une fiche par page, avec le saut uniquement AVANT les fiches suivantes. */
   .fiche-print .fiche-sheet + .fiche-sheet { page-break-before: always; break-before: page; }
+  .fiche-print .fiche-sheet:last-child { page-break-after: avoid !important; break-after: avoid-page !important; }
   .fiche-print .fiche-entete-img { height: 20mm; }
   .fiche-print .fiche-ligne-cochee { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
