@@ -37,7 +37,7 @@ jamais le dossier `wamp\` complet, ni le fichier SQL, ni `salfa-config.php`.
 Le dossier `Salaire_salfa` et son ZIP prêts à copier incluent désormais les corrections de la partie Congés :
 
 - la fiche de congé / permission affiche uniquement **Annuler** et **Enregistrer** ; le bouton **Enregistrer** sauvegarde, valide et lance l’impression de la fiche ;
-- l’impression des fiches d’absence et de permission n’ajoute plus de page blanche après la dernière fiche.
+- l’impression des fiches d’absence et de permission est réduite pour tenir sur une seule page A4 par fiche, sans page blanche supplémentaire.
 
 Aucune modification SQL ni réimportation n’est nécessaire. Pour mettre à jour une installation existante, remplacez les fichiers de l’application comme décrit ci-dessous, conservez la base MySQL et la configuration, puis actualisez avec **Ctrl+F5**.
 
