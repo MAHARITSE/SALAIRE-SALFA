@@ -17,7 +17,7 @@ import { BulletinHeaderModal } from '../BulletinHeaderModal';
 import { setRemoteCongeHeader } from '../../bulletin/header';
 import { WAMP } from '../../runtime';
 import { correspondRecherche, normaliserRecherche } from '../../local/recherche';
-import { X, Save, Eye, PenLine, CalendarClock, Info, CheckCircle2, Download, Settings2 } from 'lucide-react';
+import { X, Save, Eye, PenLine, CalendarClock, Info, CheckCircle2, Download, Settings2, Trash2 } from 'lucide-react';
 
 export interface BrouillonConge extends Partial<CongeAbsence> {
   id?: number;
@@ -36,6 +36,7 @@ interface FicheAbsenceModalProps {
     draft: Partial<CongeAbsence>,
     options: { imprimerApres: boolean; valider: boolean }
   ) => Promise<{ success: boolean; message?: string; avertissement?: string }>;
+  onSupprimer?: (id: number) => Promise<void> | void;
 }
 
 const aujourdHui = (): string => new Date().toISOString().slice(0, 10);
@@ -45,7 +46,7 @@ const champ =
 const etiquette = 'block text-[10px] sm:text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1';
 
 export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
-  initial, employes, soldes, contactsConnus, config, annee, utilisateur, onClose, onEnregistrer,
+  initial, employes, soldes, contactsConnus, config, annee, utilisateur, onClose, onEnregistrer, onSupprimer,
 }) => {
   const cfg = config || DEFAULT_CONGES_CONFIG;
   const [onglet, setOnglet] = useState<'saisie' | 'apercu'>('saisie');
@@ -595,6 +596,125 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
               <textarea className={`${champ} h-16`} value={b.observations || ''} onChange={(e) => set('observations', e.target.value)} placeholder="Précisions pour le chef de service, le médecin, le dossier…" />
             </div>
 
+            {/* ------------------------------ Visas / Signatures ------------------------------ */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-700/30 p-2.5">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">
+                  Visas &amp; Signatures apposés sur la fiche
+                </div>
+                {(b.visa_chef_par || b.visa_chef_le || b.visa_medecin_par || b.visa_medecin_le || b.visa_gestionnaire_par || b.visa_gestionnaire_le) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setB((prev) => ({
+                        ...prev,
+                        visa_chef_par: '',
+                        visa_chef_le: '',
+                        visa_medecin_par: '',
+                        visa_medecin_le: '',
+                        visa_gestionnaire_par: '',
+                        visa_gestionnaire_le: '',
+                        statut: prev.statut === 'VALIDE' || prev.statut === 'AVIS_CHF' || prev.statut === 'AVIS_MEDECIN' ? 'SOUMIS' : prev.statut,
+                      }));
+                    }}
+                    className="text-[10px] text-red-600 hover:text-red-700 dark:text-red-400 font-semibold flex items-center gap-1 hover:underline"
+                    title="Effacer tous les visas / signatures apposés"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Effacer les visas
+                  </button>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                {/* Chef de Service */}
+                <div className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-bold text-[10px] uppercase text-slate-600 dark:text-slate-300">Chef de Service</span>
+                    {(b.visa_chef_par || b.visa_chef_le) && (
+                      <button
+                        type="button"
+                        onClick={() => setB((p) => ({ ...p, visa_chef_par: '', visa_chef_le: '' }))}
+                        className="text-[10px] text-red-500 hover:text-red-700"
+                        title="Supprimer la signature du chef"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    className={`${champ} text-xs py-1 mb-1`}
+                    placeholder="Signataire (ex: admin)"
+                    value={b.visa_chef_par || ''}
+                    onChange={(e) => set('visa_chef_par', e.target.value)}
+                  />
+                  <input
+                    type="date"
+                    className={`${champ} text-xs py-1`}
+                    value={b.visa_chef_le || ''}
+                    onChange={(e) => set('visa_chef_le', e.target.value)}
+                  />
+                </div>
+
+                {/* Médecin Chef */}
+                <div className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-bold text-[10px] uppercase text-slate-600 dark:text-slate-300">Médecin Chef</span>
+                    {(b.visa_medecin_par || b.visa_medecin_le) && (
+                      <button
+                        type="button"
+                        onClick={() => setB((p) => ({ ...p, visa_medecin_par: '', visa_medecin_le: '' }))}
+                        className="text-[10px] text-red-500 hover:text-red-700"
+                        title="Supprimer la signature du médecin"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    className={`${champ} text-xs py-1 mb-1`}
+                    placeholder="Signataire (ex: admin)"
+                    value={b.visa_medecin_par || ''}
+                    onChange={(e) => set('visa_medecin_par', e.target.value)}
+                  />
+                  <input
+                    type="date"
+                    className={`${champ} text-xs py-1`}
+                    value={b.visa_medecin_le || ''}
+                    onChange={(e) => set('visa_medecin_le', e.target.value)}
+                  />
+                </div>
+
+                {/* Gestionnaire */}
+                <div className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-bold text-[10px] uppercase text-slate-600 dark:text-slate-300">Gestionnaire</span>
+                    {(b.visa_gestionnaire_par || b.visa_gestionnaire_le) && (
+                      <button
+                        type="button"
+                        onClick={() => setB((p) => ({ ...p, visa_gestionnaire_par: '', visa_gestionnaire_le: '' }))}
+                        className="text-[10px] text-red-500 hover:text-red-700"
+                        title="Supprimer la signature du gestionnaire"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    className={`${champ} text-xs py-1 mb-1`}
+                    placeholder="Signataire (ex: admin)"
+                    value={b.visa_gestionnaire_par || ''}
+                    onChange={(e) => set('visa_gestionnaire_par', e.target.value)}
+                  />
+                  <input
+                    type="date"
+                    className={`${champ} text-xs py-1`}
+                    value={b.visa_gestionnaire_le || ''}
+                    onChange={(e) => set('visa_gestionnaire_le', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* ------------------------------ Le solde ------------------------------ */}
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/40 p-2.5">
               <div className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1.5">
@@ -694,6 +814,22 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
             Le circuit suit la fiche : demandeur → chef de service → médecin chef → gestionnaire.
           </div>
           <div className="flex gap-2">
+            {initial?.id && onSupprimer && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (initial?.id) {
+                    await onSupprimer(initial.id);
+                    onClose();
+                  }
+                }}
+                className="px-3 py-2 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 text-sm font-semibold flex items-center justify-center gap-1.5"
+                title="Supprimer définitivement cette fiche"
+              >
+                <Trash2 className="w-4 h-4" />
+                Supprimer
+              </button>
+            )}
             <button onClick={onClose} className="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-slate-200 dark:bg-slate-600 text-sm font-semibold">Annuler</button>
             <button onClick={() => enregistrer({ imprimerApres: true, valider: true })} disabled={enCours || estInactifSelectionne} className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-salfa-dark hover:bg-salfa-teal text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50" title="Enregistrer, valider et imprimer la fiche">
               <Save className="w-4 h-4" />{enCours ? '…' : 'Enregistrer'}

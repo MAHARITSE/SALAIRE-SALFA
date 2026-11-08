@@ -616,6 +616,9 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
                             <button onClick={() => imprimerFiches([c])} className="px-2 py-1 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200" title="Imprimer la fiche d’absence">
                               <Printer className="w-3 h-3 inline" />
                             </button>
+                            <button onClick={() => supprimer(c)} className="px-2 py-1 rounded-md text-[10px] font-bold bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100" title="Supprimer la fiche">
+                              <Trash2 className="w-3 h-3 inline" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -912,6 +915,12 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             utilisateur={meta}
             onClose={() => setModal({ ouvert: false, initial: null })}
             onEnregistrer={enregistrer}
+            onSupprimer={async (congeId) => {
+              const c = conges.find((x) => Number(x.id) === Number(congeId));
+              if (c) {
+                await supprimer(c);
+              }
+            }}
           />
         </div>
       )}

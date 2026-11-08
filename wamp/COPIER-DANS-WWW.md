@@ -32,6 +32,14 @@ Les futurs mois créés dans l’application restent ouverts jusqu’à leur cl�
 Ne copiez dans `www` **que** le dossier `Salaire_salfa` prêt à l'emploi :
 jamais le dossier `wamp\` complet, ni le fichier SQL, ni `salfa-config.php`.
 
+## Mise à jour du 8 novembre 2026
+
+Le dossier `Salaire_salfa` et son archive ZIP prêts à copier incluent désormais :
+
+- la possibilité d’**effacer ou modifier les visas et signatures** apposés sur la fiche d’absence (bouton « Effacer les visas » et suppression individuelle par visa) ;
+- le bouton **Supprimer** présent directement dans la modale d’édition de la fiche d’absence et dans le tableau des demandes en attente ;
+- la configuration optimisée du serveur et de la compilation.
+
 ## Mise à jour du 6 novembre 2026
 
 Le dossier `Salaire_salfa` et son ZIP prêts à copier incluent désormais les corrections de la partie Congés :
