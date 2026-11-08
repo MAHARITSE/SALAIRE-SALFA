@@ -366,8 +366,13 @@
     break-after: page;
     page-break-after: always;
   }
+  /* État individuel seul : garder le format « bulletin-paie » jusqu'à la fin du
+     document. Comme pour la décharge, le retour à une page anonyme après la
+     dernière feuille peut créer une 2e page blanche à l'impression. */
+  body:has(.bulletin-print) { page: bulletin-paie; }
   /* Garder le format de la décharge jusqu'à la fin du document : le retour
-     à une page anonyme après la dernière section peut créer une feuille vide. */
+     à une page anonyme après la dernière section peut créer une feuille vide.
+     (Cette règle suit la précédente : en livret, la décharge reste la dernière page.) */
   body:has(.bulletin-decharge-page) { page: bulletin-decharge; }
   .bulletin-decharge-page {
     page: bulletin-decharge;
