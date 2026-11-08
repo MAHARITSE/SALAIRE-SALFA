@@ -302,6 +302,15 @@ paie mensuel peut contenir un net enregistré différent, notamment à cause de
 l'arrondi : cet écart est indiqué sur le bulletin, sans modifier les données.
 Les montants doivent être contrôlés avant paiement.
 
+Au-dessus de l'aperçu, le sélecteur **Retenues de cet état individuel** permet
+d'imprimer ou de télécharger le bulletin du salarié sélectionné **avec avance et
+médicaments** (par défaut), **sans avance sur salaire**, **sans médicaments** ou
+**sans avance ni médicaments**. Le net à payer et le règlement sont recalculés
+pour cet exemplaire uniquement ; les montants saisis en base ne sont jamais
+modifiés. Ce choix ne s'applique qu'à l'état individuel : le livret « Tous les
+bulletins » conserve toujours toutes les retenues. L'impression d'un seul état
+tient sur une seule feuille A4 paysage, sans page blanche supplémentaire.
+
 ### Saisie en lot des avances et médicaments
 
 Dans **Salariés & Saisie**, choisissez le mois et l'année, puis cliquez sur

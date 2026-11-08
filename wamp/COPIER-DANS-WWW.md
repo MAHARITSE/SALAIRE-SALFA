@@ -38,6 +38,8 @@ Le dossier `Salaire_salfa` et son archive ZIP prêts à copier incluent désorma
 
 - la possibilité d’**effacer ou modifier les visas et signatures** apposés sur la fiche d’absence (bouton « Effacer les visas » et suppression individuelle par visa) ;
 - le bouton **Supprimer** présent directement dans la modale d’édition de la fiche d’absence et dans le tableau des demandes en attente ;
+- dans **2. Bulletins de Paie (2 Ex. sur A4)**, le retour du choix **« Retenues de cet état individuel »** : imprimer / télécharger le bulletin du salarié sélectionné **avec avance et médicaments**, **sans avance sur salaire**, **sans médicaments** ou **sans avance ni médicaments** (le net et le règlement sont recalculés pour cet exemplaire, sans jamais modifier les montants saisis ; le livret « Tous les bulletins » conserve toutes les retenues) ;
+- l’impression d’un **seul état individuel** ne produit plus de **2e page blanche** : le document reste sur le format « bulletin-paie » jusqu'à la fin ;
 - la configuration optimisée du serveur et de la compilation.
 
 ## Mise à jour du 6 novembre 2026

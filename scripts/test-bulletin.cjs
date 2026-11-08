@@ -26,7 +26,13 @@ try {
   } = bundle('src/bulletin/model.ts', 'model');
   const seed = require('../src/data/salfa_data.json');
   const bulletinTab = fs.readFileSync('src/components/tabs/BulletinsTab.tsx', 'utf8');
-  assert.doesNotMatch(bulletinTab, /ChoixRetenuesIndividuel|deduireAvance|deduireMed|Sans Avance ni Médicament/, 'l’état individuel ne propose plus de choix pour ces retenues');
+  // L'état individuel propose à nouveau le choix des retenues avance / médicaments (aperçu, impression, PDF).
+  assert.match(bulletinTab, /deduireAvance: false/, 'le choix sans avance est proposé pour l’état individuel');
+  assert.match(bulletinTab, /deduireMed: false/, 'le choix sans médicaments est proposé pour l’état individuel');
+  assert.match(bulletinTab, /Retenues de cet état individuel/, 'le sélecteur de retenues est visible dans l’aperçu');
+  assert.match(bulletinTab, /downloadSingleBulletinPDF\(selectedPaie, optionsIndividuel\)/, 'le PDF individuel applique le choix de retenues');
+  assert.match(bulletinTab, /printMode === 'un_seul' \? optionsIndividuel : undefined/, 'l’impression applique le choix uniquement à l’état individuel');
+  assert.match(bulletinTab, /downloadPayrollBookletPDF\(filtered, mois, annee\)/, 'le livret complet conserve toutes les retenues standards');
   const ordreLivre = [
     bulletinTab.indexOf('className="bulletin-booklet-cover"'),
     bulletinTab.indexOf('className="bulletin-print-sheet"'),
@@ -35,6 +41,12 @@ try {
   ];
   assert.ok(ordreLivre.every((index, i) => index >= 0 && (i === 0 || index > ordreLivre[i - 1])), 'le livret place couverture, bulletins, page blanche et décharge dans cet ordre');
   const cssImpression = fs.readFileSync('src/index.css', 'utf8');
+  // Impression d'un seul état : le document reste sur la page nommée « bulletin-paie »
+  // jusqu'à la fin (pas de retour à une page anonyme => pas de 2e page blanche).
+  const reglePaieSeule = cssImpression.indexOf('body:has(.bulletin-print) { page: bulletin-paie; }');
+  const regleFinDecharge = cssImpression.indexOf('body:has(.bulletin-decharge-page) { page: bulletin-decharge; }');
+  assert.ok(reglePaieSeule >= 0, 'un état individuel seul reste sur le format bulletin-paie jusqu’à la fin du document');
+  assert.ok(regleFinDecharge > reglePaieSeule, 'en livret, la règle de fin sur la décharge reste prioritaire (dernière page portrait)');
   const pdfLivre = fs.readFileSync('src/pdf/bulletinsPdf.ts', 'utf8');
   assert.match(cssImpression, /\.bulletin-booklet-cover\s*\{[^}]*display:\s*block\s*!important/s, 'la couverture est visible à l’impression');
   assert.match(cssImpression, /\.bulletin-decharge-page\s*\{[^}]*display:\s*block\s*!important/s, 'la décharge est visible à l’impression');

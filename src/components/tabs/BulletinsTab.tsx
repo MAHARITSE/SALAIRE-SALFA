@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { PaieMensuelle } from '../../types';
 import { fetchPaiesMois } from '../../api';
-import { Calendar, Printer, Download, FileText, Eye, Settings2, ChevronDown, User, Users, Scissors } from 'lucide-react';
+import { Calendar, Printer, Download, FileText, Eye, Settings2, ChevronDown, User, Users, Scissors, Pill } from 'lucide-react';
 import { downloadPayrollBookletPDF, downloadSingleBulletinPDF } from '../../pdf/bulletinsPdf';
 import { YearProps, YearSelect } from '../YearSelect';
 import {
+  BulletinOptions,
   construireBulletin,
   NB_EXEMPLAIRES_BULLETIN,
   paginerPaiesDecharge,
@@ -23,6 +24,15 @@ import { BulletinHeaderModal } from '../BulletinHeaderModal';
 
 const MOIS = ['JANVIER','FEVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOUT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DECEMBRE'];
 
+/** Choix des retenues de l'état individuel : avec ou sans avance / médicaments (les données saisies ne sont jamais modifiées). */
+type RetenuesIndividuel = 'standard' | 'sans_avance' | 'sans_med' | 'sans_les_deux';
+const CHOIX_RETENUES: Record<RetenuesIndividuel, { libelle: string; options?: BulletinOptions }> = {
+  standard: { libelle: 'Avec avance et médicaments' },
+  sans_avance: { libelle: 'Sans avance sur salaire', options: { deduireAvance: false } },
+  sans_med: { libelle: 'Sans médicaments', options: { deduireMed: false } },
+  sans_les_deux: { libelle: 'Sans avance ni médicaments', options: { deduireAvance: false, deduireMed: false } },
+};
+
 export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
   const [mois, setMois] = useState(() => MOIS[new Date().getMonth()]);
   const [paies, setPaies] = useState<PaieMensuelle[]>([]);
@@ -35,8 +45,11 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
   // Mode d'impression : 'un_seul' (bulletin actif sélectionné) ou 'tous' (tous les bulletins affichés)
   const [printMode, setPrintMode] = useState<'un_seul' | 'tous'>('un_seul');
   const [previewDouble, setPreviewDouble] = useState(true);
+  // Choix propre à l'état individuel : déduire ou non l'avance et les médicaments (aperçu, impression et PDF).
+  const [retenuesIndividuel, setRetenuesIndividuel] = useState<RetenuesIndividuel>('standard');
   const [openMenu, setOpenMenu] = useState<'print' | 'pdf' | null>(null);
   const actionsRef = useRef<HTMLDivElement | null>(null);
+  const optionsIndividuel = CHOIX_RETENUES[retenuesIndividuel].options;
 
   useEffect(() => {
     const update = () => setHeader(loadBulletinHeader());
@@ -129,7 +142,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
                   disabled={!selectedPaie}
                   onClick={() => {
                     setOpenMenu(null);
-                    if (selectedPaie) downloadSingleBulletinPDF(selectedPaie);
+                    if (selectedPaie) downloadSingleBulletinPDF(selectedPaie, optionsIndividuel);
                   }}
                   className="w-full px-3.5 py-2.5 text-left text-xs font-semibold hover:bg-sky-50 dark:hover:bg-slate-700 flex items-center gap-2.5 disabled:opacity-40"
                 >
@@ -137,6 +150,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
                   <div>
                     <div>Télécharger cet état individuel (2 ex. sur A4)</div>
                     {selectedPaie && <div className="text-[10px] font-normal text-slate-400 truncate max-w-[190px]">Mat {selectedPaie.numero_matricule} — {selectedPaie.nom_prenoms}</div>}
+                    <div className={`text-[10px] font-normal ${retenuesIndividuel === 'standard' ? 'text-slate-400' : 'text-amber-600 dark:text-amber-400 font-semibold'}`}>{CHOIX_RETENUES[retenuesIndividuel].libelle}</div>
                   </div>
                 </button>
                 <button
@@ -182,6 +196,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
                   <div>
                     <div>Imprimer cet état individuel (2 ex.)</div>
                     {selectedPaie && <div className="text-[10px] font-normal text-slate-400 truncate max-w-[190px]">Mat {selectedPaie.numero_matricule} — {selectedPaie.nom_prenoms}</div>}
+                    <div className={`text-[10px] font-normal ${retenuesIndividuel === 'standard' ? 'text-slate-400' : 'text-amber-600 dark:text-amber-400 font-semibold'}`}>{CHOIX_RETENUES[retenuesIndividuel].libelle}</div>
                   </div>
                 </button>
                 <button
@@ -262,15 +277,43 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
                 </button>
               </div>
 
+              {/* Choix des retenues pour cet état individuel uniquement (aperçu, impression, PDF). Le livret « Tous » garde toutes les retenues. */}
+              <div className={`flex flex-wrap items-center gap-2 mb-3 px-2.5 py-2 rounded-lg border text-xs ${
+                retenuesIndividuel === 'standard'
+                  ? 'bg-slate-50 dark:bg-slate-700/40 border-slate-200 dark:border-slate-600'
+                  : 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700'
+              }`}>
+                <label htmlFor="bul-retenues-individuel" className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-200">
+                  <Pill className="w-4 h-4 text-salfa-teal" />
+                  Retenues de cet état individuel :
+                </label>
+                <select
+                  id="bul-retenues-individuel"
+                  aria-label="Retenues de l'état individuel"
+                  value={retenuesIndividuel}
+                  onChange={e => setRetenuesIndividuel(e.target.value as RetenuesIndividuel)}
+                  className="rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 px-2.5 py-1.5 text-xs font-bold"
+                >
+                  {(Object.keys(CHOIX_RETENUES) as RetenuesIndividuel[]).map(key => (
+                    <option key={key} value={key}>{CHOIX_RETENUES[key].libelle}</option>
+                  ))}
+                </select>
+                <span className={`text-[11px] ${retenuesIndividuel === 'standard' ? 'text-slate-500 dark:text-slate-400' : 'text-amber-700 dark:text-amber-400 font-semibold'}`}>
+                  {retenuesIndividuel === 'standard'
+                    ? 'S’applique à l’aperçu, à l’impression et au PDF de ce salarié — les données saisies ne sont jamais modifiées.'
+                    : 'Le net à payer est recalculé sans ces retenues pour cet exemplaire uniquement — les données saisies ne sont jamais modifiées.'}
+                </span>
+              </div>
+
               {previewDouble ? (
                 <div className="overflow-x-auto pb-1">
                   <div className="min-w-[920px] grid grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)] items-stretch bg-white p-2 rounded-lg border border-slate-200">
-                    <BulletinCopies paie={selectedPaie} header={header.image} />
+                    <BulletinCopies paie={selectedPaie} header={header.image} options={optionsIndividuel} />
                   </div>
                 </div>
               ) : (
                 <div className="max-w-[600px] mx-auto">
-                  <BulletinCard paie={selectedPaie} header={header.image} />
+                  <BulletinCard paie={selectedPaie} header={header.image} options={optionsIndividuel} />
                 </div>
               )}
             </>
@@ -303,7 +346,8 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
           )}
           {bulletinsImprimes.map((p) => (
             <div key={p.id} className="bulletin-print-sheet">
-              <BulletinCopies paie={p} header={header.image} />
+              {/* Le choix sans avance / médicaments ne porte que sur l'état individuel ; le livret complet conserve toutes les retenues. */}
+              <BulletinCopies paie={p} header={header.image} options={printMode === 'un_seul' ? optionsIndividuel : undefined} />
             </div>
           ))}
           {printMode === 'tous' && (
@@ -349,8 +393,8 @@ const BulletinCutLine: React.FC = () => (
   </div>
 );
 
-const BulletinCard: React.FC<{ paie: PaieMensuelle; header: string }> = ({ paie, header }) => {
-  const bulletin = construireBulletin(paie);
+const BulletinCard: React.FC<{ paie: PaieMensuelle; header: string; options?: BulletinOptions }> = ({ paie, header, options }) => {
+  const bulletin = construireBulletin(paie, options);
   return (
     <div className="bulletin-card">
       <img className="bulletin-header-image" src={header} alt="Entête de l’établissement" />
@@ -508,12 +552,12 @@ const BulletinCard: React.FC<{ paie: PaieMensuelle; header: string }> = ({ paie,
   );
 };
 
-const BulletinCopies: React.FC<{ paie: PaieMensuelle; header: string }> = ({ paie, header }) => (
+const BulletinCopies: React.FC<{ paie: PaieMensuelle; header: string; options?: BulletinOptions }> = ({ paie, header, options }) => (
   <>
     {Array.from({ length: NB_EXEMPLAIRES_BULLETIN }, (_, index) => (
       <React.Fragment key={`${paie.id}-ex-${index}`}>
         {index > 0 && <BulletinCutLine />}
-        <BulletinCard paie={paie} header={header} />
+        <BulletinCard paie={paie} header={header} options={options} />
       </React.Fragment>
     ))}
   </>
