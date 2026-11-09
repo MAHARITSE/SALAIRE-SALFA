@@ -394,6 +394,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
   };
 
   const imprimerEtat = () => {
+    setFicheImpr([]);
     if (vue !== 'etat') setVue('etat');
     setTimeout(() => window.print(), 120);
   };
@@ -942,7 +943,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
       )}
 
       {/* --------------------------------------------------- documents d'impression */}
-      {etatFiltre && <EtatCongesImpression etat={etatFiltre} annee={annee} />}
+      {etatFiltre && ficheImpr.length === 0 && <EtatCongesImpression etat={etatFiltre} annee={annee} />}
       {ficheImpr.length > 0 && (
         <div className="fiche-print">
           {ficheImpr.map((c) => (

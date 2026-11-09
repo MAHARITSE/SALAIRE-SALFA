@@ -118,6 +118,8 @@
 
 @media print {
   /* Les conteneurs de l'application sont limités et défilants à l'écran. */
+  html:has(.etat-print),
+  body:has(.etat-print),
   body:has(.etat-print) #root,
   body:has(.etat-print) #root > div,
   body:has(.etat-print) main,
@@ -131,10 +133,15 @@
     height: auto !important;
     padding: 0 !important;
     margin: 0 !important;
+    border: 0 !important;
   }
-  .etat-print { page: etat-impression; display: block !important; margin: 0 !important; color: #000; font-family: Arial, sans-serif; }
-  .etat-print-page { break-after: page; page-break-after: always; }
-  .etat-print-page:last-child { break-after: auto; page-break-after: auto; }
+  /* Garder le format « etat-impression » jusqu'à la fin du document pour éviter
+     une page blanche due au retour à une page anonyme. */
+  body:has(.etat-print) { page: etat-impression; }
+  .etat-print { page: etat-impression; display: block !important; margin: 0 !important; padding: 0 !important; color: #000; font-family: Arial, sans-serif; }
+  .etat-print-page { page: etat-impression; break-after: auto; page-break-after: auto; }
+  .etat-print-page + .etat-print-page { break-before: page; page-break-before: always; }
+  .etat-print-page:last-child { break-after: avoid; page-break-after: avoid; }
   .etat-print-heading { text-align: center; font-size: 7pt; line-height: 1.15; margin-bottom: 2mm; }
   .etat-print-heading strong { display: block; }
   .etat-print-table { width: 100%; max-width: none; table-layout: fixed; border-collapse: collapse; font-size: var(--etat-font-size); line-height: 1; }
@@ -552,17 +559,23 @@
 @page fiche-absence { size: A4 portrait; margin: 8mm 10mm; }
 
 @media print {
+  html:has(.conge-etat-print),
+  body:has(.conge-etat-print),
   body:has(.conge-etat-print) #root,
   body:has(.conge-etat-print) #root > div,
   body:has(.conge-etat-print) main,
   body:has(.conge-etat-print) main > div,
   .conges-root {
     display: block !important; overflow: visible !important; width: auto !important; max-width: none !important;
-    min-height: 0 !important; height: auto !important; padding: 0 !important; margin: 0 !important;
+    min-height: 0 !important; height: auto !important; padding: 0 !important; margin: 0 !important; border: 0 !important;
   }
-  .conge-etat-print { page: conges-impression; display: block !important; margin: 0 !important; color: #000; font-family: Arial, sans-serif; }
-  .conge-etat-page { break-after: page; page-break-after: always; }
-  .conge-etat-page:last-child { break-after: auto; page-break-after: auto; }
+  /* Garder le format « conges-impression » sur tout le corps du document pour
+     éviter qu'un retour à la page anonyme en fin de document n'imprime une page blanche. */
+  body:has(.conge-etat-print) { page: conges-impression; }
+  .conge-etat-print { page: conges-impression; display: block !important; margin: 0 !important; padding: 0 !important; color: #000; font-family: Arial, sans-serif; }
+  .conge-etat-page { page: conges-impression; break-after: auto; page-break-after: auto; }
+  .conge-etat-page + .conge-etat-page { break-before: page; page-break-before: always; }
+  .conge-etat-page:last-child { break-after: avoid !important; page-break-after: avoid !important; }
   .conge-etat-heading { text-align: center; font-size: 7.5pt; line-height: 1.15; margin-bottom: 1.6mm; }
   .conge-etat-heading strong { display: block; }
   .conge-etat-heading span { display: block; font-size: 6.5pt; }
@@ -579,21 +592,26 @@
   .conge-etat-table tfoot { font-weight: bold; }
   .conge-etat-legende { font-size: 5.8pt; margin-top: 1.2mm; color: #000; }
 
-  /* Une fiche d'absence à imprimer masque l'état : l'impression en cours est le document signé. */
+  /* Une fiche d'absence à imprimer masque l'état : l'impression en cours est le document signé.
+     En appliquant « page: fiche-absence » sur body, le navigateur conserve le format A4 portrait
+     jusqu'à la fin du document et n'ajoute pas de page blanche après la fiche. */
+  body:has(.fiche-print) { page: fiche-absence; }
   body:has(.fiche-print) .conge-etat-print { display: none !important; }
+  html:has(.fiche-print), body:has(.fiche-print),
   body:has(.fiche-print) #root, body:has(.fiche-print) #root > div,
   body:has(.fiche-print) main, body:has(.fiche-print) main > div,
   body:has(.fiche-print) .conges-root {
     display: block !important; overflow: visible !important; width: auto !important; max-width: none !important;
-    min-height: 0 !important; height: auto !important; padding: 0 !important; margin: 0 !important;
+    min-height: 0 !important; height: auto !important; padding: 0 !important; margin: 0 !important; border: 0 !important;
   }
-  .fiche-print { page: fiche-absence; display: block !important; margin: 0 !important; }
+  .fiche-print { page: fiche-absence; display: block !important; margin: 0 !important; padding: 0 !important; }
   .fiche-print .fiche-sheet {
     page: fiche-absence;
     /* Garder le format d'origine de la fiche ; seules les règles de pagination
        changent pour supprimer le saut après la dernière feuille. */
     width: auto; min-height: 0; border: 0; padding: 0; margin: 0; box-shadow: none;
     background: #fff; color: #000; font-size: 9.5pt;
+    break-inside: avoid; page-break-inside: avoid;
     page-break-after: auto !important; break-after: auto !important;
   }
   /* Une fiche par page, avec le saut uniquement AVANT les fiches suivantes. */
