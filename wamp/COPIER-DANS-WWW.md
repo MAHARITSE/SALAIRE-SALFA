@@ -40,6 +40,7 @@ Le dossier `Salaire_salfa` et son archive ZIP prêts à copier incluent désorma
 - le bouton **Supprimer** présent directement dans la modale d’édition de la fiche d’absence et dans le tableau des demandes en attente ;
 - dans **2. Bulletins de Paie (2 Ex. sur A4)**, le retour du choix **« Retenues de cet état individuel »** : imprimer / télécharger le bulletin du salarié sélectionné **avec avance et médicaments**, **sans avance sur salaire**, **sans médicaments** ou **sans avance ni médicaments** (le net et le règlement sont recalculés pour cet exemplaire, sans jamais modifier les montants saisis ; le livret « Tous les bulletins » conserve toutes les retenues) ;
 - l’impression d’un **seul état individuel** ne produit plus de **2e page blanche** : le document reste sur le format « bulletin-paie » jusqu'à la fin ;
+- l’impression de l’**état des congés / absences** et de la **fiche d’absence** ne produit plus de **page blanche finale** (le corps du document conserve le format de page nommé jusqu’à la fin, avec saut de page uniquement avant les feuilles suivantes) ;
 - la configuration optimisée du serveur et de la compilation.
 
 ## Mise à jour du 6 novembre 2026

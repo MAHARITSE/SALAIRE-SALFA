@@ -962,6 +962,56 @@ export function renderFicheHtml(conge: any) { return renderToStaticMarkup(<Fiche
   assert.equal((htmlFiche.match(/@ 07 Ora 45 mn/g) || []).length, 2, 'Ora départ et Ora reprise affichent toutes deux @ 07 Ora 45 mn (7h45) pour un Congé');
   assert.ok(!htmlFiche.includes('Situation :') && !htmlFiche.includes('Fiche n°') && !htmlFiche.includes('Saisie le'), 'pied de page supprimé de FicheAbsence');
 
+  // ----------------------------------------------------------------------------
+  // 18) Impression sans page blanche finale (fiche d'absence & état des congés)
+  // ----------------------------------------------------------------------------
+  const indexCss = fs.readFileSync(path.resolve('src/index.css'), 'utf8');
+  assert.match(
+    indexCss,
+    /body:has\(\.conge-etat-print\)\s*\{\s*page:\s*conges-impression;\s*\}/,
+    'body adopte page: conges-impression pour éviter une page blanche après l’état des absences'
+  );
+  assert.match(
+    indexCss,
+    /body:has\(\.fiche-print\)\s*\{\s*page:\s*fiche-absence;\s*\}/,
+    'body adopte page: fiche-absence pour éviter une page blanche après la fiche d’absence'
+  );
+  assert.ok(
+    indexCss.indexOf('body:has(.conge-etat-print) { page: conges-impression; }') <
+      indexCss.indexOf('body:has(.fiche-print) { page: fiche-absence; }'),
+    'la règle body:has(.fiche-print) surcharge body:has(.conge-etat-print) lors de l’impression d’une fiche'
+  );
+  assert.match(
+    indexCss,
+    /\.conge-etat-page\s*\+\s*\.conge-etat-page\s*\{\s*break-before:\s*page;\s*page-break-before:\s*always;\s*\}/,
+    'les pages de l’état des congés insèrent un saut uniquement avant les pages suivantes'
+  );
+  assert.match(
+    indexCss,
+    /\.conge-etat-page:last-child\s*\{\s*break-after:\s*avoid\s*!important;\s*page-break-after:\s*avoid\s*!important;\s*\}/,
+    'la dernière page de l’état des congés bloque tout saut de page final'
+  );
+  assert.match(
+    indexCss,
+    /\.fiche-print\s+\.fiche-sheet\s*\+\s*\.fiche-sheet\s*\{\s*page-break-before:\s*always;\s*break-before:\s*page;\s*\}/,
+    'les fiches d’absence insèrent un saut uniquement avant les fiches suivantes'
+  );
+  assert.match(
+    indexCss,
+    /\.fiche-print\s+\.fiche-sheet:last-child\s*\{\s*page-break-after:\s*avoid\s*!important;\s*break-after:\s*avoid-page\s*!important;\s*\}/,
+    'la dernière fiche d’absence bloque tout saut de page final'
+  );
+  assert.match(
+    indexCss,
+    /body:has\(\.etat-print\)\s*\{\s*page:\s*etat-impression;\s*\}/,
+    'body adopte page: etat-impression pour l’état de paie'
+  );
+  const congesTabSrc = fs.readFileSync(path.resolve('src/components/tabs/CongesTab.tsx'), 'utf8');
+  assert.ok(
+    congesTabSrc.includes('etatFiltre && ficheImpr.length === 0 && <EtatCongesImpression'),
+    'EtatCongesImpression est démonté pendant l’impression d’une fiche d’absence'
+  );
+
   console.log('Congés & Permissions : tests OK');
 })().catch((e) => {
   console.error('ÉCHEC —', e && e.stack ? e.stack : e);
