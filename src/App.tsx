@@ -26,7 +26,7 @@ import { CLE_SESSION_PRESENCE, INTERVALLE_PRESENCE_MS, lirePresenceLocale } from
 import { WAMP } from './runtime';
 import {
   Users, FileText, BarChart3, CheckCircle2, LogOut,
-  CalendarCheck2, Bell, ShieldCheck, ChevronDown, Database, Settings, Sliders, UserX, Image as ImageIcon,
+  CalendarCheck2, ShieldCheck, ChevronDown, Database, Settings, Sliders, UserX, Image as ImageIcon,
 } from 'lucide-react';
 import { AppTab, estRoleAdmin } from './local/roles';
 
@@ -438,13 +438,7 @@ export const App: React.FC = () => {
             )}
           />
 
-          <ControlesFlottants theme={theme} toggleTheme={toggleTheme} actions={(
-            <button type="button" className="controle-rond" aria-label="Compte et administration" title="Compte et administration"
-              aria-controls="administration-menu" aria-haspopup="menu" aria-expanded={showAdminMenu}
-              onClick={() => setShowAdminMenu(v => !v)}>
-              <Bell className="h-[17px] w-[17px]" aria-hidden="true" />
-            </button>
-          )} />
+          <ControlesFlottants theme={theme} toggleTheme={toggleTheme} />
 
           <main id="contenu-principal" tabIndex={-1} className="caisse-main flex-1 w-full max-w-[1920px] mx-auto px-2 xs:px-3 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6 overflow-x-hidden">
             <PageHeading onglet={estAdmin ? activeTab : 'conges'} />

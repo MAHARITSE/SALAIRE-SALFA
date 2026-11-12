@@ -14,10 +14,9 @@ export function lireTailleAffichage(): number {
 }
 
 /** Contrôles d'écran uniquement : ne modifient ni les impressions ni les données. */
-export function ControlesFlottants({ theme, toggleTheme, actions }: {
+export function ControlesFlottants({ theme, toggleTheme }: {
   theme: ThemeMode;
   toggleTheme: () => void;
-  actions: React.ReactNode;
 }) {
   const [taille, setTaille] = useState(lireTailleAffichage);
   useEffect(() => {
@@ -29,7 +28,6 @@ export function ControlesFlottants({ theme, toggleTheme, actions }: {
     <>
       <style media="screen">{`:root { font-size: ${taille}px; }`}</style>
       <aside className="controles-flottants no-print" aria-label="Accessibilité et affichage">
-        {actions}
         <button type="button" className="controle-rond" onClick={() => setTaille(NIVEAUX_TAILLE[index - 1])} disabled={index <= 0} aria-label="Réduire la taille de police" title="Réduire la taille de police"><Minus size={16} /></button>
         <button type="button" className="controle-pourcentage" onClick={() => setTaille(16)} aria-label={`Taille actuelle ${pourcentage}%, réinitialiser à 100%`} title="Réinitialiser à 100 %">{pourcentage}%</button>
         <button type="button" className="controle-rond" onClick={() => setTaille(NIVEAUX_TAILLE[index + 1])} disabled={index >= NIVEAUX_TAILLE.length - 1} aria-label="Augmenter la taille de police" title="Augmenter la taille de police"><Plus size={16} /></button>

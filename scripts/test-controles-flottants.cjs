@@ -26,18 +26,20 @@ try {
   global.localStorage = { getItem: () => '16' };
   for (const theme of ['light', 'dark']) {
     const html = m.renderToStaticMarkup(m.createElement(m.ControlesFlottants, {
-      theme, toggleTheme() {}, actions: m.createElement('button', { type: 'button' }, 'MENU COMPTE'),
+      theme, toggleTheme() {},
     }));
     assert.match(html, /no-print/);
     assert.match(html, /<style media="screen">:root \{ font-size: 16px; \}/);
-    assert.match(html, /MENU COMPTE/);
+    assert.equal((html.match(/<button\b/g) || []).length, 4, 'zoom et thème uniquement');
+    assert.doesNotMatch(html, /Bell|cloche|Compte et administration/);
     assert.match(html, /Réduire la taille de police/);
     assert.match(html, /Augmenter la taille de police/);
     assert.match(html, /réinitialiser à 100%/);
     assert.match(html, theme === 'dark' ? /Activer le mode clair/ : /Activer le mode sombre/);
   }
   const app = fs.readFileSync('src/App.tsx', 'utf8');
-  assert.match(app, /aria-label="Compte et administration"/);
+  assert.doesNotMatch(app, /<Bell\b/);
+  assert.match(app, /aria-label=\{estAdmin \? 'Administration'/);
   assert.match(app, /role="menuitem"/);
   assert.match(app, /onClick=\{handleLogout\}/);
   console.log('Contrôles flottants : tailles bornées et validées, stockage facultatif, thème, menu conservé, taille limitée à l’écran : OK');

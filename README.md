@@ -110,7 +110,7 @@ connexion reprend également sa carte centrée, son identité SALFA et ses champ
 sobres, avec affichage/masquage du mot de passe. La version locale propose les
 comptes publics de démonstration ; la version finale WAMP ne les affiche pas. Les fonctionnalités métier et les documents
 imprimés sont conservés. Le bandeau supérieur est remplacé par des
-contrôles flottants (menu compte via la cloche, taille − / 100 % / + et thème),
+contrôles flottants (taille − / 100 % / + et thème),
 sans supprimer les onglets ni les accès administrateur. Voir [le périmètre et les vérifications](docs/THEME-CAISSE.md).
 
 ---

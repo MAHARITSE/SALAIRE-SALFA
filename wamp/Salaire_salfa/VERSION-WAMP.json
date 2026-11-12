@@ -1,7 +1,7 @@
 {
   "application": "SALFA — Paie et Congé",
   "version": "1.0.0",
-  "construitLe": "2026-11-12T13:30:20.853Z",
+  "construitLe": "2026-11-12T13:36:09.915Z",
   "backend": "wamp",
   "contactSessionSecondes": 15,
   "expirationSansContactSecondes": 3600,
@@ -15,12 +15,12 @@
     "assets/aistudio/image_af6ce929.png": "af6ce92968332cb80dd794346c7638d651bcb046758a92b2efcd41bc4873fce5",
     "assets/contrat-salfa-modele-BeOjn3nh.docx": "08afa561c42301235dbc64df21fe193d7d310b2b93b67030729e97290a94335c",
     "assets/html2canvas.esm-QH1iLAAe.js": "061c08e50c0dc57b8d5e6531f0b8237a52a68b233260d49ab2f2c2906ad112c4",
-    "assets/index-BB3QYixq.css": "9e928153b904af84f04130fab7218607d3f7f6bb85b5521e1be076028b0f5111",
-    "assets/index-HrlYXvmg.js": "bc6eea0141b8dfaf088d17e0a5419b4e43efd485d976b5dae4349c49c9ec1e0c",
-    "assets/index.es-DQ2IqeG4.js": "c087738eacba51cda8e1d96c6b25c88c7e8cb3e1c794f75d2f23eabcdc8332f9",
+    "assets/index-D-ooUY5o.js": "dd11f5641b5984e4b4439d52c9d536e3d3ff98f30760691cc1568978b0531a25",
+    "assets/index-NgRIEbBA.css": "fb2d9ec3861a149aa3b36db03d201e915b7888732417f964d53fc718f75ad5f7",
+    "assets/index.es-B_8D6HxF.js": "40d1331e44a5d52a3a59fccd25e1409edcc42571d13dafc4480cbd130bc6d290",
     "assets/logo-salfa-jr2F-qO9.png": "68e76df37e32828e94499ad8ef65af52ee07bd68348f84923d7b79c3856417f1",
     "assets/purify.es-CAi2OJFm.js": "8e143ee7bcdf076d62676183aacc62568c9adb8042c57d4fef7d62e1ca7c345a",
     "favicon.png": "68e76df37e32828e94499ad8ef65af52ee07bd68348f84923d7b79c3856417f1",
-    "index.html": "48fea6315ee8de30e344ee901428f69328410f5e0d11c44667e660a494d8da18"
+    "index.html": "20556b944ec75e7cb7e335157a940efb9a9227d01ae03d89a505bf201977c07b"
   }
 }

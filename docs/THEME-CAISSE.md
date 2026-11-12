@@ -97,14 +97,11 @@ WAMP confirme l’absence du panneau et des accès de démonstration dans les JS
 ## Bandeau remplacé par les contrôles flottants
 
 Le bandeau supérieur SALFA / exercice / profil / Administration est supprimé.
-Les onglets de navigation restent disponibles. En bas à droite, les cinq contrôles
-reprennent la seconde capture : cloche, réduction, pourcentage réinitialisable,
-augmentation et thème clair/sombre.
-
-La paie n’ayant pas de messagerie, la cloche ouvre le menu **Compte et
-administration** (paramètres, imports, déconnexion selon les droits), sans
-inventer de notifications ni de son de messages. Ce menu se referme avec Échap
-ou un clic extérieur et reste dans la fenêtre à 320 px.
+Les onglets de navigation restent disponibles. En bas à droite, les quatre
+contrôles permettent de réduire la taille, de réinitialiser le pourcentage,
+d’augmenter la taille et de basculer le thème clair/sombre. La cloche flottante
+est supprimée ; le menu de compte reste accessible depuis le bouton
+**Administration** (ou **Comptable**, selon le rôle) à droite des onglets.
 
 Les boutons −/+ ajustent la taille d’affichage de 13 à 22 px (16 px = 100 %),
 comme dans Caisse ; le pourcentage remet à 100 %. La préférence est enregistrée
@@ -120,6 +117,5 @@ des droits Administrateur/Comptable.
 Le bouton **Administration** est à nouveau visible à droite des onglets, sans
 rétablir le grand bandeau identité/profil. Son menu complet reste soumis aux
 rôles : le Comptable dispose uniquement de son menu de compte et de déconnexion.
-La cloche flottante conserve un raccourci vers ce même menu (pas de duplication
-des paramètres). Le menu s’ouvre sous le bouton, se ferme par Échap/clic extérieur
+La cloche flottante a été retirée à la demande de l’utilisateur. Le menu s’ouvre sous le bouton, se ferme par Échap/clic extérieur
 et reste utilisable sur écran mobile. Le zoom et le thème flottants sont conservés.
