@@ -59,6 +59,7 @@ const CATEGORIES_SUGGEREES = ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5
 
 export interface EmployeModalFormProps {
   employe: Employe | null;
+  duplication?: { source: Employe; valeurs: Partial<Employe> };
   periodeActive?: { annee: number; mois: string };
   categoriesExistantes?: string[];
   onClose: () => void;
@@ -67,50 +68,52 @@ export interface EmployeModalFormProps {
 
 export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
   employe,
+  duplication,
   periodeActive,
   categoriesExistantes = [],
   onClose,
   onSaved,
 }) => {
   const todayIso = () => new Date().toISOString().slice(0, 10);
+  const valeurs = employe ?? duplication?.valeurs;
   const [form, setForm] = useState({
-    numero_matricule: employe?.numero_matricule || '',
-    nom_prenoms: String(employe?.nom_prenoms || '').toLocaleUpperCase('fr-FR'),
-    numero_cnaps: employe?.numero_cnaps || '',
-    categorie: employe?.categorie || '',
-    jobs: employe?.jobs || '',
-    date_embauche: employe?.date_embauche || '',
-    enfant_a_charge: employe?.enfant_a_charge || 0,
-    base_aj: employe?.base_aj || 0,
-    logement_transport: employe?.logement_transport || 0,
-    rendement: employe?.rendement || 0,
-    responsabilite_representation: employe?.responsabilite_representation || 0,
-    rib: employe?.rib || '',
-    mode_paiement: employe?.mode_paiement || 'ESPECES',
-    conge_maternite: employe ? (employe.conge_maternite === 1 || employe.conge_maternite === true) : false,
-    date_debut_maternite: employe?.date_debut_maternite || '',
-    actif: employe ? (Number(employe.actif) === 1 ? 1 : 0) : 1,
-    date_inactif: employe?.date_inactif || '',
-    genre: employe?.genre || '',
-    date_naissance: employe?.date_naissance || '',
-    lieu_naissance: employe?.lieu_naissance || '',
-    pere: employe?.pere || '',
-    mere: employe?.mere || '',
-    cin: employe?.cin || '',
-    date_cin: employe?.date_cin || '',
-    lieu_cin: employe?.lieu_cin || '',
-    situation_matrimoniale: employe?.situation_matrimoniale || '',
-    adresse: employe?.adresse || '',
-    service: employe?.service || '',
-    diplome: employe?.diplome || '',
-    etablissement: employe?.etablissement || '',
-    statut: employe?.statut || '',
-    numero_ordre: employe?.numero_ordre || '',
-    nature_contrat: employe?.nature_contrat || '',
-    duree_contrat: employe?.duree_contrat || '',
-    lieu_embauche: employe?.lieu_embauche || '',
-    lieu_travail: employe?.lieu_travail || '',
-    date_effet: employe?.date_effet || '',
+    numero_matricule: valeurs?.numero_matricule || '',
+    nom_prenoms: String(valeurs?.nom_prenoms || '').toLocaleUpperCase('fr-FR'),
+    numero_cnaps: valeurs?.numero_cnaps || '',
+    categorie: valeurs?.categorie || '',
+    jobs: valeurs?.jobs || '',
+    date_embauche: valeurs?.date_embauche || '',
+    enfant_a_charge: valeurs?.enfant_a_charge || 0,
+    base_aj: valeurs?.base_aj || 0,
+    logement_transport: valeurs?.logement_transport || 0,
+    rendement: valeurs?.rendement || 0,
+    responsabilite_representation: valeurs?.responsabilite_representation || 0,
+    rib: valeurs?.rib || '',
+    mode_paiement: valeurs?.mode_paiement || 'ESPECES',
+    conge_maternite: valeurs ? (valeurs.conge_maternite === 1 || valeurs.conge_maternite === true) : false,
+    date_debut_maternite: valeurs?.date_debut_maternite || '',
+    actif: valeurs ? (Number(valeurs.actif) === 1 ? 1 : 0) : 1,
+    date_inactif: valeurs?.date_inactif || '',
+    genre: valeurs?.genre || '',
+    date_naissance: valeurs?.date_naissance || '',
+    lieu_naissance: valeurs?.lieu_naissance || '',
+    pere: valeurs?.pere || '',
+    mere: valeurs?.mere || '',
+    cin: valeurs?.cin || '',
+    date_cin: valeurs?.date_cin || '',
+    lieu_cin: valeurs?.lieu_cin || '',
+    situation_matrimoniale: valeurs?.situation_matrimoniale || '',
+    adresse: valeurs?.adresse || '',
+    service: valeurs?.service || '',
+    diplome: valeurs?.diplome || '',
+    etablissement: valeurs?.etablissement || '',
+    statut: valeurs?.statut || '',
+    numero_ordre: valeurs?.numero_ordre || '',
+    nature_contrat: valeurs?.nature_contrat || '',
+    duree_contrat: valeurs?.duree_contrat || '',
+    lieu_embauche: valeurs?.lieu_embauche || '',
+    lieu_travail: valeurs?.lieu_travail || '',
+    date_effet: valeurs?.date_effet || '',
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -192,7 +195,7 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
         <div className="bg-salfa-dark dark:bg-slate-900 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between text-white shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <h3 className="text-sm sm:text-lg font-bold truncate">
-              {employe ? `Modifier les informations — Mat ${employe.numero_matricule}` : 'Nouveau Salarié'}
+              {employe ? `Modifier les informations — Mat ${employe.numero_matricule}` : duplication ? 'Modifier la copie — Étape 2 sur 2' : 'Nouveau Salarié'}
             </h3>
             {employe && (
               <span
@@ -210,6 +213,15 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto thin-scrollbar">
+          {duplication && (
+            <div className="rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 p-3 text-xs text-sky-900 dark:text-sky-200">
+              <b>Copie de {duplication.source.numero_matricule} — {duplication.source.nom_prenoms}.</b>{' '}
+              Modifiez les informations pour le nouveau salarié avant d’enregistrer. Le matricule proposé est modifiable.
+              Le nom, la CNaPS, la CIN et le RIB sont à renseigner ; le statut est remis à actif, hors maternité.
+              Vérifiez les autres données copiées, notamment l’état civil, les dates, le mode de paiement et les montants.
+              Aucun historique de paie ni de congés n’est copié. Annuler n’ajoute aucune fiche.
+            </div>
+          )}
           {formError && (
             <div className="rounded-xl border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/30 px-3.5 py-2.5 text-xs font-semibold text-red-800 dark:text-red-200">
               {formError}
@@ -543,7 +555,7 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
             <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300">
               <Info className="w-4 h-4 shrink-0 mt-0.5" />
               <span>
-                Après l'enregistrement, le bulletin du nouveau salarié est automatiquement généré pour le mois ouvert.
+                Après l’enregistrement, un bulletin est généré si le mois affiché est déjà initialisé et non clôturé. Sinon, il faudra initialiser le mois ou ajouter les salariés manquants.
               </span>
             </div>
           )}
@@ -561,7 +573,7 @@ export const EmployeModalForm: React.FC<EmployeModalFormProps> = ({
               disabled={saving}
               className="px-6 py-2 rounded-lg bg-salfa-dark dark:bg-slate-600 hover:bg-salfa-teal text-white text-sm font-bold shadow"
             >
-              {saving ? '...' : 'Enregistrer'}
+              {saving ? '...' : duplication ? 'Enregistrer le nouveau salarié' : 'Enregistrer'}
             </button>
           </div>
         </form>

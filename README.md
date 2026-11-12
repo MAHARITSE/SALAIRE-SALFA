@@ -311,6 +311,37 @@ modifiés. Ce choix ne s'applique qu'à l'état individuel : le livret « Tous l
 bulletins » conserve toujours toutes les retenues. L'impression d'un seul état
 tient sur une seule feuille A4 paysage, sans page blanche supplémentaire.
 
+### Ajouter un salarié par duplication
+
+Dans **Salariés & Saisie**, le bouton **Dupliquer un salarié** remplace
+**Nouveau Salarié**. Le parcours comporte deux étapes :
+
+1. Recherchez et choisissez une fiche existante (nom, matricule ou fonction),
+   puis cliquez sur **Copier et modifier**. La ligne sélectionnée dans l’état
+   de paie est proposée par défaut ; les fiches inactives restent disponibles.
+   Répondez ensuite à **deux questions successives** : confirmer la duplication
+   de la fiche choisie, puis confirmer l’ouverture de la copie en modification.
+   **Non, annuler** ou la fermeture à l’une des questions abandonne l’opération,
+   sans créer de salarié.
+2. La fiche copiée s’ouvre directement en modification. Adaptez les données,
+   puis cliquez sur **Enregistrer le nouveau salarié**.
+
+Un matricule libre est proposé en tenant compte de toutes les fiches, y compris
+inactives. Le nom, la CNaPS, la CIN (et ses références) et le RIB sont vidés pour
+éviter de réutiliser les identifiants du salarié source. Le statut est remis à
+actif, hors maternité. Les autres informations de la fiche sont préremplies :
+**vérifiez notamment l’état civil, les dates, le mode de paiement et les montants**.
+Les bulletins, congés et historiques ne sont pas dupliqués.
+
+Aucune fiche n’est créée avant l’enregistrement ; annuler à l’une des deux
+étapes ne crée rien. La fiche source et ses anciens bulletins restent inchangés.
+Le bulletin du nouveau salarié est généré selon le comportement habituel si le
+mois affiché est déjà initialisé et non clôturé ; sinon, initialisez le mois ou
+utilisez l’ajout des salariés manquants. La modification ordinaire d’une fiche
+existante reste inchangée.
+
+Vérification : `node scripts/test-duplication-employe.cjs`.
+
 ### Saisie en lot des avances et médicaments
 
 Dans **Salariés & Saisie**, choisissez le mois et l'année, puis cliquez sur

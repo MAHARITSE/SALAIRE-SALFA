@@ -26,7 +26,7 @@ import {
 import { triggerSqlDownload } from '../../local/sqlBackup';
 import { correspondRecherche, normaliserRecherche } from '../../local/recherche';
 import {
-  Plus,
+  Copy,
   Search,
   Edit3,
   History,
@@ -53,6 +53,8 @@ import {
 import { YearProps, YearSelect } from '../YearSelect';
 import { SaisieLotModal } from '../SaisieLotModal';
 import { EmployeModalForm } from '../EmployeModalForm';
+import { DuplicationEmployeModal } from '../DuplicationEmployeModal';
+import { preparerDuplicationEmploye } from '../../local/duplicationEmploye';
 import { FusionEmployesModal } from '../FusionEmployesModal';
 import { ContratTravailModal } from '../ContratTravailModal';
 import { formatMontant, formatMontantSaisie, formatMontantEdition, parseMontantSaisie } from '../../local/montants';
@@ -374,6 +376,8 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   const printMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Modales
+  const [duplicationSource, setDuplicationSource] = useState<Employe | null>(null);
+  const [showDuplicationModal, setShowDuplicationModal] = useState(false);
   const [showEmpModal, setShowEmpModal] = useState<boolean>(false);
   const [editingEmploye, setEditingEmploye] = useState<Employe | null>(null);
   const [accModalPaie, setAccModalPaie] = useState<PaieMensuelle | null>(null);
@@ -957,13 +961,12 @@ export const SalariesSaisieTab: React.FC<Props> = ({
           <button
             type="button"
             onClick={() => {
-              setEditingEmploye(null);
-              setShowEmpModal(true);
+              setShowDuplicationModal(true);
             }}
             className="flex items-center justify-center gap-2 bg-salfa-dark hover:bg-salfa-teal text-white px-4 py-2 rounded-lg font-bold text-xs sm:text-sm shadow-sm transition"
           >
-            <Plus className="w-4 h-4" />
-            <span>Nouveau Salarié</span>
+            <Copy className="w-4 h-4" />
+            <span>Dupliquer un salarié</span>
           </button>
         </div>
       </div>
@@ -1412,16 +1415,32 @@ export const SalariesSaisieTab: React.FC<Props> = ({
         />
       )}
 
+      {showDuplicationModal && (
+        <DuplicationEmployeModal
+          employes={employes}
+          initialEmployeId={selectedPaie ? Number(selectedPaie.employe_id) : null}
+          onClose={() => setShowDuplicationModal(false)}
+          onSelect={(source) => {
+            setDuplicationSource(source);
+            setEditingEmploye(null);
+            setShowDuplicationModal(false);
+            setShowEmpModal(true);
+          }}
+        />
+      )}
+
       {showEmpModal && (
         <EmployeModalForm
-          key={editingEmploye ? `emp-${editingEmploye.id}` : 'emp-new'}
+          key={editingEmploye ? `emp-${editingEmploye.id}` : `emp-copy-${duplicationSource?.id}`}
+          duplication={!editingEmploye && duplicationSource ? { source: duplicationSource, valeurs: preparerDuplicationEmploye(duplicationSource, employes) } : undefined}
           employe={editingEmploye}
           periodeActive={{ annee, mois }}
           categoriesExistantes={categoriesExistantes}
-          onClose={() => setShowEmpModal(false)}
+          onClose={() => { setShowEmpModal(false); setDuplicationSource(null); }}
           onSaved={async () => {
             const wasCreate = !editingEmploye;
             setShowEmpModal(false);
+            setDuplicationSource(null);
             if (wasCreate && !verrouille && paies.length > 0) {
               await initMoisPaie(annee, mois);
             }
