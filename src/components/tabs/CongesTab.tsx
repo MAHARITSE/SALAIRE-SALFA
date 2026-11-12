@@ -18,7 +18,7 @@ import {
 import {
   CongeAbsence, CongesConfig, SoldeSaisie, EtatConges, MOTIFS_ABSENCE, LIBELLES_CATEGORIE,
   LIBELLES_STATUT, StatutConges, fmtJours, actionsAutorisees, trouverMotif, aBesoinMedecin,
-  joursAffiches, decomposerTitreActif, anneesSuccessives, construireEtat, estEnCongeLe,
+  joursAffiches, decomposerTitreActif, anneesSuccessives, construireEtat, estEnCongeOuPermissionLe, estEnAttenteDeVisa,
 } from '../../local/conges';
 import { loadConfig } from '../../local/config';
 import { correspondRecherche, normaliserRecherche } from '../../local/recherche';
@@ -160,14 +160,14 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
     });
   }, [etat, rechercheNormalisee, congesFiltresRecherche, employes, conges, config, annee, nbAnnees, inclureRefuses]);
   const enAttente = useMemo(
-    () => congesFiltresRecherche.filter((c) => c.statut === 'SOUMIS' || c.statut === 'AVIS_CHF' || c.statut === 'AVIS_MEDECIN'),
+    () => congesFiltresRecherche.filter(estEnAttenteDeVisa),
     [congesFiltresRecherche]
   );
-  const congesEnCours = useMemo(() => {
+  const absencesEnCours = useMemo(() => {
     const employesParId = new Map<number, any>(employes.map((e): [number, any] => [Number(e.id), e]));
     const employesParMatricule = new Map<number, any>(employes.map((e): [number, any] => [Number(e.numero_matricule), e]));
     return congesFiltresRecherche
-      .filter((c) => estEnCongeLe(c, dateDuJour))
+      .filter((c) => estEnCongeOuPermissionLe(c, dateDuJour))
       .map((fiche) => ({
         fiche,
         employe: employesParId.get(Number(fiche.employe_id)) || employesParMatricule.get(Number(fiche.numero_matricule)) || null,
@@ -219,13 +219,13 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
   };
   const fichesSort = useTableSort(listeFiltree, ficheAccessors);
   const attenteSort = useTableSort(enAttente, ficheAccessors);
-  const coursSort = useTableSort(congesEnCours, {
+  const coursSort = useTableSort(absencesEnCours, {
     mat: ({ fiche, employe }) => Number(employe?.numero_matricule || fiche.numero_matricule),
     nom: ({ fiche, employe }) => employe?.nom_prenoms || fiche.nom_prenoms,
     debut: ({ fiche }) => dateSortValue(fiche.date_debut),
     fin: ({ fiche }) => dateSortValue(fiche.date_fin),
     retour: ({ fiche }) => dateSortValue(dateRetourFiche(fiche)),
-    motif: ({ fiche }) => fiche.motif_libelle,
+    motif: ({ fiche }) => `${LIBELLES_CATEGORIE[fiche.categorie]} ${fiche.motif_libelle}`,
   });
   const soldesSort = useTableSort(soldesListe, {
     mat: ({ employe }) => Number(employe.numero_matricule),
@@ -600,18 +600,18 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             )}
           </section>
 
-          {/* --------------------------------------------------- salariés actuellement en congé */}
+          {/* --------------------------------------------------- salariés actuellement en congé ou en permission */}
           <section className="caisse-card bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="px-3 sm:px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2">
               <CalendarClock className="w-4 h-4 text-sky-600 dark:text-sky-300" />
-              <h3 className="text-xs sm:text-sm font-bold uppercase text-slate-700 dark:text-slate-200">Personnes actuellement en congé</h3>
+              <h3 className="text-xs sm:text-sm font-bold uppercase text-slate-700 dark:text-slate-200">Personnes actuellement en congé ou en permission</h3>
               <span className="text-[10px] text-slate-500">Au {dateFr(dateDuJour)}</span>
-              <span className="ml-auto text-[11px] text-slate-500">({congesEnCours.length})</span>
+              <span className="ml-auto text-[11px] text-slate-500">({absencesEnCours.length})</span>
             </div>
             {chargement ? (
-              <div className="p-5 text-center text-sm text-slate-500">Chargement des congés…</div>
-            ) : congesEnCours.length === 0 ? (
-              <div className="p-5 text-center text-sm text-slate-500">Aucun salarié n’est actuellement en congé à cette date.</div>
+              <div className="p-5 text-center text-sm text-slate-500">Chargement des congés et permissions…</div>
+            ) : absencesEnCours.length === 0 ? (
+              <div className="p-5 text-center text-sm text-slate-500">Aucun salarié n’est actuellement en congé ou en permission à cette date.</div>
             ) : (
               <div className="table-responsive thin-scrollbar">
                 <table className="w-full text-left border-collapse text-xs">
@@ -619,8 +619,8 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
                     <tr>
                       <SortableHeader column="mat" sort={coursSort} className="px-2 py-2 text-center">Mat.</SortableHeader>
                       <SortableHeader column="nom" sort={coursSort} className="px-2 py-2">Salarié</SortableHeader>
-                      <SortableHeader column="debut" sort={coursSort} className="px-2 py-2 text-center">Début du congé</SortableHeader>
-                      <SortableHeader column="fin" sort={coursSort} className="px-2 py-2 text-center">Fin du congé</SortableHeader>
+                      <SortableHeader column="debut" sort={coursSort} className="px-2 py-2 text-center">Début de l’absence</SortableHeader>
+                      <SortableHeader column="fin" sort={coursSort} className="px-2 py-2 text-center">Fin de l’absence</SortableHeader>
                       <SortableHeader column="retour" sort={coursSort} className="px-2 py-2 text-center">Date de prise de service</SortableHeader>
                       <SortableHeader column="motif" sort={coursSort} className="px-2 py-2">Motif</SortableHeader>
                     </tr>
@@ -636,7 +636,10 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
                         <td className="px-2 py-2 text-center whitespace-nowrap font-mono">{dateFr(fiche.date_debut)}</td>
                         <td className="px-2 py-2 text-center whitespace-nowrap font-mono font-semibold">{dateFr(fiche.date_fin)}</td>
                         <td className="px-2 py-2 text-center whitespace-nowrap font-mono font-bold text-salfa-teal dark:text-sky-300">{dateFr(dateRetourFiche(fiche))}</td>
-                        <td className="px-2 py-2">{fiche.motif_libelle || LIBELLES_CATEGORIE.CONGE}</td>
+                        <td className="px-2 py-2">
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${COULEUR_CATEGORIE[fiche.categorie]}`}>{LIBELLES_CATEGORIE[fiche.categorie]}</span>
+                          {fiche.motif_libelle && <div className="mt-0.5 text-[10px] text-slate-600 dark:text-slate-300">{fiche.motif_libelle}</div>}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

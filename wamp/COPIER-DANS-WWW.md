@@ -36,6 +36,9 @@ jamais le dossier `wamp\` complet, ni le fichier SQL, ni `salfa-config.php`.
 
 Le dossier et le ZIP incluent les dernières modifications :
 
+- suivi des **congés et permissions en cours**, avec distinction du type d’absence ;
+  les permissions non validées restent dans **Demandes en attente de visa** ;
+
 - page **Connexion à la Paie et Congé**, avec l’icône de l’application ;
 - nouvelle présentation, contrôles flottants de taille et de thème, et bouton
   **Administration** à droite des onglets ;

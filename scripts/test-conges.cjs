@@ -42,6 +42,48 @@ assert.equal(C.estEnCongeLe(congeActuelTest, '2026-10-31'), false, 'date de repr
 assert.equal(C.estEnCongeLe({ ...congeActuelTest, statut: 'SOUMIS' }, '2026-10-30'), false, 'une demande non validée ne figure pas parmi les salariés en congé');
 assert.equal(C.estEnCongeLe({ ...congeActuelTest, categorie: 'PERMISSION' }, '2026-10-30'), false, 'les permissions ne sont pas comptées comme congés annuels');
 
+// Les listes de suivi distinguent les absences validées des fiches à faire signer.
+const permissionActuelle = {
+  ...congeActuelTest, id: 902, categorie: 'PERMISSION', imputation: 'PERMISSION',
+  motif_code: 'Tera-bady', motif_libelle: 'Accouchement de l’épouse',
+};
+const avantPermissions = JSON.stringify([congeActuelTest, permissionActuelle]);
+for (const date of ['2026-10-29', '2026-10-30']) {
+  assert.equal(C.estEnCongeOuPermissionLe(permissionActuelle, date), true, 'permission validée incluse aux deux bornes');
+  assert.equal(C.estEnCongeOuPermissionLe(congeActuelTest, date), true, 'congés annuels toujours inclus');
+}
+for (const date of ['2026-10-28', '2026-10-31', '']) {
+  assert.equal(C.estEnCongeOuPermissionLe(permissionActuelle, date), false, 'pas de permission future, terminée ou sans date');
+}
+for (const imputation of ['CONGE', 'PERMISSION', 'AUCUNE']) {
+  assert.equal(C.estEnCongeOuPermissionLe({ ...permissionActuelle, imputation }, '2026-10-30'), true, 'affichage de la permission indépendant de son décompte');
+}
+for (const statut of ['SOUMIS', 'AVIS_CHF', 'AVIS_MEDECIN']) {
+  const attente = { ...permissionActuelle, statut };
+  assert.equal(C.estEnAttenteDeVisa(attente), true, 'permission à tous les stades de visa affichée en attente');
+  assert.equal(C.estEnCongeOuPermissionLe(attente, '2026-10-30'), false, 'ne pas annoncer une absence non validée comme autorisée');
+}
+for (const statut of ['VALIDE', 'REFUSE']) {
+  assert.equal(C.estEnAttenteDeVisa({ ...permissionActuelle, statut }), false, 'permission traitée absente des demandes en attente');
+}
+for (const extra of [
+  { statut: 'REFUSE' }, { jours_valides: 0 }, { categorie: 'AJUSTEMENT' },
+  { categorie: 'EXAMEN_MEDICAL' }, { date_debut: '' }, { date_fin: '' },
+  { date_debut: '2026-10-31', date_fin: '2026-10-29' },
+]) assert.equal(C.estEnCongeOuPermissionLe({ ...permissionActuelle, ...extra }, '2026-10-30'), false, 'exclusions des absences actuelles');
+const fichesSuivi = [
+  congeActuelTest, permissionActuelle,
+  { ...permissionActuelle, id: 903, statut: 'SOUMIS' },
+  { ...permissionActuelle, id: 904, statut: 'REFUSE' },
+  { ...permissionActuelle, id: 905, date_debut: '2026-11-01', date_fin: '2026-11-02' },
+];
+assert.deepEqual(fichesSuivi.filter(c => C.estEnCongeOuPermissionLe(c, '2026-10-30')).map(c => c.id), [901, 902]);
+assert.deepEqual(fichesSuivi.filter(C.estEnAttenteDeVisa).map(c => c.id), [903]);
+assert.equal(JSON.stringify([congeActuelTest, permissionActuelle]), avantPermissions, 'les listes ne modifient ni les fiches ni les jours');
+assert.match(congesTabUi, /congesFiltresRecherche\.filter\(estEnAttenteDeVisa\)/);
+assert.match(congesTabUi, /estEnCongeOuPermissionLe\(c, dateDuJour\)/);
+assert.match(congesTabUi, /Personnes actuellement en congé ou en permission/);
+
 const recherche = bundle('src/local/recherche.ts', 'recherche');
 assert.equal(recherche.normaliserRecherche('François  RAZAFI—TENDRY'), 'FRANCOIS RAZAFI TENDRY', 'recherche sans accents ni ponctuation');
 assert.equal(recherche.correspondRecherche('JOELSON TSIAMBANY', 'TSIAMBANY   Joelson'), true, 'recherche par mots dans n’importe quel ordre');

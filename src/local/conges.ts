@@ -622,12 +622,10 @@ export function estValide(c: CongeAbsence): boolean {
   return c.statut === 'VALIDE';
 }
 
-/** Vrai si un congé annuel validé couvre la date donnée (bornes Du … au … incluses). */
-export function estEnCongeLe(c: CongeAbsence, dateIso: string): boolean {
+/** Absence validée de durée positive, bornes Du … au … incluses. */
+function absenceValideeCouvreDate(c: CongeAbsence, dateIso: string): boolean {
   return Boolean(
     c &&
-    c.categorie === 'CONGE' &&
-    c.imputation === 'CONGE' &&
     estValide(c) &&
     Number(c.jours_valides ?? c.jours_demandes ?? 0) > 0 &&
     /^\d{4}-\d{2}-\d{2}$/.test(dateIso) &&
@@ -636,6 +634,21 @@ export function estEnCongeLe(c: CongeAbsence, dateIso: string): boolean {
     c.date_debut <= dateIso &&
     dateIso <= c.date_fin
   );
+}
+
+/** Congé annuel uniquement : ne pas confondre permission et décompte du congé. */
+export function estEnCongeLe(c: CongeAbsence, dateIso: string): boolean {
+  return Boolean(c && c.categorie === 'CONGE' && c.imputation === 'CONGE' && absenceValideeCouvreDate(c, dateIso));
+}
+
+/** Liste d'absence actuelle : congés annuels et permissions, quel que soit le droit imputé à la permission. */
+export function estEnCongeOuPermissionLe(c: CongeAbsence, dateIso: string): boolean {
+  return estEnCongeLe(c, dateIso) || Boolean(c && c.categorie === 'PERMISSION' && absenceValideeCouvreDate(c, dateIso));
+}
+
+/** Même circuit de visa pour les congés, permissions et examens médicaux. */
+export function estEnAttenteDeVisa(c: CongeAbsence): boolean {
+  return Boolean(c && ['SOUMIS', 'AVIS_CHF', 'AVIS_MEDECIN'].includes(c.statut));
 }
 
 /** Jours effectivement imputés (validés) d'une demande. */
