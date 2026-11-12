@@ -27,6 +27,8 @@ Chaque utilisateur saisit les identifiants du compte créé sur le serveur.
   limiter Apache et le pare-feu au réseau autorisé et faire vérifier la sécurité
   et les sauvegardes par un administrateur. Ne pas exposer à Internet.
 - L'API exige une session, un jeton CSRF et un compte créé sur le serveur.
+- Version finale : la page de connexion ne présente aucun compte de démonstration. Le panneau et ses accès locaux sont exclus du JavaScript WAMP (`npm run test:wamp-build` pour le contrôler).
+- Présence de session : mécanisme CAISSE-SALFA, délai réglé à une heure : contact par onglet toutes les 15 secondes, expiration après 1 heure sans contact. Une session récente est reprise au rechargement ; une panne réseau n'est pas assimilée à une déconnexion confirmée. Voir [les règles et tests](../docs/SESSION-ET-RECHERCHE.md).
   L'ouverture des périodes verrouillées et la modification des paramètres sont
   réservées à l'administrateur. Cette version doit toutefois être considérée
   comme un **prototype à valider** : les calculs et une partie des contrôles
@@ -40,6 +42,15 @@ Chaque utilisateur saisit les identifiants du compte créé sur le serveur.
   rechargez et vérifiez avant de refaire l'opération.
 - Les sauvegardes SQL contiennent des données très confidentielles et les
   empreintes des mots de passe. Chiffrez-les et limitez leur accès.
+
+## Mise à jour du paquet prêt à copier
+
+Les fichiers `wamp/Salaire_salfa` et `wamp/Salaire_salfa.zip` sont régénérés par
+`npm run package:wamp` (compilation, contrôle du bundle, copie de l’API complète,
+création et vérification du ZIP). Voir
+[COPIER-DANS-WWW.md](COPIER-DANS-WWW.md#mise-à-jour-du-12-novembre-2026) pour mettre
+à jour une installation existante **sans réimporter de SQL ni effacer la base,
+la configuration ou les sauvegardes**. Le paquet ne contient aucun secret MySQL.
 
 ## 1. Sur l'ordinateur serveur
 
@@ -268,3 +279,31 @@ recette sur une base de test avant toute utilisation réelle : import du SQL,
 connexion (sans aucune indication d'identifiant sur la page), création de
 salarié, saisie, export, conflit entre deux postes, sauvegarde/restauration
 et indisponibilité du serveur.
+
+## Administration : sauvegarder et restaurer SQL
+
+L’entrée « Importer Excel » est remplacée par **Sauvegarde et restauration SQL**.
+Le téléchargement exporte la base relationnelle et la conserve aussi sur le
+serveur si le dossier de sauvegardes est accessible en écriture. L’historique
+permet de récupérer les sauvegardes serveur.
+
+Pour restaurer, utiliser uniquement un export **complet SALFA**, `.sql` non vide,
+10 Mo maximum. Cochez l’accord de remplacement puis saisissez `RESTAURER`.
+Prévenez les autres utilisateurs et arrêtez les saisies avant cette opération.
+Les données de paie, les périodes clôturées, les congés, les paramètres et les
+en-têtes sont remplacés. Les utilisateurs et mots de passe actuels restent
+inchangés ; la restauration ne crée pas les comptes d’un autre serveur.
+
+Le serveur exige une session Administrateur et le jeton CSRF. Il verrouille la
+révision et refuse un état périmé (409). Une sauvegarde de sécurité doit être
+effectivement enregistrée sur disque avant les modifications. Les instructions
+du fichier ne sont jamais exécutées directement : seuls les littéraux des
+INSERT sur les tables SALFA autorisées sont réinsérés via PDO préparé. DDL,
+changement de base et paramètres SQL du fichier ne sont pas exécutés. Les scripts
+arbitraires, fichiers tronqués/partiels et colonnes incompatibles sont refusés.
+Une erreur annule la transaction. Après succès, cliquez sur **Recharger
+l’application** ; les autres postes doivent également recharger.
+
+Tests sans serveur MySQL : `php wamp/test-sql-restore.php` (parseur et écritures
+préparées/rollback via PDO SQLite) et `php wamp/test-validation.php`.
+Une recette sur WAMP/MySQL réel reste nécessaire avant usage en production.

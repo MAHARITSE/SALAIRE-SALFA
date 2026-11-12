@@ -1,6 +1,12 @@
 <?php
 declare(strict_types=1);
 
+// Fenêtre de présence demandée : 1 heure sans contact (secondes).
+const SALFA_DUREE_SESSION = 3600;
+function sessionPresenceValide($last, int $now): bool {
+    return is_int($last) && $last > 0 && $last <= $now && $now - $last <= SALFA_DUREE_SESSION;
+}
+
 /** Une session révoquée ou dont le rôle a changé ne doit plus autoriser d'écriture. */
 function sessionUserStillAllowed(array $sessionUser, $currentUser): bool {
     return is_array($currentUser)

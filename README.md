@@ -102,6 +102,19 @@ npm run preview        # prévisualise le build
 
 ---
 
+## Thème visuel CAISSE-SALFA
+
+L’interface après connexion reprend la palette verte, l’en-tête sur deux niveaux,
+les cartes sobres et les modes clair/sombre de **CAISSE-SALFA**. La page de
+connexion reprend également sa carte centrée, son identité SALFA et ses champs
+sobres, avec affichage/masquage du mot de passe. La version locale propose les
+comptes publics de démonstration ; la version finale WAMP ne les affiche pas. Les fonctionnalités métier et les documents
+imprimés sont conservés. Le bandeau supérieur est remplacé par des
+contrôles flottants (menu compte via la cloche, taille − / 100 % / + et thème),
+sans supprimer les onglets ni les accès administrateur. Voir [le périmètre et les vérifications](docs/THEME-CAISSE.md).
+
+---
+
 ## 🔐 Comptes par défaut & Droits d'accès
 
 | Rôle           | Identifiant | Mot de passe   | Accès autorisé                                                      |
@@ -109,11 +122,17 @@ npm run preview        # prévisualise le build
 | Administrateur | `admin`     | `admin123`     | **Accès complet** à toutes les fonctionnalités (Paie, États, Bulletins, Rapports, Administration & Congés) |
 | Comptable      | `comptable` | `comptable123` | **Permissions & Congés uniquement** (fiches d'absence, visas, suivi et état de contrôle des congés) |
 
-> 🔒 **Page de connexion :** ces identifiants ne sont **plus affichés sur la page
-> de connexion** (aucune liste de comptes, aucun pré-remplissage, aucun exemple
-> dans les champs), dans la version locale comme dans la version WAMP. En mode
-> WAMP, seuls les comptes créés sur le serveur (`setup.php` / `CREER-COMPTE.php`)
-> fonctionnent ; les comptes de démonstration ci-dessus n'y sont pas créés.
+> **Démonstration locale :** le bloc « Comptes de démonstration » propose
+> Administrateur et Comptable. Un clic remplit les champs ; il faut ensuite
+> cliquer sur « Se connecter ». Un compte modifié, désactivé ou supprimé n’est
+> plus proposé. Aucun compte personnalisé ni nouveau mot de passe n’est affiché.
+>
+> 🔒 **Version finale WAMP :** aucun compte de démonstration, identifiant,
+> mot de passe ou pré-remplissage n’est proposé sur la page de connexion.
+> Seuls les comptes créés sur le serveur fonctionnent. Le panneau et ses accès
+> publics sont supprimés du JavaScript compilé WAMP ; contrôle avec
+> `npm run test:wamp-build`. La version locale n’est pas destinée à héberger
+> publiquement de vraies données de paie.
 
 ---
 
@@ -155,36 +174,26 @@ L'affichage comptable est unifié : les montants sont **alignés à droite** et 
 valeur nulle s'affiche **`-`** au lieu de `0,00`, dans les tableaux, bulletins,
 contrats et exports Excel.
 
-## 📥 Importer votre classeur Excel (ancien ou récent : personnel + états de paie)
+## Sauvegarde et restauration SQL
 
-L'application lit directement vos fichiers **`SALAIRE_SALFA_….xlsm` / `.xlsx` / `.xls` / `.xlsb` / `.csv`**
-(100 % dans le navigateur, aucune donnée envoyée sur Internet) avec une **analyse préalable des colonnes** :
+Dans **Administration → Sauvegarde et restauration SQL** :
 
-1. Connectez-vous en tant qu'**Administrateur**, puis ouvrez le menu **Administration ▾** (en haut à droite, avec *Déconnexion*).
-2. Cliquez sur **« Importer Excel (Ancien / Récent) »**.
-3. Déposez le classeur (ancien exercice ou classeur actuel).
-4. **Onglet 1 — Analyse des champs** : inspectez comment chaque colonne du fichier est associée à sa rubrique SALFA (avec échantillons de valeurs, niveau de confiance et vérification arithmétique Base / Accessoires / Brut / Net), et réaffectez manuellement n'importe quelle colonne avant import si nécessaire.
-5. **Onglet 2 — Feuilles & Périodes** : incluez/excluez chaque feuille et corrigez si besoin son type (Personnel / État mensuel), son mois ou son année (`1995..`).
-6. Choisissez le mode :
-   - **Fusionner** (avec option **Archive historique** activée automatiquement pour les années antérieures afin de conserver vos barèmes actuels et marquer les anciens salariés sortis en *Inactif*) ;
-   - **Remplacer tout** : recharge tout depuis le fichier (les mois clôturés restent protégés).
-7. Cliquez sur **Importer**.
+- **Télécharger la sauvegarde SQL** exporte les données complètes, localement ou
+  depuis MySQL en mode WAMP. L’historique serveur permet de retélécharger les fichiers.
+- **Restaurer la sauvegarde SQL** est disponible dans la version finale WAMP.
+  Choisissez un export complet SALFA `.sql` de 10 Mo maximum, cochez l’accord
+  de remplacement puis saisissez **RESTAURER**. Après succès, rechargez l’application.
+- La restauration remplace salariés, paies (y compris clôturées), congés,
+  paramètres et en-têtes. **Les comptes et mots de passe actuels sont conservés.**
+- Une sauvegarde de sécurité sur disque est obligatoire avant toute restauration.
+  Une erreur annule la transaction ; les autres postes doivent recharger leurs données.
+- Les fichiers partiels « Congés seuls », scripts SQL arbitraires et schémas
+  incompatibles sont refusés. La démonstration locale exporte du SQL mais ne
+  restaure pas une base MySQL.
 
-Le lecteur reconnaît automatiquement :
+L’entrée d’importation Excel a été retirée de l’interface. Les exports Excel
+restent disponibles. Conservez les sauvegardes SQL dans un emplacement privé.
 
-- les feuilles de **personnel** (colonnes `MATRICULE` / `N° MAT`, `NOM ET PRENOMS`, `N° CNAPS`, `CAT`, `JOB`, `DATE EMB`, `BASE AJ`…) ;
-- les feuilles d'**état mensuel** (le mois est lu dans le nom de la feuille ou dans le titre,
-  p. ex. « PAIE JANVIER 2026 ») et toutes leurs colonnes : `BASE AJ`, `LOGT/TRSP`, `RENDEMENT`,
-  `RESP/REPRES`, `SALAIRE BRUT`, `CNaPS`, `PATRONAL`, `SAL IMPOSABLE`, `IRSA`, `SALAIRE NET`,
-  `AUGMENTATION DIVERS`, `PRIME DE GARDE`, `ANC 2`, `RISQUE`, `REPR/REC`, `ACCESSOIR`, `BRUT`,
-  `AVANCE`, `MED`, `NET`, `VIREMENT`, `ESPECES`, `RAP` ;
-- les lignes **TOTAL / TOTAUX** sont ignorées ;
-- les montants écrits à la française (`1 234,56`) et les dates (`23/08/2024`, date Excel).
-
-> Les données importées sont conservées dans le navigateur (localStorage).
-> Les données sont propres à chaque navigateur ; exportez régulièrement une sauvegarde JSON.
-
----
 
 ## 📄 État de paie mensuel (onglet 2)
 
@@ -341,6 +350,21 @@ utilisez l’ajout des salariés manquants. La modification ordinaire d’une fi
 existante reste inchangée.
 
 Vérification : `node scripts/test-duplication-employe.cjs`.
+
+### Recherche des bulletins et reprise de session
+
+Dans **Bulletins**, l’aperçu suit automatiquement la recherche : il conserve
+la sélection si elle est encore visible, sinon affiche le premier résultat.
+Sans résultat, aucun ancien bulletin ne reste sélectionné et les sorties sont
+désactivées. Le PDF, l’impression individuelle et le livret suivent les
+résultats affichés, sans modifier les montants enregistrés.
+
+Comme **CAISSE-SALFA**, chaque onglet ouvert renouvelle la présence toutes les
+**15 secondes**, avec une expiration après **1 heure sans contact**.
+Une session récente se retrouve après rechargement ou dans un nouvel onglet ;
+la déconnexion et les changements de compte invalident les anciennes vues.
+Ce n’est pas un délai d’inactivité clavier/souris. La page de connexion adopte
+le style CAISSE-SALFA sans changer les comptes ni cette règle de présence. Voir [les règles, limites et tests](docs/SESSION-ET-RECHERCHE.md).
 
 ### Saisie en lot des avances et médicaments
 

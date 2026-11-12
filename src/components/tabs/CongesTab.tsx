@@ -14,7 +14,6 @@ import { UserSession } from '../../types';
 import {
   fetchEmployes, fetchConges, fetchSituationConges, fetchEtatConges,
   creerConge, modifierConge, deciderConge, supprimerConge, saisirOuverturePremiereAnnee,
-  exporterSauvegardeSql,
 } from '../../api';
 import {
   CongeAbsence, CongesConfig, SoldeSaisie, EtatConges, MOTIFS_ABSENCE, LIBELLES_CATEGORIE,
@@ -76,7 +75,6 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
   const [chargement, setChargement] = useState(true);
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; texte: string } | null>(null);
   const [modal, setModal] = useState<{ ouvert: boolean; initial: BrouillonConge | null }>({ ouvert: false, initial: null });
-  const [exportSqlEnCours, setExportSqlEnCours] = useState(false);
   const [enteteOuvert, setEnteteOuvert] = useState(false);
   const [referentiel, setReferentiel] = useState(false);
   const [ficheImpr, setFicheImpr] = useState<CongeAbsence[]>([]);
@@ -399,39 +397,13 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
     setTimeout(() => window.print(), 120);
   };
 
-  const exporterSqlConges = async () => {
-    if (user?.role !== 'Administrateur') return;
-    setExportSqlEnCours(true);
-    setMessage(null);
-    try {
-      const resultat = await exporterSauvegardeSql({
-        type: 'CONGES',
-        periode: String(annee),
-        motif: `Sauvegarde SQL Congés & Permissions — ${annee}`,
-        telecharger: true,
-      });
-      if (!resultat.success) {
-        setMessage({ type: 'err', texte: resultat.message || 'Échec de la génération SQL Congés.' });
-        return;
-      }
-      setMessage({
-        type: 'ok',
-        texte: `Sauvegarde SQL Congés téléchargée : ${resultat.filename}${resultat.server_saved ? ' — copie archivée sur le serveur WAMP.' : '.'}`,
-      });
-    } catch (e: any) {
-      setMessage({ type: 'err', texte: e?.message || 'Échec de la génération SQL Congés.' });
-    } finally {
-      setExportSqlEnCours(false);
-    }
-  };
-
   const totalAttente = enAttente.length;
   const depassements = Object.values(soldes).filter((s) => s.restant < 0).length;
 
   return (
     <div className="conges-root space-y-3 w-full max-w-full overflow-x-hidden">
       {/* ---------------------------------------------------------------- barre d'outils */}
-      <div className="no-print bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-3">
+      <div className="no-print caisse-card bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2">
             <CalendarClock className="w-4 h-4 text-salfa-teal dark:text-sky-300" />
@@ -469,17 +441,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
             <button onClick={() => etatFiltre && exporterEtatCongesExcel(etatFiltre, annee)} disabled={!etatFiltre} className="order-5 min-h-9 flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow">
               <FileSpreadsheet className="w-4 h-4" />Excel
             </button>
-            {user?.role === 'Administrateur' && (
-              <button
-                onClick={exporterSqlConges}
-                disabled={exportSqlEnCours}
-                title="Exporte salfa_conges, salfa_employes et salfa_users sans modifier salfa_paies."
-                className="order-6 min-h-9 flex-1 sm:flex-initial bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 shadow"
-              >
-                <Download className={`w-4 h-4 ${exportSqlEnCours ? 'animate-pulse' : ''}`} />
-                {exportSqlEnCours ? 'Génération SQL…' : 'Exporter SQL Congés uniquement'}
-              </button>
-            )}
+
           </div>
         </div>
 
@@ -556,7 +518,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
       {/* ------------------------------------------------------------- vue « suivi » */}
       {vue === 'suivi' && (
         <div className="no-print space-y-3">
-          <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <section className="caisse-card bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="px-3 sm:px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-amber-600" />
               <h3 className="text-xs sm:text-sm font-bold uppercase text-slate-700 dark:text-slate-200">Demandes en attente de visa</h3>
@@ -639,7 +601,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
           </section>
 
           {/* --------------------------------------------------- salariés actuellement en congé */}
-          <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <section className="caisse-card bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="px-3 sm:px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2">
               <CalendarClock className="w-4 h-4 text-sky-600 dark:text-sky-300" />
               <h3 className="text-xs sm:text-sm font-bold uppercase text-slate-700 dark:text-slate-200">Personnes actuellement en congé</h3>
@@ -684,7 +646,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
           </section>
 
           {/* --------------------------------------------------- situation des droits */}
-          <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <section className="caisse-card bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="px-3 sm:px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2">
               <h3 className="text-xs sm:text-sm font-bold uppercase text-slate-700 dark:text-slate-200">Situation des droits — {annee}</h3>
               <span className="text-[11px] text-slate-500">({soldesListe.length} salarié(s))</span>
@@ -785,7 +747,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
           </section>
 
           {/* ------------------------------------------------------------- les fiches */}
-          <section className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <section className="caisse-card bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
             <div className="px-3 sm:px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2">
               <h3 className="text-xs sm:text-sm font-bold uppercase text-slate-700 dark:text-slate-200">Fiches d’absence — {filtre === 'A_TRAITER' ? 'à traiter' : filtre.toLowerCase()}</h3>
               <span className="text-[11px] text-slate-500">({listeFiltree.length})</span>
@@ -872,7 +834,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
 
       {/* ------------------------------------------------------------- vue « état » */}
       {vue === 'etat' && (
-        <div className="no-print bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-2 sm:p-4">
+        <div className="no-print caisse-card bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-2 sm:p-4">
           <div className="text-center mb-3 space-y-0.5">
             <div className="text-[11px] sm:text-sm font-extrabold uppercase text-salfa-dark dark:text-white">SALFA TANAMBAO — DISPENSAIRE TOBY BETELA TOLIARA</div>
             <div className="text-sm sm:text-lg font-extrabold text-salfa-dark dark:text-white">CONTRÔLE DES CONGÉS ET PERMISSIONS</div>
@@ -959,7 +921,7 @@ export const CongesTab: React.FC<YearProps & { user: UserSession }> = ({ annee, 
 // Rappell du référentiel de la fiche d'absence (droits et motifs)
 // ------------------------------------------------------------------------------
 const ReferentielAbsence: React.FC<{ config: CongesConfig; onClose: () => void }> = ({ config, onClose }) => (
-  <section className="no-print bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+  <section className="no-print caisse-card bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
     <div className="px-3 sm:px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2">
       <BookOpen className="w-4 h-4 text-salfa-teal" />
       <h3 className="text-xs sm:text-sm font-bold uppercase text-slate-700 dark:text-slate-200">Ce que prévoit la fiche d’absence</h3>

@@ -323,7 +323,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden border border-slate-200 dark:border-slate-700 modal-mobile max-h-[95dvh] flex flex-col">
+      <div className="caisse-card bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden border border-slate-200 dark:border-slate-700 modal-mobile max-h-[95dvh] flex flex-col">
         <div className="bg-salfa-dark dark:bg-slate-900 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between text-white shrink-0">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400 shrink-0" />
@@ -432,7 +432,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                   </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 overflow-hidden">
+                <div className="caisse-card bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 overflow-hidden">
                   <div className="overflow-x-auto thin-scrollbar">
                     <table className="w-full text-xs sm:text-sm min-w-[500px]">
                       <thead className="bg-slate-100 dark:bg-slate-700 text-[11px] uppercase font-bold text-slate-600 dark:text-slate-300">
@@ -460,7 +460,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                 <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">Formule actuelle : <code className="font-mono bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">IRSA = max({minIrsa}, Σ(tranches) - {deductionEnfant} × enfants)</code> — base arrondie = floor(imposable/{arrondiIrsaBase || 1})*{arrondiIrsaBase || 1}</div>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-5">
+              <div className="caisse-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-5">
                 <h5 className="text-xs sm:text-sm font-extrabold text-slate-800 dark:text-white mb-3 flex items-center gap-2"><Info className="w-4 h-4 text-salfa-teal dark:text-sky-300" />Simulateur IRSA (avec barème édité)</h5>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                   <div>
@@ -501,7 +501,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                 <div className="mt-3 p-2.5 rounded bg-white dark:bg-slate-800 border dark:border-slate-700 text-[11px] font-mono"><span className="font-bold">Formule :</span> base_revalorisée = Base × indice(années) — indice trouvé dans la tranche [min,max]</div>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 overflow-hidden">
+              <div className="caisse-card bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 overflow-hidden">
                 <div className="overflow-x-auto thin-scrollbar">
                   <table className="w-full text-xs sm:text-sm min-w-[520px]">
                     <thead className="bg-slate-100 dark:bg-slate-700 text-[11px] uppercase font-bold text-slate-600 dark:text-slate-300">
@@ -526,7 +526,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-5">
+              <div className="caisse-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 sm:p-5">
                 <h5 className="text-xs sm:text-sm font-extrabold mb-3 flex items-center gap-2"><Award className="w-4 h-4 text-amber-600" />Simulateur ancienneté</h5>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                   <div><label className="block text-[11px] font-bold mb-1 dark:text-slate-300">Base (Ar)</label><input type="number" value={baseEssai} onChange={(e) => setBaseEssai(Number(e.target.value) || 0)} className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-white px-3 py-2 text-sm font-mono font-bold" /></div>
@@ -615,7 +615,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+              <div className="caisse-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
                 <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2">
                   <h4 className="text-[11px] sm:text-xs font-extrabold text-salfa-dark dark:text-white uppercase tracking-wider">Motifs prévus par le règlement intérieur</h4>
                   <span className="text-[10px] text-slate-500">colonne « Voalazan'ny FITSIPIKA ANATINY manan-kery » de la fiche d'absence</span>
@@ -699,7 +699,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({ onClose, initialTab = 'f
               </div>
 
               {/* Champ d'import et modèles prédéfinis */}
-              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-4">
+              <div className="caisse-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
                     <div className="w-16 h-16 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center p-2 shrink-0">

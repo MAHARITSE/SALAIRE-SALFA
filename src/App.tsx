@@ -2,27 +2,31 @@
 // COMPOSANT PRINCIPAL REACT - SALFA TANAMBAO - RESPONSIVE + DARKMODE
 // Droits d'accès par rôle :
 // - Administrateur : accès complet à toutes les fonctionnalités (Paie & Congés)
-//                    + sous-menu Administration (Paramètres, Import Excel, Déconnexion)
+//                    + sous-menu Administration (Paramètres, Sauvegarde/restauration SQL, Déconnexion)
 // - Comptable      : accès exclusif aux Permissions & Congés (fiches d'absence)
 // ==============================================================================
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { UserSession } from './types';
 import { LoginModal } from './components/LoginModal';
+import { ApplicationHeader, PageHeading } from './components/ApplicationHeader';
+import { ControlesFlottants } from './components/ControlesFlottants';
 import { AdminModal, AdminTabKey } from './components/AdminModal';
-import { ImportExcelModal } from './components/ImportExcelModal';
+import { SauvegardeSqlModal } from './components/SauvegardeSqlModal';
 import { UsersSettingsModal } from './components/UsersSettingsModal';
 import { InactifsModal } from './components/InactifsModal';
 import { SalariesSaisieTab } from './components/tabs/SalariesSaisieTab';
 import { BulletinsTab } from './components/tabs/BulletinsTab';
 import { RapportsTab } from './components/tabs/RapportsTab';
 import { CongesTab } from './components/tabs/CongesTab';
-import { initTheme, applyThemeClass, storeTheme, ThemeMode } from './local/theme';
+import { getStoredTheme, getSystemPrefersDark, applyThemeClass, storeTheme, ThemeMode } from './local/theme';
 import { loadConfig } from './local/config';
 import { applyAppFavicon } from './local/favicon';
-import { apiLogout } from './api';
+import { apiLogout, apiRestoreSession, apiVerifySession, apiForgetSession } from './api';
+import { CLE_SESSION_PRESENCE, INTERVALLE_PRESENCE_MS, lirePresenceLocale } from './local/session';
+import { WAMP } from './runtime';
 import {
   Users, FileText, BarChart3, CheckCircle2, LogOut,
-  CalendarCheck2, ShieldCheck, Moon, Sun, Upload, ChevronDown, Settings, Sliders, User, UserX, Image as ImageIcon,
+  CalendarCheck2, Bell, ShieldCheck, ChevronDown, Database, Settings, Sliders, UserX, Image as ImageIcon,
 } from 'lucide-react';
 import { AppTab, estRoleAdmin } from './local/roles';
 
@@ -31,23 +35,23 @@ export const App: React.FC = () => {
   const [annee, setAnnee] = useState(() => new Date().getFullYear());
   const [activeTab, setActiveTab] = useState<AppTab>('salaries');
   const [showLogin, setShowLogin] = useState(true);
+  const [verificationSession, setVerificationSession] = useState(true);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminInitialTab, setAdminInitialTab] = useState<AdminTabKey>('formules');
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showInactifsModal, setShowInactifsModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
+  const [showSqlModal, setShowSqlModal] = useState(false);
   const [showAdminMenu, setShowAdminMenu] = useState(false);
-  const [importedMois, setImportedMois] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>('light');
+  // Lire la préférence dès le premier rendu : un effet initial « light » ne doit
+  // pas écraser le thème sombre, notamment lors du double montage StrictMode.
+  const [theme, setTheme] = useState<ThemeMode>(() => getStoredTheme() ?? (getSystemPrefersDark() ? 'dark' : 'light'));
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const estAdmin = estRoleAdmin(user?.role);
 
   useEffect(() => {
-    const t = initTheme();
-    setTheme(t);
     applyAppFavicon();
   }, []);
 
@@ -68,7 +72,8 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (!showAdminMenu) return;
     const handlePointerDown = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
+          !(e.target instanceof Element && e.target.closest('[aria-controls="administration-menu"]'))) {
         setShowAdminMenu(false);
       }
     };
@@ -89,23 +94,81 @@ export const App: React.FC = () => {
       if (activeTab !== 'conges') setActiveTab('conges');
       if (showAdminModal) setShowAdminModal(false);
       if (showUsersModal) setShowUsersModal(false);
-      if (showImportModal) setShowImportModal(false);
+      if (showSqlModal) setShowSqlModal(false);
     }
-  }, [user, activeTab, showAdminModal, showUsersModal, showImportModal]);
+  }, [user, activeTab, showAdminModal, showUsersModal, showSqlModal]);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  const handleLoginSuccess = (usr: UserSession) => {
+  const handleLoginSuccess = useCallback((usr: UserSession) => {
     setUser(usr);
     setShowAdminMenu(false);
     setShowAdminModal(false);
     setShowUsersModal(false);
-    setShowImportModal(false);
+    setShowSqlModal(false);
     setActiveTab(usr.role === 'Administrateur' ? 'salaries' : 'conges');
+    setShowInactifsModal(false);
     setShowLogin(false);
-  };
+  }, []);
+
+  const revenirConnexion = useCallback(() => {
+    // Invalider ce poste n'envoie pas de logout : un autre onglet a pu changer de compte.
+    apiForgetSession();
+    setUser(null);
+    setShowAdminMenu(false);
+    setShowAdminModal(false);
+    setShowUsersModal(false);
+    setShowInactifsModal(false);
+    setShowSqlModal(false);
+    setActiveTab('salaries');
+    setShowLogin(true);
+  }, []);
+
+  useEffect(() => {
+    let actif = true;
+    apiRestoreSession()
+      .then(usr => { if (actif) { if (usr) handleLoginSuccess(usr); else revenirConnexion(); } })
+      .catch(() => { if (actif) revenirConnexion(); })
+      .finally(() => { if (actif) setVerificationSession(false); });
+    return () => { actif = false; };
+  }, [handleLoginSuccess, revenirConnexion]);
+
+  // Comme CAISSE-SALFA : chaque onglet ouvert renouvelle la présence toutes les
+  // 15 s. Vérifier aussi au retour sur un onglet suspendu, sans ressusciter la session.
+  useEffect(() => {
+    if (!user || verificationSession) return;
+    let actif = true;
+    let enCours = false;
+    const verifier = async () => {
+      if (enCours) return;
+      enCours = true;
+      try {
+        const etat = await apiVerifySession(user);
+        if (actif && !etat) revenirConnexion();
+      } catch { /* Une panne réseau n'est pas une déconnexion confirmée. */ }
+      finally { enCours = false; }
+    };
+    const timer = window.setInterval(() => { void verifier(); }, INTERVALLE_PRESENCE_MS);
+    const reprise = () => { if (document.visibilityState === 'visible') void verifier(); };
+    const changementSession = (event: StorageEvent) => {
+      if (WAMP || (event.key !== CLE_SESSION_PRESENCE && event.key !== null)) return;
+      // Ne pas réécrire chaque heartbeat reçu : cela créerait un écho entre onglets.
+      const presence = lirePresenceLocale();
+      if (!presence || presence.id !== user.id) revenirConnexion();
+    };
+    document.addEventListener('visibilitychange', reprise);
+    window.addEventListener('focus', reprise);
+    window.addEventListener('storage', changementSession);
+    return () => {
+      actif = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', reprise);
+      window.removeEventListener('focus', reprise);
+      window.removeEventListener('storage', changementSession);
+    };
+  }, [user?.id, user?.role, verificationSession, revenirConnexion]);
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -113,12 +176,7 @@ export const App: React.FC = () => {
     setLoggingOut(true);
     try {
       await apiLogout();
-      setUser(null);
-      setShowAdminModal(false);
-      setShowUsersModal(false);
-      setShowImportModal(false);
-      setActiveTab('salaries');
-      setShowLogin(true);
+      revenirConnexion();
     } catch {
       window.alert('Déconnexion non confirmée par le serveur. Vérifiez la connexion et réessayez.');
     } finally {
@@ -127,8 +185,11 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] flex flex-col bg-slate-100 dark:bg-slate-900 font-sans text-slate-900 dark:text-slate-100 w-full max-w-[100vw] overflow-x-hidden transition-colors">
-      {showLogin && (
+    <div className={`${user && !loggingOut ? 'theme-caisse' : ''} min-h-screen min-h-[100dvh] flex flex-col bg-slate-100 dark:bg-slate-900 font-sans text-slate-900 dark:text-slate-100 w-full max-w-[100vw] overflow-x-hidden transition-colors`}>
+      {verificationSession && (
+        <div role="status" className="min-h-screen flex items-center justify-center text-sm text-slate-500 dark:text-slate-400">Vérification de la session…</div>
+      )}
+      {showLogin && !verificationSession && (
         <LoginModal
           onSuccess={handleLoginSuccess}
           theme={theme}
@@ -161,41 +222,25 @@ export const App: React.FC = () => {
         />
       )}
 
-      {showImportModal && estAdmin && (
-        <ImportExcelModal
-          anneeDefaut={annee}
-          onClose={() => {
-            setShowImportModal(false);
-            setRefreshKey((k) => k + 1);
-          }}
-          onImported={(rap) => {
-            const derniere = rap.periodes[rap.periodes.length - 1];
-            if (derniere) {
-              setAnnee(derniere.annee);
-              setImportedMois(derniere.mois);
-            }
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('salfa-annees-updated'));
-            }
-            setRefreshKey((k) => k + 1);
-          }}
-        />
+      {showSqlModal && estAdmin && (
+        <SauvegardeSqlModal onClose={() => setShowSqlModal(false)} />
       )}
 
       {user && !loggingOut && (
         <>
-          {/* Navigation onglets + Sous-menu Administration */}
-          <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm sticky top-0 z-40 no-print w-full max-w-[100vw] transition-colors">
-            <div className="w-full max-w-[1920px] mx-auto px-2 xs:px-3 sm:px-6 lg:px-8 flex items-center gap-2">
-              <nav className="flex-1 min-w-0 flex gap-1.5 sm:gap-3 lg:gap-5 overflow-x-auto no-scrollbar py-2 sm:py-2.5 scroll-smooth snap-x">
+          <a href="#contenu-principal" className="caisse-skip-link no-print">Aller au contenu principal</a>
+          <ApplicationHeader
+            navigation={(
+              <nav aria-label="Navigation principale" className="caisse-navigation no-scrollbar">
                 {estAdmin && (
                   <>
                     <button
                       onClick={() => setActiveTab('salaries')}
-                      className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] xs:text-xs sm:text-sm font-bold whitespace-nowrap transition snap-start shrink-0 ${
+                      aria-current={activeTab === 'salaries' ? 'page' : undefined}
+                      className={`caisse-nav-link ${
                         activeTab === 'salaries'
-                          ? 'bg-salfa-dark dark:bg-slate-700 text-white shadow-md'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white bg-slate-50 dark:bg-slate-700/50 sm:bg-transparent'
+                          ? 'caisse-nav-active'
+                          : ''
                       }`}
                     >
                       <Users className="w-4 h-4 shrink-0" />
@@ -205,10 +250,11 @@ export const App: React.FC = () => {
 
                     <button
                       onClick={() => setActiveTab('bulletins')}
-                      className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] xs:text-xs sm:text-sm font-bold whitespace-nowrap transition snap-start shrink-0 ${
+                      aria-current={activeTab === 'bulletins' ? 'page' : undefined}
+                      className={`caisse-nav-link ${
                         activeTab === 'bulletins'
-                          ? 'bg-salfa-dark dark:bg-slate-700 text-white shadow-md'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white bg-slate-50 dark:bg-slate-700/50 sm:bg-transparent'
+                          ? 'caisse-nav-active'
+                          : ''
                       }`}
                     >
                       <FileText className="w-4 h-4 shrink-0" />
@@ -218,10 +264,11 @@ export const App: React.FC = () => {
 
                     <button
                       onClick={() => setActiveTab('rapports')}
-                      className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] xs:text-xs sm:text-sm font-bold whitespace-nowrap transition snap-start shrink-0 ${
+                      aria-current={activeTab === 'rapports' ? 'page' : undefined}
+                      className={`caisse-nav-link ${
                         activeTab === 'rapports'
-                          ? 'bg-salfa-dark dark:bg-slate-700 text-white shadow-md'
-                          : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white bg-slate-50 dark:bg-slate-700/50 sm:bg-transparent'
+                          ? 'caisse-nav-active'
+                          : ''
                       }`}
                     >
                       <BarChart3 className="w-4 h-4 shrink-0" />
@@ -233,10 +280,11 @@ export const App: React.FC = () => {
 
                 <button
                   onClick={() => setActiveTab('conges')}
-                  className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] xs:text-xs sm:text-sm font-bold whitespace-nowrap transition snap-start shrink-0 ${
+                  aria-current={activeTab === 'conges' ? 'page' : undefined}
+                  className={`caisse-nav-link ${
                     activeTab === 'conges' || !estAdmin
-                      ? 'bg-salfa-dark dark:bg-slate-700 text-white shadow-md'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white bg-slate-50 dark:bg-slate-700/50 sm:bg-transparent'
+                      ? 'caisse-nav-active'
+                      : ''
                   }`}
                 >
                   <CalendarCheck2 className="w-4 h-4 shrink-0" />
@@ -250,40 +298,30 @@ export const App: React.FC = () => {
                   )}
                 </button>
               </nav>
-
-              {/* Sous-menu Administration (ou Compte) + Thème */}
-              <div className="shrink-0 flex items-center gap-1.5 sm:gap-2">
-                <button
-                  type="button"
-                  onClick={toggleTheme}
-                  className="p-2 rounded-xl text-slate-600 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition"
-                  title="Changer le thème clair / sombre"
-                  aria-label="Changer thème"
-                >
-                  {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                </button>
-
+            )}
+            actions={(
+              <div className="caisse-toolbar flex shrink-0 items-center">
                 <div ref={menuRef} className="relative">
                   <button
                     type="button"
                     onClick={() => setShowAdminMenu((v) => !v)}
                     aria-expanded={showAdminMenu}
                     aria-haspopup="menu"
-                    className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-xl text-xs font-bold border transition shadow-sm ${
-                      estAdmin
-                        ? 'bg-salfa-dark dark:bg-slate-700 hover:bg-salfa-teal dark:hover:bg-slate-600 text-white border-transparent'
-                        : 'bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/50 text-sky-900 dark:text-sky-200 border-sky-200 dark:border-sky-800'
-                    }`}
+                    aria-label={estAdmin ? 'Administration' : 'Compte Comptable'}
+                    aria-controls="administration-menu"
+                    className="caisse-administration-button flex shrink-0 items-center gap-1.5 rounded-xl bg-[#1e3a5f] px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-[#284b76]"
                   >
-                    {estAdmin ? <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-300" /> : <User className="w-4 h-4 shrink-0" />}
-                    <span className="hidden xs:inline">{estAdmin ? 'Administration' : 'Comptable'}</span>
-                    <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${showAdminMenu ? 'rotate-180' : ''}`} />
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-200" aria-hidden="true" />
+                    <span>{estAdmin ? 'Administration' : 'Comptable'}</span>
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   </button>
 
                   {showAdminMenu && (
                     <div
                       role="menu"
-                      className="absolute right-0 mt-2 w-72 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xl py-1.5 z-50"
+                      id="administration-menu"
+                      aria-label="Compte et administration"
+                      className="administration-menu absolute rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xl py-1.5 z-50"
                     >
                       <div className="px-3.5 py-2 border-b border-slate-100 dark:border-slate-700">
                         <div className="text-xs font-bold text-slate-800 dark:text-white truncate">
@@ -367,14 +405,14 @@ export const App: React.FC = () => {
                             role="menuitem"
                             onClick={() => {
                               setShowAdminMenu(false);
-                              setShowImportModal(true);
+                              setShowSqlModal(true);
                             }}
                             className="w-full px-3.5 py-2.5 text-left text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-2.5 transition"
                           >
-                            <Upload className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <Database className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                             <div>
-                              <div>Importer Excel (Ancien / Récent)</div>
-                              <div className="text-[10px] font-normal text-slate-400">Analyse et placement des champs</div>
+                              <div>Sauvegarde et restauration SQL</div>
+                              <div className="text-[10px] font-normal text-slate-400">Exporter et restaurer une sauvegarde complète</div>
                             </div>
                           </button>
                         </div>
@@ -397,10 +435,19 @@ export const App: React.FC = () => {
                   )}
                 </div>
               </div>
-            </div>
-          </div>
+            )}
+          />
 
-          <main className="flex-1 w-full max-w-[1920px] mx-auto px-2 xs:px-3 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6 overflow-x-hidden">
+          <ControlesFlottants theme={theme} toggleTheme={toggleTheme} actions={(
+            <button type="button" className="controle-rond" aria-label="Compte et administration" title="Compte et administration"
+              aria-controls="administration-menu" aria-haspopup="menu" aria-expanded={showAdminMenu}
+              onClick={() => setShowAdminMenu(v => !v)}>
+              <Bell className="h-[17px] w-[17px]" aria-hidden="true" />
+            </button>
+          )} />
+
+          <main id="contenu-principal" tabIndex={-1} className="caisse-main flex-1 w-full max-w-[1920px] mx-auto px-2 xs:px-3 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6 overflow-x-hidden">
+            <PageHeading onglet={estAdmin ? activeTab : 'conges'} />
             <div className="w-full max-w-full overflow-x-hidden">
               {estAdmin ? (
                 <>
@@ -410,7 +457,6 @@ export const App: React.FC = () => {
                       annee={annee}
                       setAnnee={setAnnee}
                       refreshKey={refreshKey}
-                      importedMois={importedMois}
                     />
                   )}
                   {activeTab === 'bulletins' && <BulletinsTab key={`bul-${refreshKey}`} annee={annee} setAnnee={setAnnee} />}
@@ -423,7 +469,7 @@ export const App: React.FC = () => {
             </div>
           </main>
 
-          <footer className="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 py-2.5 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 no-print w-full max-w-[100vw] overflow-hidden transition-colors">
+          <footer className="caisse-footer bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 py-2.5 sm:py-3 px-2 sm:px-4 text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 no-print w-full max-w-[100vw] overflow-hidden transition-colors">
             <div className="w-full max-w-[1920px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-1.5 sm:gap-2">
               <div className="flex items-center gap-1.5 font-medium text-center sm:text-left">
                 <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" />

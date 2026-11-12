@@ -1,9 +1,13 @@
 // API locale ou WAMP : mêmes fonctions de calcul, persistance MySQL transactionnelle en mode WAMP.
 import * as local from './api-local';
 import { WAMP } from './runtime';
+import type { UserSession } from './types';
+import { memoriserPresenceLocale, oublierPreuvePresenceLocale } from './local/session';
 import {
   remoteLogin,
   remoteLogout,
+  remoteSession,
+  remoteForgetSession,
   remoteHealth,
   remoteRead,
   remoteWrite,
@@ -14,6 +18,7 @@ import {
   remoteUsersToggle,
   remoteUsersDelete,
   remoteExportSqlBackup,
+  remoteRestoreSqlBackup,
   remoteListSqlBackups,
   remoteDownloadSqlBackupFile,
 } from './wampClient';
@@ -38,12 +43,37 @@ export type { CongeImportLigne, CongeImportRapport, AnalyseControleConges } from
 export const apiLogin: typeof local.apiLogin = async (u, p) => {
   const user = WAMP ? await remoteLogin(u, p) : await local.apiLogin(u, p);
   local.setSessionLocale(user);
+  if (!WAMP && user) {
+    if (!memoriserPresenceLocale(user.id)) {
+      local.apiLogoutLocal();
+      throw new Error('Le navigateur bloque le stockage de session. Autorisez le stockage du site puis réessayez.');
+    }
+  }
   return user;
 };
 export const apiLogout = async (): Promise<void> => {
   if (WAMP) await remoteLogout();
+  if (!WAMP) memoriserPresenceLocale(null);
   local.apiLogoutLocal();
 };
+/** Reprise d'une session récente dans un nouvel onglet ou après actualisation. */
+export async function apiRestoreSession(): Promise<UserSession | null> {
+  const user = WAMP ? await remoteSession() : local.restaurerSessionLocale();
+  local.setSessionLocale(user);
+  return user;
+}
+
+export async function apiVerifySession(attendu: UserSession): Promise<UserSession | null> {
+  return WAMP ? remoteSession(attendu) : local.restaurerSessionLocale(attendu);
+}
+
+/** Invalidation de la vue courante, sans effacer la session d'un autre onglet. */
+export function apiForgetSession(): void {
+  local.apiLogoutLocal();
+  if (!WAMP) oublierPreuvePresenceLocale();
+  if (WAMP) remoteForgetSession();
+}
+
 export const checkHealth: typeof local.checkHealth = () => WAMP ? remoteHealth() : local.checkHealth();
 export const fetchEmployes: typeof local.fetchEmployes = (...args) => WAMP ? remoteRead(() => local.fetchEmployes(...args)) : local.fetchEmployes(...args);
 export const fetchEmployePaies: typeof local.fetchEmployePaies = (...args) => WAMP ? remoteRead(() => local.fetchEmployePaies(...args)) : local.fetchEmployePaies(...args);
@@ -129,3 +159,8 @@ export const fetchHistoriqueSauvegardesSql: typeof local.fetchHistoriqueSauvegar
 export const telechargerSauvegardeSqlServeur = async (filename: string): Promise<{ success: boolean; message?: string }> =>
   WAMP ? remoteDownloadSqlBackupFile(filename) : { success: false, message: 'Disponible uniquement sur serveur WAMP.' };
 
+
+export async function restaurerSauvegardeSql(sql: string, confirmation: string): Promise<{ success: boolean; message: string; backup: string }> {
+  if (!WAMP) throw new Error('La restauration SQL est disponible dans la version finale WAMP uniquement.');
+  return remoteRestoreSqlBackup(sql, confirmation);
+}

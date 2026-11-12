@@ -226,7 +226,7 @@ export const SaisieLotModal: React.FC<Props> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="saisie-lot-title"
-        className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[95dvh] flex flex-col overflow-hidden border dark:border-slate-600"
+        className="caisse-card bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[95dvh] flex flex-col overflow-hidden border dark:border-slate-600"
       >
         {/* En-tête */}
         <div

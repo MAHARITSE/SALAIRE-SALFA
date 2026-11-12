@@ -1,7 +1,7 @@
 # Application prête à copier (sans Node.js)
 
 Le dossier **`wamp/Salaire_salfa/`** contient l'application **déjà compilée**
-(`index.html` + `assets/`) et l'API (`api/index.php`, `api/validation.php`).
+(`index.html` + `assets/`) et l’API complète, y compris `api/sqlRestore.php`.
 Aucun Node.js / npm n'est nécessaire sur le serveur.
 
 ## Installation sur le serveur WampServer
@@ -31,6 +31,44 @@ Les futurs mois créés dans l’application restent ouverts jusqu’à leur cl�
 
 Ne copiez dans `www` **que** le dossier `Salaire_salfa` prêt à l'emploi :
 jamais le dossier `wamp\` complet, ni le fichier SQL, ni `salfa-config.php`.
+
+## Mise à jour du 12 novembre 2026
+
+Le dossier et le ZIP incluent les dernières modifications :
+
+- page **Connexion à la Paie et Congé**, avec l’icône de l’application ;
+- nouvelle présentation, contrôles flottants de taille et de thème, et bouton
+  **Administration** à droite des onglets ;
+- bouton **Exporter SQL Congés uniquement** retiré de l’onglet Congés ;
+- **Sauvegarde et restauration SQL** dans Administration, à la place de
+  l’importation Excel ; confirmation et sauvegarde de sécurité avant restauration,
+  avec conservation des comptes et mots de passe actuels ;
+- recherche des bulletins synchronisée avec aperçu, PDF et impression ;
+- duplication d’un salarié avec deux confirmations ;
+- session WAMP : contact toutes les **15 secondes**, expiration après
+  **1 heure sans contact**, reprise au rechargement et vérification du compte
+  par PHP. Les comptes de démonstration ne sont pas affichés dans cette version.
+
+### Mettre à jour une installation existante sans perdre les données
+
+1. Effectuer une sauvegarde SQL et conserver une copie du dossier de l’application.
+2. Prévenir les utilisateurs et interrompre les saisies pendant la copie.
+3. Décompresser le nouveau `Salaire_salfa.zip` dans un dossier temporaire.
+4. Copier le contenu de son dossier `Salaire_salfa` **dans**
+   `C:\wamp64\www\Salaire_salfa`, en remplaçant les fichiers existants.
+   **Copier aussi tout le dossier `api`, notamment `sqlRestore.php`, et les
+   fichiers cachés `.htaccess` et `.user.ini`.** Ne pas seulement remplacer `index.html`.
+5. Conserver `C:\wamp64\salfa-config.php`, la base MySQL et les sauvegardes
+   `C:\wamp64\salfa-backups`. Si d’anciennes sauvegardes sont dans le sous-dossier
+   `Salaire_salfa\backups`, le conserver également. **Ne réimporter aucun SQL
+   d’initialisation pour cette mise à jour.**
+6. Ouvrir l’application avec **Ctrl+F5**, puis se reconnecter. Si PHP conserve une
+   ancienne version en cache (OPcache), redémarrer Apache depuis WampServer.
+
+`VERSION-WAMP.json` indique la date de construction et les empreintes SHA-256 des
+fichiers fournis. Ce fichier permet d’identifier le paquet, pas de garantir qu’une
+recette MySQL a été réalisée. Vérifier sur le serveur le renouvellement de session
+et faire une recette de restauration sur une copie de la base avant la production.
 
 ## Mise à jour du 8 novembre 2026
 
@@ -130,9 +168,8 @@ La base MySQL et la configuration du serveur ne sont pas contenues dans le ZIP.
 ## Régénérer le dossier après une modification du code (poste de développement)
 
 ```bat
-npx vite build --mode wamp
-xcopy /E /I /Y dist\* wamp\Salaire_salfa\
-xcopy /E /I /Y wamp\api\* wamp\Salaire_salfa\api\
+npm ci
+npm run package:wamp
 ```
 
 (ou relancer `wamp/INSTALLER-SERVEUR.bat` sur un poste où Node.js est installé :

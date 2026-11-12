@@ -1,13 +1,22 @@
 // ==============================================================================
 // LOGIN MODAL - SALFA TANAMBAO - RESPONSIVE + DARKMODE + AUTO-SETUP WAMP
 // ==============================================================================
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserSession } from '../types';
 import { apiLogin } from '../api';
 import { remoteSetupDb } from '../wampClient';
-import { Lock, AlertCircle, Moon, Sun, Database, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, Moon, Sun, Database, CheckCircle2, LogIn, KeyRound, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { ThemeMode } from '../local/theme';
 import { WAMP } from '../runtime';
+import { DEFAULT_APP_ICON, getCachedFavicon } from '../local/favicon';
+import { listerComptesDemoLocaux, type CompteDemoLocal } from '../local/comptesDemo';
+import { ComptesDemoPanel } from './ComptesDemoPanel';
+
+// Même palette et mêmes champs sobres que CAISSE-SALFA, sans reprendre ses
+// comptes métier de la caisse ni changer l'authentification de la paie.
+const CHAMP = 'w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm transition-colors placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-brand-400 dark:focus:ring-brand-950';
+const LIBELLE = 'mb-1.5 block text-xs sm:text-[13px] font-semibold text-slate-700 dark:text-slate-300';
+const PRIMAIRE = 'inline-flex items-center justify-center gap-2 rounded-lg bg-brand-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:bg-brand-600 dark:hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed';
 
 interface LoginModalProps {
   onSuccess: (user: UserSession) => void;
@@ -16,11 +25,12 @@ interface LoginModalProps {
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggleTheme }) => {
-  // Aucune indication d'identifiant ou de mot de passe n'est affichée sur la page
-  // de connexion : pas de liste de comptes, pas de pré-remplissage, pas d'exemple.
-  // Les champs démarrent toujours vides, dans les deux modes (local et WAMP).
+  // Les champs démarrent vides. En local seulement, les accès publics de démo
+  // peuvent être remplis par clic ; aucune liste de comptes en version WAMP.
+  const [iconeApp, setIconeApp] = useState(() => getCachedFavicon() || DEFAULT_APP_ICON);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [afficherMotDePasse, setAfficherMotDePasse] = useState(false);
   const [error, setError] = useState('');
   const [infoOk, setInfoOk] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,6 +43,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggle
   const [dbUser, setDbUser] = useState('root');
   const [dbPassword, setDbPassword] = useState('');
   const [savingDb, setSavingDb] = useState(false);
+  const [comptesDemo, setComptesDemo] = useState<CompteDemoLocal[]>([]);
+
+  useEffect(() => {
+    if (WAMP) return; // Supprimé du bundle final WAMP, y compris les accès de démo.
+    const actualiser = () => setComptesDemo(listerComptesDemoLocaux());
+    actualiser();
+    const changementComptes = (event: StorageEvent) => {
+      if (event.key === 'salfa_paie_store_v1' || event.key === null) actualiser();
+    };
+    window.addEventListener('storage', changementComptes);
+    return () => window.removeEventListener('storage', changementComptes);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,177 +108,176 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onSuccess, theme, toggle
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-700 modal-mobile transition-colors">
-        <div className="bg-salfa-dark dark:bg-slate-900 p-4 sm:p-6 text-white text-center relative">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="absolute top-3 right-3 p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition"
-            title="Changer thème"
-          >
-            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-          <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-salfa-teal/30 mb-2 sm:mb-3">
-            <Lock className="w-5 h-5 sm:w-6 sm:h-6 text-sky-300" />
-          </div>
-          <h2 className="text-base sm:text-xl font-bold">CLINIQUE SALFA TANAMBAO</h2>
-          <p className="text-[11px] sm:text-xs text-slate-300 mt-1 px-2">
-            Gestion de la Paie &amp; des Congés — Authentification{' '}
-            <span className="text-sky-300">{WAMP ? '(serveur réseau)' : '(100% Local)'}</span>
-          </p>
-        </div>
-
-        <div className="p-4 sm:p-6">
-          {!WAMP && (
-            <div className="mb-3 flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1.5 rounded-lg">
-              <Lock className="w-3.5 h-3.5 shrink-0" />
-              <span className="font-semibold">Mode 100% local</span>
-              <span className="hidden xs:inline text-emerald-600 dark:text-emerald-400">
-                — données dans ce navigateur
-              </span>
+    <main aria-labelledby="connexion-title" className="login-page no-print [color-scheme:light] dark:[color-scheme:dark] flex min-h-screen min-h-[100dvh] w-full items-center justify-center bg-slate-50 px-4 py-10 text-slate-800 transition-colors dark:bg-slate-950 dark:text-slate-100">
+      <div className="w-full max-w-md">
+        <section className="login-card space-y-4 rounded-xl border border-slate-200 bg-white p-5 sm:p-7 shadow-[0_1px_3px_0_rgb(15_23_42/0.025)] dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-3">
+              <img
+                src={iconeApp}
+                alt="Icône de l’application"
+                className="h-11 w-11 shrink-0 rounded-xl object-contain"
+                onError={() => { if (iconeApp !== DEFAULT_APP_ICON) setIconeApp(DEFAULT_APP_ICON); }}
+              />
+              <div className="min-w-0">
+                <p className="text-lg font-extrabold leading-none tracking-tight text-brand-950 dark:text-brand-300">SALFA</p>
+                <p className="mt-1 text-[10px] sm:text-[11px] uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">CLINIQUE SALFA TANAMBAO</p>
+              </div>
             </div>
-          )}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              title="Changer le thème clair / sombre"
+              aria-label="Changer thème"
+            >
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
+            <h1 id="connexion-title" className="flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-slate-100">
+              <LogIn className="h-5 w-5 text-brand-700 dark:text-brand-400" aria-hidden="true" />
+              Connexion à la Paie et Congé
+            </h1>
+            <p className="mt-1 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+              Ouvrez la session avec votre compte : chaque rôle retrouve ses pages.
+            </p>
+          </div>
 
           {infoOk && (
-            <div className="mb-4 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+            <div role="status" className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{infoOk}</span>
             </div>
           )}
 
-          {error && (
-            <div className="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
           {WAMP && needsDbSetup ? (
-            <form onSubmit={handleSetupDb} className="space-y-3 border border-sky-200 dark:border-sky-800 bg-sky-50/50 dark:bg-slate-700/40 rounded-xl p-3.5">
-              <div className="flex items-center gap-2 text-xs font-bold text-salfa-dark dark:text-sky-200">
-                <Database className="w-4 h-4 text-salfa-teal" />
-                <span>Configuration MySQL WampServer</span>
-              </div>
-              <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
-                Indiquez les identifiants MySQL de votre WampServer (par défaut : utilisateur <b>root</b>, mot de passe vide). La base <b>salfa_paie</b> sera créée automatiquement.
+            <form onSubmit={handleSetupDb} className="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" aria-labelledby="mysql-title" aria-busy={savingDb}>
+              <h2 id="mysql-title" className="flex items-center gap-2 text-sm font-semibold">
+                <Database className="h-4 w-4 shrink-0" aria-hidden="true" />
+                Configuration MySQL WampServer
+              </h2>
+              <p className="text-xs leading-relaxed">
+                Indiquez les accès MySQL de votre WampServer. La base <b>salfa_paie</b> sera créée automatiquement.
               </p>
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
-                  <label className="block text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300 mb-0.5">Hôte MySQL</label>
-                  <input
-                    type="text"
-                    value={dbHost}
-                    onChange={(e) => setDbHost(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2.5 py-1.5 text-xs dark:text-white"
-                  />
+                  <label htmlFor="db-host" className={LIBELLE}>Hôte MySQL</label>
+                  <input id="db-host" type="text" value={dbHost} onChange={e => setDbHost(e.target.value)} className={`${CHAMP} !py-1.5 !text-xs`} spellCheck={false} />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300 mb-0.5">Port</label>
-                  <input
-                    type="number"
-                    value={dbPort}
-                    onChange={(e) => setDbPort(Number(e.target.value) || 3306)}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2.5 py-1.5 text-xs dark:text-white"
-                  />
+                  <label htmlFor="db-port" className={LIBELLE}>Port</label>
+                  <input id="db-port" type="number" value={dbPort} onChange={e => setDbPort(Number(e.target.value) || 3306)} className={`${CHAMP} !py-1.5 !text-xs`} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300 mb-0.5">Base de données</label>
-                  <input
-                    type="text"
-                    value={dbName}
-                    onChange={(e) => setDbName(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2.5 py-1.5 text-xs dark:text-white"
-                  />
+                  <label htmlFor="db-name" className={LIBELLE}>Base de données</label>
+                  <input id="db-name" type="text" value={dbName} onChange={e => setDbName(e.target.value)} className={`${CHAMP} !py-1.5 !text-xs`} spellCheck={false} />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300 mb-0.5">Utilisateur MySQL</label>
-                  <input
-                    type="text"
-                    value={dbUser}
-                    onChange={(e) => setDbUser(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2.5 py-1.5 text-xs dark:text-white"
-                  />
+                  <label htmlFor="db-user" className={LIBELLE}>Utilisateur MySQL</label>
+                  <input id="db-user" type="text" value={dbUser} onChange={e => setDbUser(e.target.value)} className={`${CHAMP} !py-1.5 !text-xs`} spellCheck={false} />
                 </div>
               </div>
               <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-600 dark:text-slate-300 mb-0.5">Mot de passe MySQL (laisser vide si aucun)</label>
-                <input
-                  type="password"
-                  value={dbPassword}
-                  onChange={(e) => setDbPassword(e.target.value)}
-                  placeholder="Vide par défaut sur WampServer"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-2.5 py-1.5 text-xs dark:text-white"
-                />
+                <label htmlFor="db-password" className={LIBELLE}>Mot de passe MySQL (vide si aucun)</label>
+                <input id="db-password" type="password" value={dbPassword} onChange={e => setDbPassword(e.target.value)} autoComplete="off" className={`${CHAMP} !py-1.5 !text-xs`} />
               </div>
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setNeedsDbSetup(false)}
-                  className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700"
-                >
+              {error && (
+                <p role="alert" className="flex items-start gap-2 rounded-lg bg-rose-100/80 p-3 text-xs text-rose-900 dark:bg-rose-950/60 dark:text-rose-200">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span>{error}</span>
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button type="button" onClick={() => setNeedsDbSetup(false)} disabled={savingDb} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-white disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
                   Retour
                 </button>
-                <button
-                  type="submit"
-                  disabled={savingDb}
-                  className="flex-1 bg-salfa-teal hover:bg-salfa-dark text-white font-bold py-2 px-3 rounded-lg text-xs transition disabled:opacity-50"
-                >
-                  {savingDb ? 'Configuration en cours...' : 'Enregistrer & Connecter MySQL'}
+                <button type="submit" disabled={savingDb} className={`${PRIMAIRE} flex-1 !text-xs`}>
+                  {savingDb ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Database className="h-4 w-4" aria-hidden="true" />}
+                  {savingDb ? 'Configuration en cours…' : 'Enregistrer & Connecter MySQL'}
                 </button>
               </div>
             </form>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" aria-busy={loading}>
               <div>
-                <label className="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
-                  Nom d'utilisateur
-                </label>
+                <label htmlFor="login-username" className={LIBELLE}>Identifiant</label>
                 <input
+                  id="login-username"
+                  name="username"
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={e => setUsername(e.target.value)}
                   autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  autoFocus
                   required
-                  placeholder="Nom d'utilisateur"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-salfa-teal focus:outline-none dark:text-white"
+                  className={CHAMP}
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
-                  Mot de passe
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2.5 sm:py-2 text-sm focus:ring-2 focus:ring-salfa-teal focus:outline-none dark:text-white"
-                  required
-                  autoComplete="current-password"
-                  placeholder="Mot de passe"
-                />
+                <label htmlFor="login-password" className={LIBELLE}>Mot de passe</label>
+                <div className="relative">
+                  <input
+                    id="login-password"
+                    name="password"
+                    type={afficherMotDePasse ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    spellCheck={false}
+                    required
+                    className={`${CHAMP} pr-11`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAfficherMotDePasse(v => !v)}
+                    aria-label={afficherMotDePasse ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                    aria-pressed={afficherMotDePasse}
+                    aria-controls="login-password"
+                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-lg text-slate-500 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 dark:text-slate-400 dark:hover:text-slate-200"
+                  >
+                    {afficherMotDePasse ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
+                  </button>
+                </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full mt-2 bg-salfa-dark dark:bg-slate-700 hover:bg-salfa-teal dark:hover:bg-slate-600 active:bg-slate-800 text-white font-bold py-3 sm:py-2.5 px-4 rounded-lg transition shadow-md flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
-              >
-                <Lock className="w-4 h-4" />
-                <span>{loading ? 'Connexion...' : 'Se connecter'}</span>
+              {error && (
+                <p role="alert" className="flex items-start gap-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span>{error}</span>
+                </p>
+              )}
+
+              <button type="submit" disabled={loading} className={`${PRIMAIRE} w-full`}>
+                {loading ? <Loader2 className="h-[18px] w-[18px] animate-spin" aria-hidden="true" /> : <KeyRound className="h-[18px] w-[18px]" aria-hidden="true" />}
+                {loading ? 'Vérification…' : 'Se connecter'}
               </button>
-              <div className="text-[10px] sm:text-[11px] text-center text-slate-400 dark:text-slate-500 mt-2 leading-snug">
-                {WAMP
-                  ? 'Version réseau : données enregistrées sur le serveur MySQL.'
-                  : 'Application 100% locale : vos données ne quittent jamais votre navigateur.'}
-              </div>
+              {!WAMP && comptesDemo.length > 0 ? (
+                <ComptesDemoPanel comptes={comptesDemo} disabled={loading} onChoisir={compte => {
+                  setUsername(compte.username);
+                  setPassword(compte.password);
+                  setAfficherMotDePasse(false);
+                  setError('');
+                  setInfoOk('');
+                }} />
+              ) : (
+                <p className="text-center text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                  Mot de passe oublié ? Un administrateur peut le réinitialiser depuis les paramètres des utilisateurs.
+                </p>
+              )}
             </form>
           )}
-        </div>
+        </section>
+
+        <p className="mt-4 text-center text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          {WAMP ? 'Version réseau : données enregistrées sur le serveur MySQL.' : comptesDemo.length > 0 ? 'Mode démonstration : les données restent dans ce navigateur.' : 'Mode local : les données restent dans ce navigateur.'}
+          <br />Reconnexion nécessaire après 1 heure sans contact d’aucun onglet.
+        </p>
       </div>
-    </div>
+    </main>
   );
 };

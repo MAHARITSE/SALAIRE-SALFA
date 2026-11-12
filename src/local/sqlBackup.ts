@@ -466,7 +466,7 @@ export function buildRelationalSqlBackup(params: {
   lines.push('');
 
   // 1. Utilisateurs par défaut (INSERT IGNORE pour ne jamais écraser un mot de passe modifié en base)
-  lines.push('-- Comptes utilisateurs par défaut (admin / admin123, comptable / comptable123)');
+  lines.push('-- Comptes utilisateurs par défaut (mots de passe hachés ; ne pas écraser les comptes existants)');
   lines.push('INSERT IGNORE INTO `salfa_users` (`id`, `username`, `nom_complet`, `role`, `actif`, `password_hash`) VALUES');
   lines.push(`  (1, 'admin', 'Administrateur Principal SALFA', 'Administrateur', 1, '${DEFAULT_ADMIN_BCRYPT}'),`);
   lines.push(`  (2, 'comptable', 'Comptable Clinique SALFA', 'Comptable', 1, '${DEFAULT_COMPTABLE_BCRYPT}');`);

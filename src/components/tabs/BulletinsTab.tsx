@@ -19,7 +19,7 @@ import {
 } from '../../bulletin/model';
 import { loadBulletinHeader, setRemoteHeader } from '../../bulletin/header';
 import { WAMP } from '../../runtime';
-import { normaliserRecherche, correspondRecherche } from '../../local/recherche';
+import { filtrerPaiesBulletins, selectionnerPaieVisible } from '../../bulletin/recherche';
 import { BulletinHeaderModal } from '../BulletinHeaderModal';
 
 const MOIS = ['JANVIER','FEVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOUT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DECEMBRE'];
@@ -36,9 +36,13 @@ const CHOIX_RETENUES: Record<RetenuesIndividuel, { libelle: string; options?: Bu
 export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
   const [mois, setMois] = useState(() => MOIS[new Date().getMonth()]);
   const [paies, setPaies] = useState<PaieMensuelle[]>([]);
-  const [selectedPaie, setSelectedPaie] = useState<PaieMensuelle | null>(null);
+  const [selectedPaieId, setSelectedPaieId] = useState<number | null>(null);
+  const [periodeChargee, setPeriodeChargee] = useState('');
+  const [erreurChargement, setErreurChargement] = useState('');
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [chargement, setLoading] = useState(true);
+  const periode = `${annee}-${mois}`;
+  const loading = chargement || periodeChargee !== periode;
   const [header, setHeader] = useState(loadBulletinHeader);
   const [headerOpen, setHeaderOpen] = useState(false);
 
@@ -71,23 +75,32 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setErreurChargement('');
     // Ne jamais afficher ni imprimer un bulletin d'une autre période pendant le chargement.
-    setSelectedPaie(null);
+    setSelectedPaieId(null);
     fetchPaiesMois(annee, mois).then(d => {
       if (!active) return;
       const list = d.employes || [];
       setPaies(list);
       if (WAMP) setHeader(loadBulletinHeader());
-      setSelectedPaie(list[0] || null);
+      setSelectedPaieId(list[0]?.id ?? null);
+      setPeriodeChargee(`${annee}-${mois}`);
+      setLoading(false);
+    }).catch((err: unknown) => {
+      if (!active) return;
+      setPaies([]);
+      setPeriodeChargee(`${annee}-${mois}`);
+      setErreurChargement(err instanceof Error ? err.message : 'Impossible de charger les bulletins.');
       setLoading(false);
     });
     return () => { active = false; };
   }, [mois, annee]);
 
-  const q = normaliserRecherche(search);
-  const filtered = paies.filter((p) =>
-    correspondRecherche(q, p.numero_matricule, p.nom_prenoms, p.jobs, p.categorie)
-  );
+  const filtered = loading ? [] : filtrerPaiesBulletins(paies, search);
+  // Dérivé au même rendu que la recherche, sans attendre un effet : aucune sortie
+  // individuelle ne peut utiliser l'ancienne sélection invisible.
+  const selectedPaie = selectionnerPaieVisible(filtered, selectedPaieId);
+
 
   const lancerImpression = (mode: 'un_seul' | 'tous') => {
     flushSync(() => {
@@ -104,7 +117,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
   return (
     <div className="bulletin-root w-full">
       <div className="no-print space-y-3 sm:space-y-6 w-full">
-      <div className="bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl border dark:border-slate-700 flex flex-wrap items-center gap-3">
+      <div className="caisse-card bg-white dark:bg-slate-800 p-3 sm:p-4 rounded-xl border dark:border-slate-700 flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Calendar className="w-4 h-4 text-salfa-teal" />
           <span className="font-bold text-xs">Période :</span>
@@ -136,7 +149,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
             {openMenu === 'pdf' && (
-              <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1 z-40">
+              <div className="absolute right-0 mt-1.5 w-64 rounded-xl caisse-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1 z-40">
                 <button
                   type="button"
                   disabled={!selectedPaie}
@@ -185,7 +198,7 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
             {openMenu === 'print' && (
-              <div className="absolute right-0 mt-1.5 w-64 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1 z-40">
+              <div className="absolute right-0 mt-1.5 w-64 rounded-xl caisse-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1 z-40">
                 <button
                   type="button"
                   disabled={!selectedPaie}
@@ -218,24 +231,30 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
       </div>
 
       <div className="no-print grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 space-y-2 max-h-[70vh] flex flex-col">
+        <div className="caisse-card bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 space-y-2 max-h-[70vh] flex flex-col">
           <input
+            aria-label="Rechercher un bulletin"
             autoCapitalize="characters"
             value={search}
             onChange={e => setSearch(e.target.value.toLocaleUpperCase('fr-FR'))}
             placeholder="Rechercher matricule, nom, fonction..."
             className="w-full rounded-lg border dark:border-slate-600 bg-white dark:bg-slate-700 p-2 text-sm uppercase"
           />
+          <p role="status" aria-live="polite" className="text-xs text-slate-500 dark:text-slate-400">
+            {loading ? 'Chargement…' : `${filtered.length} bulletin(s) affiché(s) sur ${paies.length}`}
+          </p>
+          {erreurChargement && <p role="alert" className="text-xs text-red-600 dark:text-red-300">{erreurChargement}</p>}
           <div className="overflow-y-auto space-y-1">
             {loading ? (
               <p className="text-sm text-slate-500 p-2">Chargement…</p>
             ) : filtered.length === 0 ? (
-              <p className="text-sm text-slate-500 p-2">Aucun bulletin pour {mois} {annee}.</p>
+              <p className="text-sm text-slate-500 p-2">Aucun bulletin correspondant à la recherche pour {mois} {annee}.</p>
             ) : (
               filtered.map(p => (
                 <button
                   key={p.id}
-                  onClick={() => setSelectedPaie(p)}
+                  onClick={() => setSelectedPaieId(p.id)}
+                  aria-pressed={selectedPaie?.id === p.id}
                   className={`w-full text-left p-2.5 rounded-lg border text-sm transition ${
                     selectedPaie?.id === p.id
                       ? 'bg-salfa-dark text-white border-salfa-dark shadow-sm'
@@ -252,10 +271,10 @@ export const BulletinsTab: React.FC<YearProps> = ({ annee, setAnnee }) => {
           </div>
         </div>
 
-        <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-3 sm:p-5 overflow-x-auto">
+        <div className="lg:col-span-2 caisse-card bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 p-3 sm:p-5 overflow-x-auto">
           {!selectedPaie ? (
             <div className="text-center p-10 text-slate-500">
-              <FileText className="w-8 h-8 mx-auto mb-2" />Aucun bulletin sélectionné.
+              <FileText className="w-8 h-8 mx-auto mb-2" />{loading ? 'Chargement…' : 'Aucun bulletin correspondant à la recherche.'}
             </div>
           ) : (
             <>

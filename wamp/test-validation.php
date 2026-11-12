@@ -38,3 +38,12 @@ check(!sessionUserStillAllowed($user, false), 'compte supprime');
 check(!sessionUserStillAllowed($user, array_merge($user, ['actif'=>0])), 'session desactivee');
 check(!sessionUserStillAllowed($user, array_merge($user, ['role'=>'Comptable'])), 'role revoque');
 echo "Validation des periodes, montants et revocation de session : OK\n";
+
+check(SALFA_DUREE_SESSION === 3600, 'fenetre configuree a une heure');
+check(sessionPresenceValide(1000, 1061), 'aucune expiration a l’ancien delai de 60 secondes');
+check(sessionPresenceValide(1000, 4599), 'presence valide juste avant une heure');
+check(sessionPresenceValide(1000, 4600), 'presence valide a une heure exacte');
+check(!sessionPresenceValide(1000, 4601), 'presence expiree apres une heure sans contact');
+check(!sessionPresenceValide(null, 1000), 'horodatage obligatoire');
+check(!sessionPresenceValide(1100, 1000), 'horodatage futur refuse');
+echo "Fenetre de presence de session (1 heure sans contact) : OK\n";

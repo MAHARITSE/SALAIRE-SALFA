@@ -6,9 +6,10 @@
 // ==============================================================================
 
 import { Employe, PaieMensuelle, TotauxMois, ComparaisonNet, UserSession, CompteUtilisateur, CompteConnexionPublic } from './types';
-import { getStore, saveStore, storeEstSynchronise, nextEmployeId, nextPaieId, nextCongeId, nextUtilisateurId, nowStamp } from './local/store';
+import { getStore, saveStore, storeEstSynchronise, lireComptesPourSession, nextEmployeId, nextPaieId, nextCongeId, nextUtilisateurId, nowStamp } from './local/store';
 import { calculerPaieEmploye, calculerAnciennete, estEmployeEnCongeMaternite } from './local/calcul';
 import { hashPassword } from './local/hash';
+import { lirePresenceLocale, renouvelerPresenceLocale } from './local/session';
 import { loadConfig } from './local/config';
 import { correspondRecherche, normaliserRecherche } from './local/recherche';
 import { normaliserChampsPersonnel, completerFicheFusionnee, appliquerPersonnelAuxFiches, rapportPersonnel, PERSONNEL_VERSION, CHAMPS_PERSONNEL_SENSIBLES, RapportPersonnel } from './local/personnel';
@@ -69,6 +70,26 @@ export function apiLogoutLocal(): void {
   sessionActive = null;
 }
 
+/** Restauration/présence locale : le rôle vient du compte, jamais du marqueur de session. */
+export function restaurerSessionLocale(attendu?: UserSession): UserSession | null {
+  const presence = lirePresenceLocale();
+  if (!presence || (attendu && presence.id !== attendu.id)) return null;
+  // Initialise le stockage au besoin, puis lit les comptes réellement persistés.
+  getStore();
+  const compte = lireComptesPourSession().find(c => Number(c.id) === presence.id && Number(c.actif) === 1);
+  if (!compte || !['Administrateur', 'Comptable'].includes(compte.role) ||
+      (attendu && compte.role !== attendu.role) || !renouvelerPresenceLocale(presence.id)) return null;
+  const user: UserSession = {
+    id: presence.id,
+    username: String(compte.username),
+    nom_complet: String(compte.nom_complet || compte.username),
+    role: compte.role,
+    actif: 1,
+  };
+  setSessionLocale(user);
+  return user;
+}
+
 function exigerAdmin(): void {
   if (sessionActive && sessionActive.role !== 'Administrateur') {
     throw new Error(
@@ -108,8 +129,8 @@ export async function checkHealth(): Promise<boolean> {
 // ------------------------------------------------------------------------------
 /**
  * Liste publique des comptes actifs, SANS aucun mot de passe ni indice de
- * connexion : aucun mot de passe (même de démonstration) ne doit être exposé
- * côté page de connexion ou dans le navigateur.
+ * connexion : cette API ne fournit jamais de mot de passe. Le panneau local de
+ * démonstration utilise séparément des accès publics fixes, jamais cette liste.
  */
 export async function fetchComptesConnexion(): Promise<CompteConnexionPublic[]> {
   const store = getStore();

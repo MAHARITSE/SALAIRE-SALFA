@@ -313,7 +313,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
   return (
     <>
       <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-2 sm:p-4 no-print" role="dialog" aria-modal="true" aria-label="Contrat de travail">
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-7xl overflow-hidden border border-slate-200 dark:border-slate-700 max-h-[96dvh] flex flex-col">
+        <div className="caisse-card bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-7xl overflow-hidden border border-slate-200 dark:border-slate-700 max-h-[96dvh] flex flex-col">
           <div className="bg-salfa-dark dark:bg-slate-900 px-4 sm:px-6 py-3 flex items-center justify-between text-white shrink-0 gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <FileSignature className="w-5 h-5 shrink-0" />
@@ -555,7 +555,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
             style={{ top: menuPos.y, left: menuPos.x }}
           >
             {menuPos.type === 'impression' && openImpressionMenu && (
-              <div className="w-64 max-w-[calc(100vw-16px)] rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
+              <div className="w-64 max-w-[calc(100vw-16px)] rounded-xl caisse-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setOpenImpressionMenu(false); imprimer('un'); }}
@@ -585,7 +585,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
               </div>
             )}
             {menuPos.type === 'pdf' && openPdfMenu && (
-              <div className="w-64 max-w-[calc(100vw-16px)] rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
+              <div className="w-64 max-w-[calc(100vw-16px)] rounded-xl caisse-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setOpenPdfMenu(false); exporterPdf('un'); }}
@@ -615,7 +615,7 @@ const ContratTravailModalInner: React.FC<Props> = ({ employes, paies, initialEmp
               </div>
             )}
             {menuPos.type === 'word' && openWordMenu && (
-              <div className="w-64 max-w-[calc(100vw-16px)] rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
+              <div className="w-64 max-w-[calc(100vw-16px)] rounded-xl caisse-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); setOpenWordMenu(false); exporterDocx('un'); }}
