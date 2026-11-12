@@ -307,7 +307,7 @@ export const FicheAbsenceModal: React.FC<FicheAbsenceModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-slate-900/80 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-6xl border border-slate-200 dark:border-slate-700 max-h-[96dvh] flex flex-col">
+      <div className="caisse-card bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-6xl border border-slate-200 dark:border-slate-700 max-h-[96dvh] flex flex-col">
         <div className="bg-salfa-dark dark:bg-slate-900 px-4 py-3 flex items-center justify-between text-white shrink-0 rounded-t-2xl">
           <div className="min-w-0">
             <h3 className="text-sm sm:text-base font-bold truncate">

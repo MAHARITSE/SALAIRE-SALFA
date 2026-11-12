@@ -1,0 +1,16 @@
+@media screen {
+  .controles-flottants { position: fixed; right: 20px; bottom: 20px; z-index: 40; display: flex; align-items: center; gap: 8px; }
+  .controle-rond { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex-shrink: 0; border: 1px solid #d8e2ed; border-radius: 9999px; background: #fff; color: #167b9f; box-shadow: 0 3px 8px #0f172a19; }
+  .controle-rond:hover { background: #f1f5f9; }
+  .controle-rond:disabled { opacity: .35; cursor: not-allowed; }
+  .controle-pourcentage { height: 28px; min-width: 32px; padding: 0 6px; border-radius: 9999px; font: 600 12px ui-monospace, monospace; color: #64748b; }
+  .controle-pourcentage:hover { background: #f1f5f9; }
+  .dark .controle-rond { background: #1e293b; border-color: #475569; color: #cbd5e1; }
+  .dark .controle-rond:hover, .dark .controle-pourcentage:hover { background: #334155; }
+  .dark .controle-pourcentage { color: #cbd5e1; }
+  .theme-caisse .caisse-main { padding-bottom: 88px; }
+
+}
+@media screen and (max-width: 767px) {
+  .controles-flottants { right: 16px; bottom: max(16px, env(safe-area-inset-bottom)); }
+}

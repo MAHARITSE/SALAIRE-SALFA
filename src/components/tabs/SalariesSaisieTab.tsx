@@ -634,7 +634,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
   return (
     <div className="etat-page-root space-y-3 sm:space-y-4 w-full">
       {/* BARRE D'OUTILS PRINCIPALE : PÉRIODE + SAISIE EN LOT + IMPRESSION (ACTIF / TOUS) + EXPORT EXCEL + CLÔTURE */}
-      <div className="no-print bg-white dark:bg-slate-800 rounded-xl p-3 sm:p-4 shadow-sm border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+      <div className="no-print caisse-card bg-white dark:bg-slate-800 rounded-xl p-3 sm:p-4 shadow-sm border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 text-salfa-dark dark:text-sky-300 font-bold text-xs sm:text-sm">
             <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-salfa-teal shrink-0" />
@@ -756,7 +756,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
             {openPrintMenu && (
-              <div className="absolute right-0 mt-1.5 w-72 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1 z-40">
+              <div className="absolute right-0 mt-1.5 w-72 rounded-xl caisse-card bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1 z-40">
                 <button
                   type="button"
                   onClick={() => lancerImpressionEtat('actif')}
@@ -909,7 +909,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
       )}
 
       {/* BARRE DE RECHERCHE + FUSION DOUBLONS + NOUVEAU SALARIÉ */}
-      <div className="no-print bg-white dark:bg-slate-800 rounded-xl p-3 sm:p-4 shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3">
+      <div className="no-print caisse-card bg-white dark:bg-slate-800 rounded-xl p-3 sm:p-4 shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3">
         <div className="relative flex-1 min-w-0">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
@@ -974,7 +974,7 @@ export const SalariesSaisieTab: React.FC<Props> = ({
       <AncienneteLegende count={nbAnniversaires} />
 
       {/* ÉTAT COMPLET EXCEL (32 COLONNES) */}
-      <div className="no-print block bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+      <div className="no-print block caisse-card bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
           <div className="overflow-auto max-h-[70vh] thin-scrollbar">
             <table className="w-full text-left border-collapse text-xs">
               <thead className="sticky top-0 z-20">
@@ -1359,9 +1359,9 @@ export const SalariesSaisieTab: React.FC<Props> = ({
         </div>
 
       {/* ACCÈS RAPIDE AUX 12 MOIS DE L'ANNÉE (SANS L'ANNÉE — FILTRÉ PAR RAPPORT À L'ANNÉE DE « PÉRIODE : ») */}
-      <div className="no-print bg-white dark:bg-slate-800 rounded-xl p-2.5 sm:p-3 border border-slate-200 dark:border-slate-700 flex items-center gap-2 overflow-x-auto thin-scrollbar">
+      <div className="no-print caisse-card bg-white dark:bg-slate-800 rounded-xl p-2.5 sm:p-3 border border-slate-200 dark:border-slate-700 flex items-center gap-2 overflow-x-auto thin-scrollbar">
         <span className="text-[11px] font-bold uppercase text-slate-400 shrink-0 pl-1">Mois initialisés :</span>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           {MOIS_LISTE.map((m) => {
             const nb = nbParMoisAnnee.get(m) || 0;
             const active = m === mois;
@@ -1593,7 +1593,7 @@ const EmptyState: React.FC<{
   const precedent = suiteChrono?.moisPrecedentCible;
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl p-6 text-center border dark:border-slate-700 space-y-3">
+    <div className="caisse-card bg-white dark:bg-slate-800 rounded-xl p-6 text-center border dark:border-slate-700 space-y-3">
       {search ? (
         <div className="text-sm text-slate-500">Aucun salarié ne correspond à la recherche.</div>
       ) : horsSuite ? (
@@ -1680,7 +1680,7 @@ const EmployeHistoryModal: React.FC<HistoryModalProps> = ({ employe, paies, onCl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden border dark:border-slate-700 modal-mobile max-h-[95dvh] flex flex-col">
+      <div className="caisse-card bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden border dark:border-slate-700 modal-mobile max-h-[95dvh] flex flex-col">
         <div className="bg-salfa-dark dark:bg-slate-900 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between text-white shrink-0">
           <div className="min-w-0">
             <h3 className="text-sm sm:text-lg font-bold truncate">Historique — Mat {employe.numero_matricule} : {employe.nom_prenoms}</h3>
@@ -1729,7 +1729,7 @@ const AccessoiresModalForm: React.FC<AccModalProps> = ({ paie, onClose, onSaved 
   };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 backdrop-blur-sm p-2 sm:p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border dark:border-slate-700 modal-mobile max-h-[90dvh] flex flex-col">
+      <div className="caisse-card bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border dark:border-slate-700 modal-mobile max-h-[90dvh] flex flex-col">
         <div className="bg-salfa-dark dark:bg-slate-900 px-4 sm:px-6 py-3 text-white shrink-0 flex items-center justify-between">
           <div className="min-w-0">
             <h3 className="text-sm sm:text-lg font-bold">Accessoires — Mat {paie.numero_matricule}</h3>

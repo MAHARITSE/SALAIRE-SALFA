@@ -48,7 +48,7 @@ export function DuplicationEmployeModal({ employes, initialEmployeId, onClose, o
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/75 backdrop-blur-sm p-4">
-      <section role="dialog" aria-modal="true" aria-labelledby="duplication-title" className="w-full max-w-xl max-h-[95dvh] flex flex-col rounded-2xl bg-white dark:bg-slate-800 shadow-2xl overflow-hidden">
+      <section role="dialog" aria-modal="true" aria-labelledby="duplication-title" className="caisse-card w-full max-w-xl max-h-[95dvh] flex flex-col rounded-2xl bg-white dark:bg-slate-800 shadow-2xl overflow-hidden">
         <header className="bg-salfa-dark text-white p-4 flex items-center justify-between gap-3">
           <h3 id="duplication-title" className="font-bold">Dupliquer un salarié — Étape 1 sur 2</h3>
           <button type="button" onClick={onClose} aria-label="Fermer" className="p-1 rounded hover:bg-white/10"><X className="w-5 h-5" /></button>

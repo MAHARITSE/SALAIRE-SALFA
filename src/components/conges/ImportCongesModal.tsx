@@ -82,7 +82,7 @@ export const ImportCongesModal: React.FC<ImportCongesModalProps> = ({ employes, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-700 max-h-[94dvh] flex flex-col">
+      <div className="caisse-card bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-200 dark:border-slate-700 max-h-[94dvh] flex flex-col">
         <div className="bg-salfa-dark dark:bg-slate-900 px-4 py-3 flex items-center justify-between text-white shrink-0 rounded-t-2xl">
           <div>
             <h3 className="text-sm sm:text-base font-bold">Reprendre un contrôle des congés (Excel)</h3>

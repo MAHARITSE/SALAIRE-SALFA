@@ -1,0 +1,153 @@
+/* Identité visuelle de MAHARITSE/CAISSE-SALFA, adaptée à la paie.
+   Cette feuille reste limitée à l'application connectée et à l'écran.
+   La connexion partage la palette via ses classes Tailwind dédiées ;
+   les mises en page A4 / impressions ne reçoivent pas ces styles. */
+@media screen {
+  .theme-caisse {
+    --caisse-background: #f5f7f9;
+    --caisse-surface: #ffffff;
+    --caisse-border: #e2e8f0;
+    --caisse-brand: #0e6351;
+    --caisse-brand-hover: #104f43;
+    --caisse-brand-soft: #eff8f5;
+    --caisse-brand-text: #104f43;
+    --caisse-muted: #64748b;
+    background: var(--caisse-background);
+    color: #1e293b;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .dark .theme-caisse {
+    --caisse-background: #090e17;
+    --caisse-surface: #0f172a;
+    --caisse-border: #1e293b;
+    --caisse-brand: #147861;
+    --caisse-brand-hover: #0e6351;
+    --caisse-brand-soft: #10352f;
+    --caisse-brand-text: #83c3af;
+    --caisse-muted: #94a3b8;
+    background: var(--caisse-background);
+    color: #f1f5f9;
+    color-scheme: dark;
+  }
+  .theme-caisse .caisse-header {
+    border-bottom: 1px solid var(--caisse-border);
+    background: var(--caisse-surface);
+    box-shadow: 0 1px 3px rgb(15 23 42 / .025);
+  }
+  .theme-caisse .caisse-eyebrow {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--caisse-muted);
+  }
+  .theme-caisse .administration-menu {
+    top: calc(100% + 8px); right: 0; width: min(288px, calc(100vw - 32px));
+    max-height: calc(100dvh - 100px); overflow-y: auto;
+  }
+  .theme-caisse .caisse-navigation-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .5rem 2rem;
+  }
+  .theme-caisse .caisse-navigation {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    gap: .375rem;
+    overflow-x: auto;
+  }
+  .theme-caisse .caisse-nav-link {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: .5rem;
+    padding: .625rem .875rem;
+    border-radius: .5rem;
+    color: var(--caisse-muted);
+    white-space: nowrap;
+    font-size: .875rem;
+    font-weight: 500;
+    transition: background-color .15s, color .15s;
+  }
+  .theme-caisse .caisse-nav-link:hover { background: var(--caisse-background); color: inherit; }
+  .theme-caisse .caisse-nav-link.caisse-nav-active {
+    background: var(--caisse-brand-soft);
+    color: var(--caisse-brand-text);
+    font-weight: 600;
+  }
+  .theme-caisse .caisse-date {
+    display: none;
+    flex-shrink: 0;
+    border-left: 1px solid var(--caisse-border);
+    padding-left: .75rem;
+    white-space: nowrap;
+    color: var(--caisse-muted);
+    font-size: .75rem;
+    font-weight: 500;
+  }
+  .theme-caisse .caisse-page-heading { margin: 0 0 1.5rem; }
+  .theme-caisse .caisse-main { padding-top: 1.75rem; padding-bottom: 2rem; }
+  .theme-caisse .caisse-footer { background: transparent; border-color: var(--caisse-border); }
+  .theme-caisse .caisse-card {
+    border-color: var(--caisse-border);
+    background: var(--caisse-surface);
+    box-shadow: 0 1px 3px rgb(15 23 42 / .025);
+  }
+  .theme-caisse .caisse-card.shadow-2xl { box-shadow: 0 25px 70px rgb(15 23 42 / .22); }
+  .dark .theme-caisse .caisse-card.shadow-2xl { box-shadow: 0 25px 70px rgb(0 0 0 / .6); }
+  .theme-caisse .modal-mobile {
+    background: var(--caisse-surface);
+    border-color: var(--caisse-border);
+    box-shadow: 0 25px 70px rgb(15 23 42 / .22);
+  }
+  /* Adaptation des anciens jetons SALFA, sans remplacer les couleurs métier
+     (erreur rouge, retenues, maternité, palier d'ancienneté bleu ciel…). */
+  .theme-caisse .bg-salfa-dark { background-color: var(--caisse-brand); }
+  .theme-caisse .bg-salfa-teal { background-color: var(--caisse-brand); }
+  .theme-caisse .text-salfa-dark,
+  .theme-caisse .text-salfa-teal { color: var(--caisse-brand-text); }
+  .theme-caisse .border-salfa-dark { border-color: var(--caisse-brand); }
+  .theme-caisse .border-salfa-teal { border-color: var(--caisse-brand); }
+  .theme-caisse .hover\:bg-salfa-teal:hover,
+  .theme-caisse .hover\:bg-salfa-dark:hover { background-color: var(--caisse-brand-hover); }
+  .theme-caisse .hover\:text-salfa-teal:hover { color: var(--caisse-brand-text); }
+  .theme-caisse .focus\:ring-salfa-teal:focus { --tw-ring-color: #b4ddcf; }
+  .theme-caisse .focus\:border-salfa-teal:focus { border-color: #268a72; }
+  .theme-caisse button:not(:disabled),
+  .theme-caisse select:not(:disabled) { cursor: pointer; }
+  .theme-caisse button:disabled { cursor: not-allowed; }
+  .theme-caisse :focus-visible { outline: 2px solid #147861; outline-offset: 3px; }
+  .dark .theme-caisse :focus-visible { outline-color: #5eead4; }
+  .theme-caisse input,
+  .theme-caisse select,
+  .theme-caisse textarea { accent-color: #0e6351; }
+  .theme-caisse ::selection { background: #b4ddcf; color: #10352f; }
+  .dark .theme-caisse ::selection { background: #134e4a; color: #f0fdfa; }
+  .theme-caisse .caisse-skip-link {
+    position: fixed;
+    top: .75rem;
+    left: .75rem;
+    z-index: 60;
+    transform: translateY(-200%);
+    border-radius: .5rem;
+    background: #0e6351;
+    padding: .625rem 1rem;
+    color: white;
+    font-size: .875rem;
+    font-weight: 600;
+  }
+  .theme-caisse .caisse-skip-link:focus { transform: none; }
+}
+
+@media screen and (max-width: 767px) {
+  .theme-caisse .caisse-navigation-row { padding: .5rem .75rem; }
+  .theme-caisse .caisse-nav-link { padding: .5rem .625rem; font-size: .8125rem; }
+  .theme-caisse .caisse-main { padding-top: 1.25rem; }
+  .theme-caisse .caisse-page-heading { margin-bottom: 1rem; }
+}
+@media screen and (max-width: 479px) {
+  .theme-caisse .caisse-date { display: none; }
+}

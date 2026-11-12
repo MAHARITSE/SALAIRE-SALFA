@@ -6,6 +6,7 @@ header('X-Content-Type-Options: nosniff');
 
 require_once __DIR__ . '/schema.php';
 require_once __DIR__ . '/validation.php';
+require_once __DIR__ . '/sqlRestore.php';
 
 function answer(int $status, array $value): void {
     http_response_code($status);
@@ -99,8 +100,10 @@ function openPdoWithAutoCreateDb(array $cfg): PDO {
 $action = $_GET['action'] ?? '';
 if ($action === 'health' && $_SERVER['REQUEST_METHOD'] === 'GET') answer(200, ['service' => 'salfa-wamp-v1']);
 
+ini_set('session.gc_maxlifetime', (string) SALFA_DUREE_SESSION);
 session_name('SALFASESSID');
 session_set_cookie_params([
+    'lifetime' => 0,
     'httponly' => true,
     'samesite' => 'Strict',
     'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
@@ -140,6 +143,10 @@ if ($action === 'logout' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     session_destroy();
     answer(200, ['success' => true]);
+}
+
+if ($action === 'session' && $_SERVER['REQUEST_METHOD'] === 'GET' && empty($_SESSION['user'])) {
+    answer(200, ['user' => null]);
 }
 
 $paths = resolveConfigPaths();
@@ -257,18 +264,24 @@ if ($action === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     answer(200, ['user' => $_SESSION['user'], 'csrf' => $_SESSION['csrf']]);
 }
 
-if (empty($_SESSION['user']) || time() - ($_SESSION['last'] ?? 0) > 3600) {
+if (empty($_SESSION['user']) || !sessionPresenceValide($_SESSION['last'] ?? null, time())) {
     session_destroy();
     answer(401, ['error' => 'Session expirée. Reconnectez-vous.']);
 }
 // Vérifier le compte réel, pas uniquement le rôle conservé au moment de la connexion.
-$currentUserQuery = $db->prepare('SELECT id, role, actif FROM salfa_users WHERE id = ?');
+$currentUserQuery = $db->prepare('SELECT id, username, nom_complet, role, actif FROM salfa_users WHERE id = ?');
 $currentUserQuery->execute([(int)($_SESSION['user']['id'] ?? 0)]);
-if (!sessionUserStillAllowed($_SESSION['user'], $currentUserQuery->fetch(PDO::FETCH_ASSOC))) {
+$currentUser = $currentUserQuery->fetch(PDO::FETCH_ASSOC);
+if (!sessionUserStillAllowed($_SESSION['user'], $currentUser)) {
     session_destroy();
     answer(401, ['error' => 'Compte désactivé ou droits modifiés. Reconnectez-vous.']);
 }
 $_SESSION['last'] = time();
+$_SESSION['user']['username'] = $currentUser['username'];
+$_SESSION['user']['nom_complet'] = $currentUser['nom_complet'];
+if ($action === 'session' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    answer(200, ['user' => $_SESSION['user'], 'csrf' => $_SESSION['csrf']]);
+}
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !hash_equals($_SESSION['csrf'] ?? '', $_SERVER['HTTP_X_SALFA_CSRF'] ?? '')) {
     answer(403, ['error' => 'Session invalide. Reconnectez-vous.']);
 }
@@ -472,6 +485,37 @@ if (in_array($action, ['users_create', 'users_update', 'users_password', 'users_
 }
 
 // Sauvegardes SQL relationnelles (Administration & Clôture)
+if ($action === 'sql_backup_restore' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (($_SESSION['user']['role'] ?? '') !== 'Administrateur') answer(403, ['error' => 'Action réservée à l’administrateur.']);
+    if (($input['confirmation'] ?? '') !== 'RESTAURER') answer(400, ['error' => 'Confirmation de restauration requise.']);
+    try {
+        $operations = salfaParseRestore(is_string($input['sql'] ?? null) ? $input['sql'] : '');
+        $db->beginTransaction();
+        $revision = $db->query('SELECT revision FROM salfa_revision WHERE id = 1 FOR UPDATE')->fetchColumn();
+        if ($revision === false || !is_int($input['revision'] ?? null) || $input['revision'] !== (int)$revision) {
+            $db->rollBack(); answer(409, ['error' => 'Les données ont changé. Rechargez avant de restaurer.']);
+        }
+        // Si cette sauvegarde échoue, aucune restauration n'est effectuée.
+        $backup = saveSqlBackupOnDisk($db, 'MANUELLE', '', 'Avant restauration SQL');
+        if (empty($backup['server_saved'])) throw new RuntimeException('Sauvegarde de sécurité non enregistrée sur disque.');
+        salfaApplyRestore($db, $operations);
+        if (!validStore(loadRelationalStore($db))) throw new InvalidArgumentException('Les données restaurées sont invalides.');
+        $row = $db->query('SELECT id FROM salfa_revision WHERE id = 1')->fetchColumn();
+        if ($row === false) throw new InvalidArgumentException('Métadonnées de sauvegarde invalides.');
+        $st = $db->prepare('UPDATE salfa_revision SET revision = ?, date_modification = ? WHERE id = 1');
+        $st->execute([(int)$revision + 1, date('Y-m-d H:i:s')]);
+        $db->commit();
+        answer(200, ['success' => true, 'backup' => $backup['filename'], 'message' => 'Restauration terminée. Les comptes et mots de passe actuels sont conservés.']);
+    } catch (InvalidArgumentException $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        answer(400, ['error' => $e->getMessage()]);
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) $db->rollBack();
+        error_log('SALFA sql_backup_restore: ' . $e->getMessage());
+        answer(500, ['error' => 'Restauration annulée : aucune modification validée. Vérifiez la sauvegarde et le serveur.']);
+    }
+}
+
 if ($action === 'sql_backups_list' && $_SERVER['REQUEST_METHOD'] === 'GET') {
     if (($_SESSION['user']['role'] ?? '') !== 'Administrateur') answer(403, ['error' => 'Action réservée à l’administrateur.']);
     answer(200, ['backups' => listSqlBackupsOnDisk()]);

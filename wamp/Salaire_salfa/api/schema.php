@@ -1219,7 +1219,8 @@ function generateRelationalSqlDump(PDO $db, string $motif = 'Sauvegarde SQL manu
 function saveSqlBackupOnDisk(PDO $db, string $type = 'MANUELLE', string $periode = '', string $motif = 'Sauvegarde SQL'): array {
     $congesOnly = ($type === 'CONGES');
     $dump = generateRelationalSqlDump($db, $motif, $congesOnly);
-    $stamp = date('Y-m-d_H-i-s');
+    // Éviter qu'une sauvegarde manuelle/de sécurité écrase un fichier de la même seconde.
+    $stamp = date('Y-m-d_H-i-s') . '_' . bin2hex(random_bytes(4));
     $slug = trim((string)preg_replace('/[^A-Z0-9]+/', '_', strtoupper($periode)), '_');
     if ($type === 'CLOTURE') {
         $filename = 'SALFA_CLOTURE_' . ($slug !== '' ? $slug . '_' : '') . $stamp . '.sql';

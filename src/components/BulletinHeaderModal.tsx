@@ -78,7 +78,7 @@ export const BulletinHeaderModal: React.FC<{
     }
   };
   return <div className="fixed inset-0 z-50 bg-black/50 p-3 flex items-center justify-center no-print" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-    <div role="dialog" aria-modal="true" aria-labelledby="bulletin-header-title" className="w-full max-w-3xl max-h-[95vh] overflow-y-auto rounded-xl bg-white dark:bg-slate-800 shadow-xl p-4 sm:p-6 space-y-4">
+    <div role="dialog" aria-modal="true" aria-labelledby="bulletin-header-title" className="w-full max-w-3xl max-h-[95vh] overflow-y-auto rounded-xl caisse-card bg-white dark:bg-slate-800 shadow-xl p-4 sm:p-6 space-y-4">
       <div className="flex justify-between items-start gap-3">
         <div>
           <h2 id="bulletin-header-title" className="text-lg font-bold">

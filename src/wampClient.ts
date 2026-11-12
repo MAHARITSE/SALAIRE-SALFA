@@ -33,6 +33,7 @@ async function request(action: string, payload?: unknown): Promise<any> {
   try { result = await response.json(); } catch { throw new Error('Réponse invalide du serveur.'); }
   if (!response.ok) {
     const err: any = new Error(result.error || `Erreur serveur (${response.status}).`);
+    err.status = response.status;
     if (result.code) err.code = result.code;
     if (result.canConfigure !== undefined) err.canConfigure = Boolean(result.canConfigure);
     throw err;
@@ -66,11 +67,35 @@ export async function remoteLogin(username: string, password: string): Promise<U
     throw e;
   }
 }
+/** Oublie seulement ce poste : ne déconnecte jamais un autre compte côté serveur. */
+export function remoteForgetSession(): void {
+  current = null; revision = null; csrf = ''; stale = false;
+  clearRemoteStore(); setRemoteConfig(null); setRemoteHeader(null); setRemoteCongeHeader(null);
+}
+
+/** Au démarrage, recharge le snapshot ; en présence périodique, ne remplace pas
+ * les données d'une saisie en cours et ne masque pas les conflits de révision. */
+export function remoteSession(attendu?: UserSession): Promise<UserSession | null> {
+  return enqueue(async () => {
+    try {
+      const etat = await request('session');
+      const user: UserSession | null = etat.user ?? null;
+      if (!user || (attendu && (user.id !== attendu.id || user.role !== attendu.role))) return null;
+      csrf = String(etat.csrf || '');
+      if (!attendu) { stale = false; apply(await request('snapshot')); }
+      return user;
+    } catch (err: any) {
+      if (err?.status === 401) return null;
+      // Une panne ou une réponse invalide n'est pas une déconnexion confirmée.
+      throw err;
+    }
+  });
+}
+
 export function remoteLogout(): Promise<void> {
   return enqueue(async () => {
     await request('logout', {});
-    current = null; revision = null; csrf = ''; stale = false;
-    clearRemoteStore(); setRemoteConfig(null); setRemoteHeader(null); setRemoteCongeHeader(null);
+    remoteForgetSession();
   });
 }
 export const remoteHealth = async () => { try { return (await request('health')).service === 'salfa-wamp-v1'; } catch { return false; } };
@@ -354,3 +379,14 @@ export async function remoteDownloadSqlBackupFile(filename: string): Promise<{ s
   }
 }
 
+
+/** Restauration exclusive : aucune écriture en attente ne doit la dépasser. */
+export function remoteRestoreSqlBackup(sql: string, confirmation: string): Promise<{ success: boolean; message: string; backup: string }> {
+  return enqueue(async () => {
+    if (revision === null || stale) throw new Error('Rechargez les données avant de restaurer.');
+    const result = await request('sql_backup_restore', { sql, confirmation, revision });
+    // Empêcher toute écriture depuis un ancien formulaire après restauration.
+    stale = true;
+    return result;
+  });
+}

@@ -222,6 +222,17 @@ export function saveStore(): boolean {
   }
 }
 
+/** Lecture fraîche des comptes pour révoquer une session modifiée dans un autre onglet,
+ * sans écraser le cache de paie ni une saisie en cours. Jamais utilisée en WAMP. */
+export function lireComptesPourSession(): any[] {
+  if (remoteMode) return [];
+  try {
+    const brut = localStorage.getItem(STORAGE_KEY);
+    const stocke = brut ? JSON.parse(brut) : null;
+    return Array.isArray(stocke?.utilisateurs) ? stocke.utilisateurs : [];
+  } catch { return []; }
+}
+
 // Détecte une modification dans un autre onglet avant une écriture en lot.
 export function storeEstSynchronise(): boolean {
   if (!storeCache) return false;
